@@ -1,0 +1,4 @@
+Flask>=3.0
+Pillow>=10.0
+exifread>=3.0
+pillow-heif>=0.16 ; platform_system == "Windows"

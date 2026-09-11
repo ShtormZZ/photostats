@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<!-- photostats — Copyright (C) 2026 Sergey Inyutin
+     Licensed under the GNU AGPL v3; see LICENSE. Commercial licensing: COMMERCIAL.md
+     SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo archive — statistics</title>
+<style>
+:root{
+  --ground:#16151A; --panel:#1E1D24; --frame:#2C2A34; --line:#3A3745;
+  --paper:#EDE8DF; --muted:#8B8598; --emulsion:#5C5769; --safelight:#E39B33;
+  --display:"Bahnschrift","Segoe UI Semibold","Segoe UI",system-ui,sans-serif;
+  --body:"Segoe UI",system-ui,-apple-system,sans-serif;
+  --data:"Consolas","Cascadia Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+/* Высоту body не задаём намеренно. С height:100% его бокс заканчивался на
+   первом экране, а прилипший элемент держится только внутри бокса родителя —
+   и шапка с фильтрами уезжала вверх, стоило прокрутить дальше одного экрана.
+   Фон и без того закрашивает весь холст: он поднимается от body к странице. */
+body{margin:0;background:var(--ground);color:var(--paper);font-family:var(--body);
+  font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--safelight);outline-offset:2px}
+
+/* ---------- шапка ---------- */
+/* Шапка и плашки фильтров прилипают одним блоком: снимать фильтр, прокручивая
+   страницу вверх, приходилось на каждый щелчок. Высоту блока замеряет скрипт —
+   от неё зависит, где начинается правая колонка. */
+.topbar{position:sticky;top:0;z-index:30}
+.top{display:flex;align-items:center;gap:18px;padding:14px 20px;
+  border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;
+  font-weight:600}
+.brand span{color:var(--safelight)}
+.tally{font-family:var(--data);font-size:13px;color:var(--muted);white-space:nowrap}
+.ver{font-family:var(--data);font-size:10px;color:var(--emulsion);align-self:flex-start;
+  margin-left:-12px}
+#src{text-decoration:none}
+.tally b{color:var(--paper);font-weight:600}
+.grow{flex:1}
+.search{background:var(--ground);border:1px solid var(--line);border-radius:3px;
+  padding:6px 10px;color:var(--paper);width:200px;font-size:13px}
+.tool{padding:6px 11px;border:1px solid var(--line);border-radius:3px;font-size:12px;
+  color:var(--muted);letter-spacing:.04em}
+.tool:hover{border-color:var(--emulsion);color:var(--paper)}
+
+/* ---------- активные фильтры ---------- */
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--line);
+  background:var(--panel);align-items:center}
+.chips.off{display:none}
+.chips-label{font-family:var(--display);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:8px;background:var(--safelight);color:#231A0B;
+  border-radius:2px;padding:4px 8px;font-size:12px;font-weight:600}
+.chip button{font-size:15px;line-height:1;opacity:.65}
+.chip button:hover{opacity:1}
+.clear-all{font-size:12px;color:var(--muted);text-decoration:underline}
+.clear-all:hover{color:var(--paper)}
+
+/* ---------- сетка ---------- */
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,42%);gap:0;
+  align-items:start}
+.left{padding:20px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.right{border-left:1px solid var(--line);padding:20px;position:sticky;
+  top:var(--topbar,57px);height:calc(100vh - var(--topbar,57px));
+  overflow-y:auto;min-width:0}
+
+/* ---------- блок карточек ---------- */
+.group{display:flex;flex-direction:column;gap:14px}
+.group-head{display:flex;align-items:center;gap:12px;width:100%;padding:2px 0;text-align:left}
+.group-head .num{font-family:var(--data);font-size:11px;color:var(--emulsion)}
+.group-head .ttl{font-family:var(--display);font-size:12px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--paper);font-weight:600;white-space:nowrap}
+.group-head .rule{flex:1;height:1px;background:var(--line);min-width:12px}
+.group-head .cnt{font-family:var(--data);font-size:11px;color:var(--muted)}
+.group-head .caret{font-family:var(--data);font-size:13px;color:var(--muted);
+  width:12px;text-align:center;line-height:1}
+.group-head:hover .ttl{color:var(--safelight)}
+.group-head:hover .rule{background:var(--emulsion)}
+.group-head:hover .caret{color:var(--paper)}
+.group-body{display:flex;flex-direction:column;gap:20px}
+.group.closed .group-body{display:none}
+.group.closed .ttl{color:var(--muted)}
+
+/* ---------- карточка ---------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px 18px 18px}
+.card-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.card-title{font-family:var(--display);font-size:13px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--paper);font-weight:600}
+.card-note{font-family:var(--data);font-size:11px;color:var(--muted)}
+.card-head .grow{min-width:0}
+.toggle{font-family:var(--data);font-size:11px;color:var(--muted);border:1px solid var(--line);
+  border-radius:2px;padding:3px 7px}
+.toggle.on{color:#231A0B;background:var(--safelight);border-color:var(--safelight)}
+
+/* ---------- плёнка (хронология) ---------- */
+.film-scroll{overflow-x:auto;overflow-y:hidden;padding-bottom:4px}
+/* Ширину ленты и оси задаёт скрипт, поровну между месяцами. Раньше кадры были
+   гибкими без запрета на сжатие и ужимались в ширину карточки, а ось имела
+   жёсткие 10 точек на месяц и уезжала на тысячи точек вправо — годы второй
+   половины архива оказывались за пределами ленты. */
+.film{background:var(--frame);padding:5px 0;border-radius:2px;margin:0 auto}
+.perf{height:7px;background:repeating-linear-gradient(90deg,
+  transparent 0 3px, var(--ground) 3px 9px, transparent 9px 12px)}
+.frames{display:flex;align-items:flex-end;height:104px;padding:5px 0;gap:1px}
+.fr{flex:1 1 0;min-width:2px;height:100%;display:flex;align-items:flex-end;background:#191820;
+  border:0;padding:0;cursor:pointer}
+.fr i{display:block;width:100%;background:var(--emulsion);transition:background .12s}
+.fr:hover i{background:#8B8398}
+.fr.on i,.fr.on{background:var(--safelight)}
+.axis{display:flex;margin:7px auto 0;width:100%;font-family:var(--data);
+  font-size:11px;color:var(--muted)}
+.yr{border-left:1px solid var(--line);padding-left:4px;text-align:left;white-space:nowrap;
+  overflow:hidden;flex:none}
+.yr:hover{color:var(--paper)}
+.yr.on{color:var(--safelight);font-weight:700}
+
+/* ---------- хронология техники ---------- */
+.tstats{display:flex;flex-wrap:wrap;gap:22px;margin-bottom:14px}
+.tstat{display:flex;flex-direction:column;gap:3px}
+.tstat span{font-family:var(--display);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.tstat b{font-family:var(--data);font-size:14px;font-weight:400;color:var(--paper)}
+.tl{overflow-x:auto;overflow-y:hidden}
+/* Лента тянется по ширине карточки: ячейки делят её поровну, а не стоят
+   фиксированными в 9 точек, из-за чего короткий период занимал десятую часть
+   карточки. Потолок ширины не даёт трём месяцам расплыться в лопаты,
+   а margin auto держит ленту по центру. */
+.tinner{margin:0 auto;width:100%}
+.tcells{display:flex;gap:1px;align-items:flex-end;height:88px;background:var(--frame);
+  padding:5px 0;border-radius:2px;width:100%}
+.tc{flex:1 1 0;min-width:4px;height:100%;display:flex;align-items:flex-end;
+  background:#191820;border:0;padding:0;cursor:pointer}
+.tc i{display:block;width:100%;height:0;background:var(--emulsion)}
+.tc:hover i{background:#B3ABC2}
+.tc.on i{background:var(--safelight)}
+.taxis{display:flex;width:100%;margin-top:7px;font-family:var(--data);font-size:11px;
+  color:var(--muted)}
+.taxis .yr{border-left:1px solid var(--line);padding-left:4px;text-align:left;
+  white-space:nowrap;overflow:hidden}
+.tnote{font-family:var(--data);font-size:11px;color:var(--muted);margin-top:9px}
+
+/* ---------- вертикальные столбцы ---------- */
+.cols{display:flex;gap:4px;align-items:flex-end;height:130px}
+.cols.hours{gap:3px}
+.col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:stretch;gap:5px;padding:0;min-width:0}
+.col .track{flex:1;display:flex;align-items:flex-end;background:#191820;border-radius:1px}
+.col i{display:block;width:100%;background:var(--emulsion);border-radius:1px 1px 0 0;
+  transition:background .12s}
+/* день светлее ночи — и дорожка, и сам столбик */
+.col.day .track{background:#312E3B}
+.col.night .track{background:#0C0B10}
+.col.day i{background:#948DA3}
+.col.night i{background:#514C60}
+.col:hover i{background:#B3ABC2}
+.col.on i{background:var(--safelight)}
+/* высота подписи задана жёстко: пустая строка иначе схлопывалась
+   и сдвигала дорожку этого столбца вверх относительно соседних */
+.col .tick{font-family:var(--data);font-size:10px;color:var(--muted);text-align:center;
+  white-space:nowrap;overflow:hidden;height:13px;line-height:13px;flex:none}
+.col.on .tick{color:var(--safelight)}
+.legend{display:flex;align-items:center;gap:6px;font-family:var(--data);font-size:11px;
+  color:var(--muted)}
+.legend i{display:inline-block;width:16px;height:9px;border-radius:1px}
+
+/* ---------- горизонтальные строки ---------- */
+.rows{display:flex;flex-direction:column;gap:3px}
+.row{display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;gap:10px;align-items:center;
+  padding:3px 4px;border-radius:2px;text-align:left;width:100%}
+.row:hover{background:#26242D}
+.row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.row .bar{height:11px;background:#191820;border-radius:1px;overflow:hidden}
+.row .bar i{display:block;width:0;height:100%;background:var(--emulsion);
+  transition:background .12s}
+.row:hover .bar i{background:#8B8398}
+.row.on .bar i{background:var(--safelight)}
+.row.on .name{color:var(--safelight);font-weight:600}
+.row .num{font-family:var(--data);font-size:12px;color:var(--muted)}
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;
+  border:1px solid rgba(255,255,255,.18);flex:none;background-size:cover}
+.subhead{display:flex;align-items:center;gap:10px;margin:16px 0 9px;
+  font-family:var(--display);font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted)}
+.subhead i{flex:1;height:1px;background:var(--line)}
+.subnote{font-family:var(--data);font-size:10.5px;color:var(--emulsion);
+  line-height:1.5;margin-top:9px}
+.hint{color:var(--muted);font-size:12.5px;line-height:1.7}
+.hint code{font-family:var(--data);font-size:11.5px;background:var(--frame);
+  padding:1px 5px;border-radius:2px}
+.more{margin-top:9px;font-family:var(--data);font-size:11px;color:var(--muted);
+  text-decoration:underline}
+.more:hover{color:var(--paper)}
+
+/* ---------- места съёмки ---------- */
+.geo-scale{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.geo-scale input{flex:1;accent-color:var(--safelight);min-width:60px}
+.geo-scale span{font-family:var(--data);font-size:11px;color:var(--muted);
+  white-space:nowrap}
+#geoMap{height:340px;border-radius:3px;background:var(--frame);margin-bottom:12px}
+.geo-warn{border:1px solid var(--line);border-radius:3px;padding:12px 14px;
+  margin-bottom:14px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.geo-warn b{color:var(--paper);font-weight:600}
+.geo-dot{border-radius:50%;background:rgba(227,155,51,.75);border:1px solid #F0C88A;
+  color:#231A0B;font-family:var(--data);font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.geo-dot.sel{background:#F3F0EA;border:2px solid var(--safelight);
+  box-shadow:0 0 0 4px rgba(227,155,51,.35)}
+.geo-bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.geo-err{border:1px solid #7A4A2C;border-radius:3px;padding:10px 12px;
+  margin-bottom:12px;color:var(--paper);font-size:12.5px;line-height:1.5}
+.geo-err code{font-family:var(--data);font-size:11px;color:var(--muted)}
+
+/* ---------- полоса предпросмотра ---------- */
+.sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.seltools{display:flex;align-items:center;gap:6px;margin:0 0 12px}
+.seltools .sortlab{font-family:var(--data);font-size:11px;color:var(--muted)}
+.seltools select{background:var(--ground);border:1px solid var(--line);border-radius:3px;
+  color:var(--paper);font-size:12px;padding:3px 6px}
+.frow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:baseline;
+  padding:5px 6px;border-bottom:1px solid #232128;text-align:left;width:100%}
+.frow:hover{background:#26242D}
+.frow .fpath{font-family:var(--data);font-size:11.5px;color:var(--paper);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl}
+.frow .fspan{font-family:var(--data);font-size:10.5px;color:var(--emulsion);white-space:nowrap}
+.frow .fnum{font-family:var(--data);font-size:12px;color:var(--muted);white-space:nowrap}
+.strip-head{display:flex;align-items:center;gap:10px;margin:0 0 7px}
+.strip-head .lbl{font-family:var(--display);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted)}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:18px}
+.cell{position:relative;aspect-ratio:1;background:var(--frame) no-repeat center/cover;
+  border-radius:2px;overflow:hidden;padding:0;border:1px solid transparent}
+.cell.in{background-color:#0E0D11}
+.cell:hover{border-color:var(--safelight)}
+.cell .noimg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--data);font-size:10px;color:var(--muted)}
+.cell.in .noimg{display:none}
+.cell .cap{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;font-family:var(--data);
+  font-size:9px;background:linear-gradient(transparent,rgba(10,9,13,.92));color:var(--paper);
+  text-align:left;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden}
+.cell:hover .cap{opacity:1}
+
+/* ---------- текстовый список ---------- */
+.lhead,.lrow{display:grid;grid-template-columns:112px minmax(70px,1.1fr) 1fr 1fr 46px;
+  gap:10px;align-items:baseline;padding:4px 6px;text-align:left;width:100%}
+.lhead{font-family:var(--display);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:7px;
+  position:sticky;top:0;background:var(--ground);z-index:2}
+.lrow{font-size:12.5px;border-bottom:1px solid #232128}
+.lrow:hover{background:#26242D}
+.lrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .c-time{font-family:var(--data);font-size:11.5px;color:var(--muted)}
+.lrow .c-fl{font-family:var(--data);font-size:11.5px;color:var(--muted);text-align:right}
+.lrow .c-cam,.lrow .c-lens{color:var(--muted)}
+.lrow:hover .c-cam,.lrow:hover .c-lens{color:var(--paper)}
+.lrow.open{background:#2C2A34}
+/* Файлы с одним именем, но разного размера — разные группы. Без границы они
+   стоят вплотную и выглядят как ошибочно найденный дубликат. */
+.lrow.gsep{border-top:1px solid var(--line)}
+.lexp{display:flex;gap:12px;padding:10px 6px 14px;border-bottom:1px solid var(--line);
+  align-items:flex-start}
+.lexp .pic{width:112px;height:112px;flex:none;border-radius:2px;padding:0;
+  background:var(--frame) no-repeat center/cover;border:1px solid transparent;
+  position:relative;overflow:hidden}
+.lexp .pic:hover{border-color:var(--safelight)}
+.lexp .pic .noimg{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-family:var(--data);font-size:10px;color:var(--muted)}
+.lexp .pic.in .noimg{display:none}
+.lexp .info{min-width:0;flex:1;display:flex;flex-direction:column;gap:7px}
+.lexp .facts{display:flex;flex-direction:column;gap:3px;font-size:12.5px;line-height:1.35}
+.lexp .facts div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--paper)}
+.lexp .facts div:first-child{font-family:var(--data);color:var(--muted)}
+.lexp .path{font-family:var(--data);font-size:10.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts2{display:flex;flex-wrap:wrap;gap:6px}
+.act2{border:1px solid var(--line);border-radius:2px;padding:4px 8px;font-size:11.5px;
+  color:var(--muted)}
+.act2:hover{border-color:var(--safelight);color:var(--safelight)}
+.empty{color:var(--muted);font-size:13px;line-height:1.6;padding:30px 0}
+
+/* ---------- карточка снимка ---------- */
+.veil{position:fixed;inset:0;background:rgba(8,7,11,.88);display:none;z-index:60;
+  align-items:center;justify-content:center;padding:24px}
+.veil.on{display:flex}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:4px;max-width:1000px;
+  width:100%;max-height:92vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.5fr) 300px}
+.detail img{width:100%;height:100%;max-height:92vh;object-fit:contain;background:#0E0D11;display:block}
+.meta{padding:18px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.meta h3{font-family:var(--display);font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+  margin:0;word-break:break-all}
+.meta dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px}
+.meta dt{color:var(--muted)}
+.meta dd{margin:0;font-family:var(--data);word-break:break-word}
+.meta .path{font-family:var(--data);font-size:11px;color:var(--muted);word-break:break-all;
+  line-height:1.5}
+.acts{display:flex;flex-direction:column;gap:7px;margin-top:auto}
+.act{border:1px solid var(--line);border-radius:3px;padding:8px;font-size:12.5px;text-align:center}
+.act:hover{border-color:var(--safelight);color:var(--safelight)}
+.act.primary{background:var(--safelight);color:#231A0B;border-color:var(--safelight);font-weight:600}
+.act.primary:hover{color:#231A0B;filter:brightness(1.08)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--frame);
+  border:1px solid var(--line);border-radius:3px;padding:9px 16px;font-size:13px;z-index:80;
+  display:none}
+.toast.on{display:block}
+
+@media (max-width:560px){
+  .lexp{flex-direction:column}
+  .lexp .pic{width:100%;height:150px}
+  .cols.hours{gap:1px}
+  .cols.hours .tick{font-size:8px}
+}
+@media (max-width:760px){
+  .lhead,.lrow{grid-template-columns:100px 1fr 46px}
+  .lhead .c-cam,.lhead .c-lens,.lrow .c-cam,.lrow .c-lens{display:none}
+  .strip{grid-template-columns:repeat(4,1fr)}
+}
+@media (max-width:1000px){
+  .wrap{grid-template-columns:1fr}
+  .right{border-left:0;border-top:1px solid var(--line);position:static;height:auto}
+  .detail{grid-template-columns:1fr}
+  .meta{border-left:0;border-top:1px solid var(--line)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+<header class="top">
+  <div class="brand">Photo<span>archive</span></div>
+  <div class="ver" id="ver"></div>
+  <div class="tally" id="tally">loading…</div>
+  <div class="grow"></div>
+  <input class="search" id="q" type="search" placeholder="search path and name">
+  <a class="tool" id="csv" href="#">export CSV</a>
+  <a class="tool" id="src" href="https://github.com/YOUR-NAME/photostats"
+     target="_blank" rel="noopener">source</a>
+</header>
+
+<div class="chips off" id="chips"></div>
+</div>
+
+<div class="wrap">
+  <main class="left">
+  <div class="group" id="g-time">
+    <button class="group-head" aria-expanded="true">
+      <span class="num">01</span>
+      <span class="ttl">When</span>
+      <span class="rule"></span>
+      <span class="cnt"></span>
+      <span class="caret">−</span>
+    </button>
+    <div class="group-body">
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Shooting timeline</div>
+        <div class="grow"></div>
+        <div class="card-note" id="span"></div>
+      </div>
+      <div class="film-scroll" id="filmScroll">
+        <div class="film">
+          <div class="perf"></div>
+          <div class="frames" id="film"></div>
+          <div class="perf"></div>
+        </div>
+        <div class="axis" id="axis"></div>
+      </div>
+      <div class="card-note" style="margin-top:9px">One frame is one month. Click a frame
+        or a year to select the photos of that period.</div>
+      <div class="card-note" id="odd" style="margin-top:6px"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">Months of the year</div></div>
+      <div class="cols" id="month"></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Time of day</div>
+        <div class="grow"></div>
+        <div class="legend"><i style="background:#312E3B"></i>day
+          <i style="background:#0C0B10;margin-left:6px"></i>night</div>
+      </div>
+      <div class="cols hours" id="hour"></div>
+    </section>
+    </div>
+  </div>
+  <div class="group" id="g-exif">
+    <button class="group-head" aria-expanded="true">
+      <span class="num">02</span>
+      <span class="ttl">EXIF metrics</span>
+      <span class="rule"></span>
+      <span class="cnt"></span>
+      <span class="caret">−</span>
+    </button>
+    <div class="group-body">
+    <section class="card">
+      <div class="card-head"><div class="card-title">Camera brands</div></div>
+      <div class="rows" id="brand"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">Camera models</div></div>
+      <div class="rows" id="camera"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">Lenses</div></div>
+      <div class="rows" id="lens"></div>
+    </section>
+
+    <section class="card" id="tlCameraCard">
+      <div class="card-head">
+        <div class="card-title">Camera over time</div>
+        <div class="grow"></div>
+        <div class="card-note" id="tlCameraNote"></div>
+        <button class="toggle" id="tlCameraSpan">whole archive</button>
+      </div>
+      <div class="tl" id="tlCamera"></div>
+      <div class="tnote" id="tlCameraFoot"></div>
+    </section>
+
+    <section class="card" id="tlLensCard">
+      <div class="card-head">
+        <div class="card-title">Lens over time</div>
+        <div class="grow"></div>
+        <div class="card-note" id="tlLensNote"></div>
+        <button class="toggle" id="tlLensSpan">whole archive</button>
+      </div>
+      <div class="tl" id="tlLens"></div>
+      <div class="tnote" id="tlLensFoot"></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Focal lengths</div>
+        <div class="grow"></div>
+        <button class="toggle" id="eq">35 mm equivalent</button>
+      </div>
+      <div class="rows" id="focal"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">Aperture</div></div>
+      <div class="rows" id="aperture"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">Shutter speed</div></div>
+      <div class="rows" id="exposure"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">ISO</div></div>
+      <div class="rows" id="iso"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div class="card-title">File size</div></div>
+      <div class="rows" id="size"></div>
+    </section>
+    <section class="card" id="extCard" hidden>
+      <div class="card-head">
+        <div class="card-title">File formats</div>
+        <div class="grow"></div>
+        <div class="card-note" id="extNote"></div>
+      </div>
+      <div class="rows" id="ext"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Duplicates</div>
+        <div class="grow"></div>
+        <div class="card-note" id="dupNote"></div>
+      </div>
+      <div class="rows" id="dup"></div>
+      <div class="tnote" id="dupRule"></div>
+    </section>
+    </div>
+  </div>
+  <div class="group" id="g-image">
+    <button class="group-head" aria-expanded="true">
+      <span class="num">03</span>
+      <span class="ttl">Image metrics</span>
+      <span class="rule"></span>
+      <span class="cnt"></span>
+      <span class="caret">−</span>
+    </button>
+    <div class="group-body">
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Dominant colour</div>
+        <div class="grow"></div>
+        <div class="card-note" id="colorNote"></div>
+      </div>
+      <div class="rows" id="color"></div>
+      <div id="ccWrap" hidden>
+        <div class="subhead">Colour in the centre<i></i></div>
+        <div class="rows" id="colorCenter"></div>
+        <div class="subnote">The centre is half the frame area, taken from the
+          middle. The dominant colour usually describes the background, the
+          centre one describes the subject.</div>
+      </div>
+    </section>
+    <section class="card" id="toneCard" hidden>
+      <div class="card-head"><div class="card-title">Colour or mono</div></div>
+      <div class="rows" id="tone"></div>
+    </section>
+    <section class="card" id="brightnessCard" hidden>
+      <div class="card-head"><div class="card-title">Brightness</div></div>
+      <div class="rows" id="brightness"></div>
+    </section>
+    <section class="card" id="contrastCard" hidden>
+      <div class="card-head"><div class="card-title">Contrast</div></div>
+      <div class="rows" id="contrast"></div>
+    </section>
+    <section class="card" id="clippingCard" hidden>
+      <div class="card-head">
+        <div class="card-title">Clipping</div>
+        <div class="grow"></div>
+        <div class="card-note">blown to white and crushed to black</div>
+      </div>
+      <div class="rows" id="clipping"></div>
+    </section>
+    </div>
+  </div>
+  <div class="group" id="g-geo">
+    <button class="group-head" aria-expanded="true">
+      <span class="num">04</span>
+      <span class="ttl">Where</span>
+      <span class="rule"></span>
+      <span class="cnt"></span>
+      <span class="caret">−</span>
+    </button>
+    <div class="group-body">
+      <section class="card" id="geoCard">
+        <div class="card-head">
+          <div class="card-title">Places</div>
+          <div class="grow"></div>
+          <div class="card-note" id="geoNote"></div>
+        </div>
+        <div id="geoBody"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+  <aside class="right">
+    <div class="sheet-head">
+      <div class="card-title">Selection</div>
+      <div class="grow"></div>
+      <div class="card-note" id="sheetNote"></div>
+    </div>
+    <div class="seltools">
+      <button class="toggle on" id="viewFiles">files</button>
+      <button class="toggle" id="viewFolders">folders</button>
+      <div class="grow"></div>
+      <label class="sortlab" for="sortBy">sort</label>
+      <select id="sortBy">
+        <option value="taken">taken</option>
+        <option value="name">file name</option>
+        <option value="size">file size</option>
+        <option value="camera">camera</option>
+        <option value="folder">folder</option>
+      </select>
+      <button class="toggle" id="sortDir" title="Reverse order">↑</button>
+    </div>
+
+    <div class="strip-head">
+      <span class="lbl">Random photos</span>
+      <div class="grow"></div>
+      <button class="toggle" id="reshuffle">others</button>
+    </div>
+    <div class="strip" id="strip"></div>
+
+    <div class="lhead">
+      <span>Taken</span><span>File</span><span class="c-cam">Camera</span>
+      <span class="c-lens">Lens</span><span style="text-align:right">mm</span>
+    </div>
+    <div id="list"></div>
+    <div id="sheetFoot"></div>
+  </aside>
+</div>
+
+<div class="veil" id="veil"><div class="detail" id="detail"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NONE = "__none__";
+const MONTHS = ["January","February","March","April","May","June","July","August",
+                "September","October","November","December"];
+const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
+  camera:"Camera", lens:"Lens", focal:"Focal", year:"Year", folder:"Folder",
+  q:"Search", ext:"Format", geo:"Place", aperture:"Aperture", exposure:"Shutter",
+  iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
+  tone:"Tone", brightness:"Brightness", contrast:"Contrast", clipping:"Clipping",
+  baddate:"Date"};
+/* Подписи диапазонов приходят с сервера — запоминаем их для плашек фильтров. */
+const seen = {};
+const order = {};        // порядок значений измерения — для выбора диапазона
+
+function remember(param, items){
+  seen[param] = seen[param] || {};
+  items.forEach(i => { seen[param][i.k] = i.l; });
+  order[param] = items.map(i => i.k);
+}
+
+const state = {filters:{}, eq:false, sort:"taken", dir:"asc", view:"files",
+               limit:300, expanded:{}, mixedMax:0.20};
+const ctl = {};
+
+/* Отменяем предыдущий запрос того же вида: пока грузилась старая выборка,
+   пользователь мог уже щёлкнуть по другому столбику. */
+function ask(key, url){
+  if (ctl[key]) ctl[key].abort();
+  ctl[key] = new AbortController();
+  return fetch(url, {signal: ctl[key].signal}).then(r => r.json());
+}
+const quiet = e => { if (e.name !== "AbortError") console.error(e); };
+const $ = id => document.getElementById(id);
+const nf = n => (n||0).toLocaleString("en-US");
+
+/* Значение фильтра — всегда массив, даже когда выбрано одно. Так множественный
+   выбор не требует отдельной ветки нигде, кроме подписи на плашке. Уходит на
+   сервер повторяющимися параметрами: month=9&month=10. */
+function params(extra){
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(state.filters)){
+    (Array.isArray(v) ? v : [v]).forEach(x => {
+      if (x !== undefined && x !== "") p.append(k, x);
+    });
+  }
+  if (state.eq) p.set("eq", "1");
+  p.set("sort", state.sort);
+  if (state.dir === "desc") p.set("dir", "desc");
+  for (const [k, v] of Object.entries(extra || {})) p.set(k, v);
+  return p;
+}
+
+const MULTI = ["year", "ym", "month", "hour"];      // где копится набор значений
+const picked = p => state.filters[p] || [];
+const isOn = (p, k) => picked(p).includes(String(k));
+let lastPick = {};                                  // якорь для выбора диапазона
+
+function toggleFilter(param, key, event){
+  key = String(key);
+  const multi = MULTI.includes(param);
+  let sel = picked(param).slice();
+
+  if (multi && event && event.shiftKey && lastPick[param] !== undefined){
+    // Shift берёт всё между прошлым выбором и этим — сентябрь по октябрь
+    // одним движением, а не по щелчку на каждый месяц.
+    const all = (order[param] || []).map(String);
+    const a = all.indexOf(lastPick[param]), b = all.indexOf(key);
+    if (a >= 0 && b >= 0){
+      sel = all.slice(Math.min(a, b), Math.max(a, b) + 1);
+    } else {
+      sel = [key];
+    }
+  } else if (multi && event && (event.ctrlKey || event.metaKey)){
+    sel = sel.includes(key) ? sel.filter(x => x !== key) : sel.concat(key);
+  } else if (sel.length === 1 && sel[0] === key){
+    sel = [];                                        // повторный щелчок снимает
+  } else if (multi && sel.includes(key)){
+    sel = sel.filter(x => x !== key);
+  } else if (multi && sel.length){
+    sel = sel.concat(key);                           // обычный щелчок добавляет
+  } else {
+    sel = [key];
+  }
+
+  if (sel.length) state.filters[param] = sel;
+  else delete state.filters[param];
+  if (multi) lastPick[param] = key;
+  if (param === "year") delete state.filters.ym;
+  if (param === "ym") delete state.filters.year;
+  load();
+}
+
+function chipText(param, val){
+  const name = NAMES[param] || param;
+  const list = Array.isArray(val) ? val : [val];
+  const one = v => {
+    const t = (seen[param] || {})[v];
+    if (t) return t;
+    if (v === NONE) return "not specified";
+    if (param === "month") return MONTHS[+v - 1];
+    if (param === "hour") return String(v).padStart(2, "0") + ":00";
+    if (param === "ym"){ const [y, m] = String(v).split("-"); return MONTHS[+m - 1] + " " + y; }
+    if (param === "folder") return String(v).split(/[\\/]/).pop() || v;
+    if (param === "ext") return String(v).toUpperCase();
+    if (param === "geo"){
+      const p = String(v).split(",").map(Number);
+      return ((p[0] + p[2]) / 2).toFixed(3) + ", " + ((p[1] + p[3]) / 2).toFixed(3);
+    }
+    return v;
+  };
+  // до трёх значений перечисляем, дальше — числом: иначе одна плашка займёт
+  // всю строку, а их может быть несколько
+  return name + ": " + (list.length <= 3 ? list.map(one).join(", ")
+                                         : list.length + " selected");
+}
+
+function measureTop(){
+  const el = document.querySelector(".topbar");
+  if (el) document.documentElement.style.setProperty(
+    "--topbar", el.getBoundingClientRect().height + "px");
+}
+window.addEventListener("resize", measureTop);
+
+function renderChips(){
+  const box = $("chips");
+  const keys = Object.keys(state.filters).filter(k => picked(k).length);
+  if (!keys.length){
+    box.className = "chips off"; box.innerHTML = ""; measureTop(); return;
+  }
+  box.className = "chips";
+  box.innerHTML = '<span class="chips-label">Filtered</span>';
+  keys.forEach(k => {
+    const el = document.createElement("span");
+    el.className = "chip";
+    el.innerHTML = '<span></span><button title="Remove">×</button>';
+    el.firstChild.textContent = chipText(k, state.filters[k]);
+    el.querySelector("button").onclick = () => { delete state.filters[k];
+      if (k==="q") $("q").value=""; load(); };
+    box.appendChild(el);
+  });
+  const clr = document.createElement("button");
+  clr.className = "clear-all"; clr.textContent = "clear all";
+  clr.onclick = () => { state.filters = {}; $("q").value = ""; load(); };
+  box.appendChild(clr);
+  measureTop();
+}
+
+/* ---------- плёнка ---------- */
+const FILM_CELL_MAX = 14;   // потолок ширины кадра-месяца, точек
+const FILM_CELL_MIN = 2;    // ниже этого лента начинает прокручиваться
+
+function renderFilm(items){
+  remember("ym", items);
+  const film = $("film"), axis = $("axis");
+  film.innerHTML = ""; axis.innerHTML = "";
+  const n = items.length;
+  if (!n) return;
+
+  // одну и ту же ширину получают и лента, и ось — иначе они разъезжаются
+  const box = $("filmScroll");
+  const span = Math.min(Math.max(box.clientWidth || 700, n * FILM_CELL_MIN),
+                        n * FILM_CELL_MAX);
+  const cellPx = span / n;
+  [film.parentElement, axis].forEach(el => {
+    el.style.maxWidth = (n * FILM_CELL_MAX) + "px";
+    el.style.minWidth = (n * FILM_CELL_MIN) + "px";
+  });
+
+  const max = Math.max(1, ...items.map(i => i.v));
+  const years = {};
+  items.forEach(it => {
+    const [y] = it.k.split("-");
+    years[y] = (years[y] || 0) + 1;
+    const b = document.createElement("button");
+    b.className = "fr" + (isOn("ym", it.k) ? " on" : "");
+    b.title = it.l + " — " + nf(it.v) + " photos";
+    b.innerHTML = "<i></i>";
+    b.firstChild.style.height = it.v ? Math.max(2, it.v / max * 100) + "%" : "0";
+    b.onclick = e => toggleFilter("ym", it.k, e);
+    film.appendChild(b);
+  });
+
+  Object.keys(years).sort().forEach(y => {
+    const b = document.createElement("button");
+    b.className = "yr" + (isOn("year", y) ? " on" : "");
+    b.style.flex = years[y] + " 0 0";        // доля оси = доля месяцев в ленте
+    // на узкой ленте под полный год места нет — ставим короткую форму,
+    // иначе ось осталась бы вовсе без подписей
+    const slot = years[y] * cellPx;
+    b.textContent = slot >= 26 ? y : slot >= 15 ? "'" + y.slice(2) : "";
+    b.title = y;
+    b.onclick = e => toggleFilter("year", y, e);
+    axis.appendChild(b);
+  });
+}
+
+/* ---------- места съёмки ----------
+   Список мест работает без сети. Тайлы карты грузятся только по кнопке и
+   только с явного согласия: это единственное обращение программы наружу, и по
+   запросам тайлов сторонний сервер видит, какие районы вы разглядываете. */
+const LEAFLET = "https://unpkg.com/leaflet@1.9.4/dist/leaflet";
+/* Карта живёт между перерисовками. Раньше она создавалась заново при каждом
+   обновлении и заново подгонялась под все кластеры — выбранная точка терялась
+   вместе с масштабом и положением. */
+let mapObj = null, mapLayer = null, mapHolder = null, mapFitted = false;
+let mapPicked = null;      // к какой точке карта уже подведена
+state.geoLevel = 4;
+state.tlSpan = "active";        // лента по периоду работы, а не по всему архиву
+state.mapOn = false;
+
+function loadAsset(tag, attrs){
+  return new Promise((ok, fail) => {
+    const el = document.createElement(tag);
+    Object.assign(el, attrs);
+    el.onload = ok;
+    el.onerror = () => fail(new Error("failed to load"));
+    document.head.appendChild(el);
+  });
+}
+
+async function enableMap(){
+  if (window.L) return true;
+  await loadAsset("link", {rel: "stylesheet", href: LEAFLET + ".css"});
+  await loadAsset("script", {src: LEAFLET + ".js"});
+  return !!window.L;
+}
+
+function renderGeo(d){
+  const body = $("geoBody"), note = $("geoNote");
+  body.innerHTML = "";
+  if (!d.withGeo){
+    note.textContent = "";
+    body.innerHTML = '<div class="hint">No photo has coordinates. They are ' +
+      'written by phones and by cameras with a satellite receiver; if the ' +
+      'archive was shot on a DSLR without GPS, this panel stays empty.</div>';
+    return;
+  }
+  note.textContent = nf(d.withGeo) + " of " + nf(d.allPhotos) + " have coordinates";
+
+  const scale = document.createElement("div");
+  scale.className = "geo-scale";
+  scale.innerHTML = '<span>coarse</span><input type="range" min="0" max="' +
+    (d.levels - 1) + '" value="' + d.level + '"><span>fine</span>' +
+    '<span class="cell"></span>';
+  scale.querySelector(".cell").textContent = nf(d.clusters.length) +
+    plural(d.clusters.length, " place", " places");
+  scale.querySelector("input").oninput = e => {
+    state.geoLevel = +e.target.value;
+    loadGeo();
+  };
+  body.appendChild(scale);
+
+  if (state.mapOn){
+    const bar = document.createElement("div");
+    bar.className = "geo-bar";
+    const off = document.createElement("button");
+    off.className = "act2";
+    off.textContent = "hide map";
+    off.onclick = () => { destroyMap(); state.mapOn = false; loadGeo(); };
+    bar.appendChild(off);
+    body.appendChild(bar);
+
+    if (!cssLoaded()){
+      const e = document.createElement("div");
+      e.className = "geo-err";
+      e.innerHTML = "The map code loaded but its stylesheet did not: without it " +
+        "the map stays an empty rectangle. Usually an ad blocker, or " +
+        "<code>unpkg.com</code> being blocked. The list below works without the map.";
+      body.appendChild(e);
+    }
+    try {
+      drawMap(body, d);
+    } catch (err){
+      destroyMap();
+      const e = document.createElement("div");
+      e.className = "geo-err";
+      e.textContent = "The map failed to build: " + err.message;
+      body.appendChild(e);
+    }
+  } else {
+    const warn = document.createElement("div");
+    warn.className = "geo-warn";
+    warn.innerHTML = '<b>The map is loaded from the internet.</b> This is the ' +
+      'only outbound request the program makes: tiles come from ' +
+      'openstreetmap.org, and from those requests their server can tell which ' +
+      'areas you are looking at. The list below works offline.<br>';
+    const btn = document.createElement("button");
+    btn.className = "act2";
+    btn.style.marginTop = "9px";
+    btn.textContent = "show map";
+    btn.onclick = async () => {
+      btn.textContent = "loading…";
+      try {
+        if (!await enableMap()) throw new Error();
+        state.mapOn = true;
+        loadGeo();
+      } catch (e){
+        btn.textContent = "could not load — offline?";
+      }
+    };
+    warn.appendChild(btn);
+    body.appendChild(warn);
+  }
+
+  const rows = document.createElement("div");
+  rows.className = "rows";
+  const max = Math.max(1, ...d.clusters.map(c => c.n));
+  d.clusters.slice(0, 14).forEach(c => {
+    const key = c.box.join(",");
+    const b = document.createElement("button");
+    b.className = "row" + (isOn("geo", key) ? " on" : "");
+    b.innerHTML = '<span class="name"></span><span class="bar"><i></i></span>' +
+      '<span class="num"></span>';
+    const label = c.lat.toFixed(3) + ", " + c.lon.toFixed(3);
+    const nm = b.querySelector(".name");
+    nm.textContent = label;
+    nm.title = label + "\n" + c.first.slice(0, 10) + " — " + c.last.slice(0, 10);
+    b.querySelector(".bar > i").style.width = Math.max(1, c.n / max * 100) + "%";
+    b.querySelector(".num").textContent = nf(c.n);
+    b.onclick = () => toggleFilter("geo", key);
+    rows.appendChild(b);
+  });
+  body.appendChild(rows);
+
+  const foot = document.createElement("div");
+  foot.className = "tnote";
+  foot.textContent = d.clusters.length > 14
+    ? "Showing the 14 largest of " + nf(d.clusters.length) +
+      "; the slider changes the cell size."
+    : "The slider changes the cell size: coarse for cities, fine for districts.";
+  body.appendChild(foot);
+}
+
+function cssLoaded(){
+  /* Стили и код Leaflet грузятся по отдельности, и блокировщик может пропустить
+     один, но не другой. Без стилей карта молча остаётся пустым прямоугольником,
+     поэтому проверяем их наличие прямо на пробном элементе. */
+  const probe = document.createElement("div");
+  probe.className = "leaflet-pane";
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const pos = getComputedStyle(probe).position;
+  probe.remove();
+  return pos === "absolute";
+}
+
+function ensureMap(){
+  if (!mapHolder){
+    mapHolder = document.createElement("div");
+    mapHolder.id = "geoMap";
+  }
+  if (!mapObj){
+    // центр задаём сразу: карта без него считается неготовой
+    mapObj = window.L.map(mapHolder, {center: [20, 0], zoom: 2});
+    window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap",
+    }).addTo(mapObj);
+    mapLayer = window.L.layerGroup().addTo(mapObj);
+    mapFitted = false;
+  }
+}
+
+function destroyMap(){
+  if (mapObj){ mapObj.remove(); }
+  mapObj = mapLayer = mapHolder = null;
+  mapFitted = false;
+  mapPicked = null;
+}
+
+function drawMap(body, d){
+  const L = window.L;
+  ensureMap();
+  body.appendChild(mapHolder);          // тот же элемент, не новый
+  mapLayer.clearLayers();
+
+  const sel = state.filters.geo;
+  const max = Math.max(1, ...d.clusters.map(c => c.n));
+  const bounds = [];
+  let picked = null;
+
+  d.clusters.forEach(c => {
+    const key = c.box.join(",");
+    const on = key === sel;
+    if (on) picked = c;
+    const size = 16 + Math.round(26 * Math.sqrt(c.n / max));
+    const icon = L.divIcon({
+      className: "",
+      html: '<div class="geo-dot' + (on ? " sel" : "") + '" style="width:' + size +
+            'px;height:' + size + 'px">' +
+            (c.n > 999 ? Math.round(c.n / 1000) + "k" : c.n) + "</div>",
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+    });
+    L.marker([c.lat, c.lon], {icon, zIndexOffset: on ? 1000 : 0})
+      .addTo(mapLayer)
+      .bindTooltip(nf(c.n) + plural(c.n, " photo", " photos") +
+                   "<br>" + c.first.slice(0, 10) + " — " + c.last.slice(0, 10))
+      .on("click", () => toggleFilter("geo", c.box.join(",")));
+    bounds.push([c.lat, c.lon]);
+  });
+
+  if (picked && sel !== mapPicked){
+    // подводим карту только в момент смены выбора: иначе любое другое действие
+    // возвращало бы её к точке и сбрасывало прокрутку, сделанную вручную
+    const b = picked.box;
+    mapObj.fitBounds([[b[0], b[1]], [b[2], b[3]]], {padding: [40, 40], maxZoom: 15});
+  } else if (!mapFitted && bounds.length){
+    mapObj.fitBounds(bounds, {padding: [30, 30], maxZoom: 12});
+  }
+  mapPicked = sel || null;
+  mapFitted = true;
+
+  // размеры контейнера известны только после раскладки страницы
+  requestAnimationFrame(() => mapObj && mapObj.invalidateSize());
+  setTimeout(() => mapObj && mapObj.invalidateSize(), 300);
+}
+
+function loadGeo(){
+  ask("geo", "/api/geo?" + params({level: state.geoLevel}))
+    .then(renderGeo).catch(quiet);
+}
+
+/* ---------- хронология техники ----------
+   Показываем только выбранную камеру или объектив: пока не выбрано, панель
+   ничего не строит и запрос не уходит. Ряд месяцев — по всему архиву, а не по
+   годам жизни самой камеры, чтобы видеть, что было до и после. Высота столбика
+   — доля месяца, снятая ею: иначе годы редкой съёмки выглядели бы перерывом. */
+const TL_CELL_MAX = 72;   // потолок ширины ячейки месяца, точек
+const TL_CELL_MIN = 4;    // ниже этого лента начинает прокручиваться
+
+const TL_HINT = {
+  camera: 'Pick a camera in the "Camera models" panel — this will show ' +
+          'when you were shooting with it.',
+  lens: 'Pick a lens in the "Lenses" panel — this will show when you were ' +
+        'shooting with it.',
+};
+
+function plural(n, one, many){ return Math.abs(n) === 1 ? one : many; }
+
+const asDate = t => t ? t.slice(0, 10) : "—";
+
+function renderTimeline(ids, data, param){
+  const box = $(ids.box), note = $(ids.note), foot = $(ids.foot);
+  box.innerHTML = ""; note.textContent = ""; foot.textContent = "";
+
+  if (!picked(param).length){
+    box.innerHTML = '<div class="hint">' + TL_HINT[param] + '</div>';
+    return;
+  }
+  const r = data && data.rows[0];
+  if (!r){
+    box.innerHTML = '<div class="empty">No photos in this selection.</div>';
+    return;
+  }
+  note.textContent = r.k;
+
+  const stats = document.createElement("div");
+  stats.className = "tstats";
+  [["First frame", asDate(r.firstDate)],
+   ["Last frame", asDate(r.lastDate)],
+   ["In service", r.days ? nf(r.days) + " " + plural(r.days, "day", "days") : "—"],
+   ["Photos", nf(r.total)]
+  ].forEach(([label, value]) => {
+    const d = document.createElement("div");
+    d.className = "tstat";
+    d.innerHTML = "<span></span><b></b>";
+    d.querySelector("span").textContent = label;
+    d.querySelector("b").textContent = value;
+    stats.appendChild(d);
+  });
+  box.appendChild(stats);
+
+  // ширина ленты: делим карточку между месяцами, но не шире потолка на ячейку —
+  // иначе три месяца превратились бы в три лопаты во весь экран
+  const inner = document.createElement("div");
+  inner.className = "tinner";
+  const n = data.months.length;
+  inner.style.maxWidth = (n * TL_CELL_MAX) + "px";
+  inner.style.minWidth = (n * TL_CELL_MIN) + "px";
+  const cellPx = Math.min(TL_CELL_MAX,
+                          Math.max(TL_CELL_MIN, (box.clientWidth || 700) / n));
+
+  const cells = document.createElement("div");
+  cells.className = "tcells";
+  let peak = 0;
+  r.v.forEach((n, i) => {
+    const total = data.totals[i];
+    const c = document.createElement("button");
+    c.className = "tc" + (isOn("ym", data.months[i]) ? " on" : "");
+    c.innerHTML = "<i></i>";
+    if (n && total){
+      c.firstChild.style.height = Math.max(4, n / total * 100) + "%";
+      c.title = data.months[i] + " · " + nf(n) + " of " + nf(total) +
+                " (" + Math.round(n / total * 100) + "%)";
+      if (n > peak) peak = n;
+    } else {
+      c.title = data.months[i] + " · no frames";
+    }
+    c.onclick = e => toggleFilter("ym", data.months[i], e);
+    cells.appendChild(c);
+  });
+  inner.appendChild(cells);
+
+  const years = {};
+  data.months.forEach(ym => { const y = ym.slice(0, 4); years[y] = (years[y] || 0) + 1; });
+  const axis = document.createElement("div");
+  axis.className = "taxis";
+  Object.keys(years).sort().forEach(y => {
+    const b = document.createElement("button");
+    b.className = "yr" + (isOn("year", y) ? " on" : "");
+    b.style.flex = years[y] + " 0 0";        // доля оси = доля месяцев в ленте
+    // подпись ставим, только если под неё есть место, иначе она обрежется
+    b.textContent = years[y] * cellPx >= 30 ? y : "";
+    b.title = y;
+    b.onclick = e => toggleFilter("year", y, e);
+    axis.appendChild(b);
+  });
+  inner.appendChild(axis);
+  box.appendChild(inner);
+
+  const cut = data.span === "active" && data.months.length < data.archiveMonths;
+  foot.textContent = (cut ? "Trimmed to the period in service. " : "") +
+    "Used in " + r.activeMonths + " " +
+    plural(r.activeMonths, "month", "months") +
+    "; best month " + nf(peak) + " " + plural(peak, "frame", "frames") +
+    ". Bar height is the share of the month shot with this gear; click selects a month.";
+}
+
+function loadTimeline(dim, ids){
+  if (!state.filters[dim]){          // не выбрано — запрос не нужен
+    renderTimeline(ids, null, dim);
+    return;
+  }
+  ask("tl" + dim, "/api/timeline?" + params({dim: dim, top: 1, span: state.tlSpan}))
+    .then(d => renderTimeline(ids, d, dim)).catch(quiet);
+}
+
+/* ---------- вертикальные столбцы ---------- */
+function renderCols(id, items, param, opts){
+  remember(param, items);
+  const box = $(id); box.innerHTML = "";
+  const max = Math.max(1, ...items.map(i=>i.v));
+  items.forEach((it,idx) => {
+    const b = document.createElement("button");
+    let band = "";
+    if (opts && opts.night) band = (idx < 6 || idx >= 21) ? " night" : " day";
+    b.className = "col" + band + (isOn(param, it.k) ? " on" : "");
+    b.title = it.l + " — " + nf(it.v) + " photos";
+    b.innerHTML = '<span class="track"><i></i></span><span class="tick"></span>';
+    b.querySelector(".track > i").style.height = it.v ? Math.max(2, it.v/max*100)+"%" : "0";
+    b.querySelector(".tick").textContent = opts && opts.tick ? opts.tick(it,idx) : it.l;
+    b.onclick = e => toggleFilter(param, it.k, e);
+    box.appendChild(b);
+  });
+}
+
+/* ---------- горизонтальные строки ---------- */
+function renderRows(id, items, param, cap){
+  remember(param, items);
+  const box = $(id); box.innerHTML = "";
+  if (!items.length){ box.innerHTML = '<div class="empty">No data in this selection.</div>'; return; }
+  const max = Math.max(1, ...items.map(i=>i.v));
+  const showAll = state.expanded[id];
+  const shown = showAll ? items : items.slice(0, cap);
+  shown.forEach(it => {
+    const b = document.createElement("button");
+    b.className = "row" + (isOn(param, it.k) ? " on" : "");
+    b.innerHTML = '<span class="name"></span><span class="bar"><i></i></span><span class="num"></span>';
+    const nm = b.querySelector(".name");
+    if (it.c){
+      const sw = document.createElement("i");
+      sw.className = "sw"; sw.style.background = it.c;
+      nm.appendChild(sw);
+    }
+    nm.appendChild(document.createTextNode(it.l));
+    nm.title = it.l;
+    b.querySelector(".bar > i").style.width = Math.max(1, it.v/max*100) + "%";
+    b.querySelector(".num").textContent = nf(it.v);
+    b.onclick = e => toggleFilter(param, it.k, e);
+    box.appendChild(b);
+  });
+  if (items.length > cap){
+    const m = document.createElement("button");
+    m.className = "more";
+    m.textContent = showAll ? "show fewer" : "show all " + items.length;
+    // Развернуть список — дело оформления, отбор от этого не меняется.
+    // Перерисовываем одну панель по тем же данным: load() перезапрашивал бы
+    // всё, включая выборку, и сбрасывал бы её прокрутку и раскрытые строки.
+    m.onclick = () => {
+      state.expanded[id] = !showAll;
+      renderRows(id, items, param, cap);
+    };
+    box.appendChild(m);
+  }
+}
+
+/* ---------- полоса предпросмотра ----------
+   Миниатюры грузим строго по одной: браузер держит к серверу не более шести
+   соединений, и параллельная пачка картинок блокировала бы клики по графикам. */
+let thumbGen = 0;
+const thumbQ = [];
+let thumbBusy = false;
+
+/* Все миниатюры — и в полосе, и в раскрытых строках — идут через одну очередь,
+   по одной за раз: браузер держит к серверу не более шести соединений, и
+   параллельная пачка картинок блокировала бы клики по графикам. Смена выборки
+   поднимает номер поколения, и всё недогруженное отменяется. */
+function queueThumb(el, id, size){
+  thumbQ.push({el, id, size, gen: thumbGen});
+  pumpThumbs();
+}
+
+async function pumpThumbs(){
+  if (thumbBusy) return;
+  thumbBusy = true;
+  while (thumbQ.length){
+    const job = thumbQ.shift();
+    if (job.gen !== thumbGen) continue;          // выборка сменилась, кадр не нужен
+    await new Promise(done => {
+      const img = new Image();
+      img.onload = () => {
+        if (job.gen === thumbGen){
+          job.el.style.backgroundImage = "url(" + img.src + ")";
+          job.el.classList.add("in");
+        }
+        done();
+      };
+      img.onerror = done;
+      img.src = "/api/thumb/" + job.id + "?s=" + job.size;
+    });
+  }
+  thumbBusy = false;
+}
+
+function renderStrip(items){
+  const box = $("strip");
+  thumbGen++;                      // всё, что грузилось раньше, больше не нужно
+  box.innerHTML = "";
+  items.forEach(it => {
+    const b = document.createElement("button");
+    b.className = "cell";
+    b.innerHTML = '<span class="noimg"></span><span class="cap"></span>';
+    b.querySelector(".noimg").textContent = it.ext.toUpperCase();
+    b.querySelector(".cap").textContent = (it.taken || "").slice(0, 10);
+    b.title = it.filename + "\n" + (it.taken || "");
+    b.onclick = () => openDetail(it);
+    box.appendChild(b);
+    queueThumb(b, it.id, 200);
+  });
+}
+
+/* ---------- текстовый список ---------- */
+let listItems = [];
+
+function act(action, id){
+  fetch("/api/" + action + "/" + id, {method: "POST"})
+    .then(r => r.json())
+    .then(r => { if (!r.ok) toast(r.error || "Did not work"); })
+    .catch(() => toast("Could not open the file"));
+}
+
+/* Сводка под строкой. Раскрытые строки не закрывают друг друга: так можно
+   разложить рядом несколько кадров и сравнить их, не теряя места в списке. */
+function expandRow(row, it){
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains("lexp")){   // повторный клик — свернуть
+    next.remove();
+    row.classList.remove("open");
+    return;
+  }
+  const box = document.createElement("div");
+  box.className = "lexp";
+  box.innerHTML =
+    '<button class="pic" title="Open large"><span class="noimg"></span></button>' +
+    '<div class="info"><div class="facts"></div><div class="path"></div>' +
+    '<div class="acts2"></div></div>';
+
+  const pic = box.querySelector(".pic");
+  pic.querySelector(".noimg").textContent = it.ext.toUpperCase();
+  pic.onclick = () => openDetail(it);
+  const path = box.querySelector(".path");
+  path.textContent = it.path;
+  path.title = it.path;
+
+  const facts = box.querySelector(".facts");
+  const line = (text, hex) => {
+    if (!text) return;
+    const d = document.createElement("div");
+    if (hex){
+      const sw = document.createElement("i");
+      sw.className = "sw";
+      sw.style.background = hex;
+      d.appendChild(sw);
+    }
+    d.appendChild(document.createTextNode(text));
+    facts.appendChild(d);
+  };
+
+  const fl = state.eq ? it.focal35 : it.focal;
+  line(it.taken + (it.date_src === "file" ? "  (file date)" : ""));
+  line([it.camera, it.lens].filter(Boolean).join("  ·  ") || "camera not specified");
+  line([fl ? Math.round(fl) + " mm" : null,
+        it.fnumber ? "f/" + it.fnumber : null,
+        it.shutter,
+        it.iso ? "ISO " + it.iso : null].filter(Boolean).join("  ·  "));
+  if (it.color){
+    const mixed = it.color_share && it.color_share < state.mixedMax;
+    line((mixed ? "mixed, most often " + it.color : it.color) +
+         (it.color_share ? ", " + Math.round(it.color_share * 100) + "% of frame" : ""),
+         it.color_hex);
+  }
+  if (it.color_center){
+    const cmix = it.color_center_share && it.color_center_share < state.mixedMax;
+    line("centre: " + (cmix ? "mixed, most often " + it.color_center
+                            : it.color_center) +
+         (it.color_center_share
+            ? ", " + Math.round(it.color_center_share * 100) + "%" : ""),
+         it.color_center_hex);
+  }
+  if (it.brightness !== null && it.brightness !== undefined)
+    line("brightness " + Math.round(it.brightness * 100) + "%  ·  contrast " +
+         it.contrast.toFixed(2));
+  line((it.width && it.height ? it.width + "×" + it.height + "  ·  " : "") +
+       (it.size / 1048576).toFixed(1) + " MB  ·  " + nf(it.size) + " bytes");
+  if (it.dup_n > 1)
+    line(it.dup_n + " files look identical — pick \u201chas duplicates\u201d to see them together");
+
+  const acts = box.querySelector(".acts2");
+  [["show in explorer", () => act("reveal", it.id)],
+   ["open file", () => act("open", it.id)],
+   ["whole folder", () => { state.filters.folder = it.folder; load(); }],
+   ["large", () => openDetail(it)]
+  ].forEach(([label, fn]) => {
+    const b = document.createElement("button");
+    b.className = "act2";
+    b.textContent = label;
+    b.onclick = fn;
+    acts.appendChild(b);
+  });
+
+  row.classList.add("open");
+  row.after(box);
+  queueThumb(pic, it.id, 260);
+}
+
+let lastGroup = null;
+
+/* Папки текущей выборки. Когда отобран месяц или камера, полезнее сначала
+   увидеть, где эти снимки лежат, а уже потом перебирать их по одному. */
+function renderFolders(data){
+  const box = $("list");
+  box.innerHTML = "";
+  $("sheetFoot").innerHTML = "";
+  if (!data.items.length){
+    box.innerHTML = '<div class="empty">Nothing matches these conditions.</div>';
+    $("sheetNote").textContent = "";
+    return;
+  }
+  data.items.forEach(it => {
+    const b = document.createElement("button");
+    b.className = "frow" + (isOn("folder", it.folder) ? " on" : "");
+    b.innerHTML = '<span class="fpath"></span><span class="fspan"></span>' +
+                  '<span class="fnum"></span>';
+    // direction:rtl обрезает путь слева — хвост важнее начала
+    b.querySelector(".fpath").textContent = it.folder + "\u200e";
+    b.querySelector(".fpath").title = it.folder;
+    b.querySelector(".fspan").textContent =
+      (it.first || "").slice(0, 7) + " — " + (it.last || "").slice(0, 7);
+    b.querySelector(".fnum").textContent = nf(it.n);
+    b.onclick = () => toggleFilter("folder", it.folder);
+    box.appendChild(b);
+  });
+  $("sheetNote").textContent = nf(data.total) +
+    plural(data.total, " folder", " folders");
+}
+
+function renderList(data, append){
+  const box = $("list");
+  if (!append){ box.innerHTML = ""; listItems = []; lastGroup = null; }
+  if (!data.items.length && !append){
+    box.innerHTML = '<div class="empty">Nothing matches these conditions.<br>' +
+      'Remove one of the filters above.</div>';
+  }
+  data.items.forEach(it => {
+    listItems.push(it);
+    const b = document.createElement("button");
+    b.className = "lrow";
+    b.innerHTML = '<span class="c-time"></span><span class="c-name"></span>' +
+      '<span class="c-cam"></span><span class="c-lens"></span><span class="c-fl"></span>';
+    const put = (cls, v) => { const e = b.querySelector(cls); e.textContent = v; e.title = v; };
+    const fl = state.eq ? it.focal35 : it.focal;
+    put(".c-time", (it.taken || "").slice(0, 16));
+    put(".c-name", it.filename + (it.dup_n > 1 ? "  ×" + it.dup_n : ""));
+    if (state.filters.dup){
+      const group = it.filename.toLowerCase() + "|" + it.size + "|" + it.taken;
+      if (lastGroup !== null && group !== lastGroup) b.classList.add("gsep");
+      lastGroup = group;
+    }
+    put(".c-cam", it.camera || "—");
+    put(".c-lens", it.lens || "—");
+    put(".c-fl", fl ? Math.round(fl) : "—");
+    b.onclick = () => expandRow(b, it);
+    box.appendChild(b);
+  });
+  $("sheetNote").textContent = nf(data.total) + " photos" +
+    (data.total > listItems.length ? " · listed " + nf(listItems.length) : "");
+  const foot = $("sheetFoot"); foot.innerHTML = "";
+  if (listItems.length < data.total){
+    const m = document.createElement("button");
+    m.className = "more";
+    m.textContent = "show " + nf(Math.min(state.limit, data.total - listItems.length)) + " more";
+    m.onclick = () => loadPhotos(listItems.length);
+    foot.appendChild(m);
+  }
+}
+
+/* ---------- карточка снимка ---------- */
+function openDetail(it){
+  const d = $("detail");
+  const rows = [
+    ["Taken", it.taken + (it.date_src === "file" ? " (from file date)" : "")],
+    ["Camera", it.camera || "—"],
+    ["Lens", it.lens || "—"],
+    ["Focal", it.focal ? it.focal + " mm" + (it.focal35 ? " · equiv " + it.focal35 + " mm" : "") : "—"],
+    ["Exposure", [it.shutter, it.fnumber ? "f/" + it.fnumber : null,
+                  it.iso ? "ISO " + it.iso : null].filter(Boolean).join("  ") || "—"],
+    ["Size", (it.width && it.height ? it.width + "×" + it.height + " · " : "") +
+             (it.size/1048576).toFixed(1) + " MB"],
+  ];
+  if (it.brightness !== null && it.brightness !== undefined)
+    rows.push(["Light", "brightness " + Math.round(it.brightness*100) + "%" +
+      "  ·  contrast " + it.contrast.toFixed(2) +
+      (it.chroma < 0.02 ? "  ·  black & white" : "")]);
+  if (it.clip_hi >= 0.005 || it.clip_lo >= 0.02)
+    rows.push(["Clipping", [it.clip_hi >= 0.005 ? "highlights " + (it.clip_hi*100).toFixed(1) + "%" : null,
+                            it.clip_lo >= 0.02 ? "shadows " + (it.clip_lo*100).toFixed(1) + "%" : null]
+                         .filter(Boolean).join("  ·  ")]);
+  if (it.color){
+    const share = it.color_share ? Math.round(it.color_share*100) + "% of frame" : "";
+    const mixed = it.color_share && it.color_share < state.mixedMax;
+    rows.push(["Colour", mixed
+      ? "mixed  ·  most often " + it.color + ", " + share
+      : it.color + (share ? "  ·  " + share : "")]);
+  }
+  if (it.color_center){
+    const cshare = it.color_center_share
+      ? Math.round(it.color_center_share * 100) + "% of centre" : "";
+    const cmixed = it.color_center_share && it.color_center_share < state.mixedMax;
+    rows.push(["Centre", cmixed
+      ? "mixed  ·  most often " + it.color_center + ", " + cshare
+      : it.color_center + (cshare ? "  ·  " + cshare : "")]);
+  }
+  d.innerHTML = '<img alt=""><div class="meta"><h3></h3><dl></dl>' +
+    '<div class="path"></div><div class="acts">' +
+    '<button class="act primary" data-a="reveal">Show in explorer</button>' +
+    '<button class="act" data-a="open">Open file</button>' +
+    '<button class="act" data-a="folder">All photos in this folder</button>' +
+    '<button class="act" data-a="close">Close</button></div></div>';
+  d.querySelector("img").src = "/api/thumb/" + it.id + "?s=1400";
+  d.querySelector("h3").textContent = it.filename;
+  d.querySelector(".path").textContent = it.path;
+  const dl = d.querySelector("dl");
+  rows.forEach(([k,v]) => {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd");
+    const hex = k === "Colour" ? it.color_hex
+              : k === "Centre" ? it.color_center_hex : null;
+    if (hex){
+      const sw = document.createElement("i");
+      sw.className = "sw"; sw.style.background = hex;
+      dd.appendChild(sw);
+    }
+    dd.appendChild(document.createTextNode(v));
+    dl.append(dt, dd);
+  });
+  d.querySelectorAll(".act").forEach(b => b.onclick = () => {
+    const a = b.dataset.a;
+    if (a === "close") return closeDetail();
+    if (a === "folder"){ closeDetail(); state.filters.folder = it.folder; return load(); }
+    fetch("/api/" + a + "/" + it.id, {method:"POST"})
+      .then(r => r.json())
+      .then(r => { if (!r.ok) toast(r.error || "Did not work"); })
+      .catch(() => toast("Could not open the file"));
+  });
+  $("veil").classList.add("on");
+}
+function closeDetail(){ $("veil").classList.remove("on"); $("detail").innerHTML = ""; }
+$("veil").onclick = e => { if (e.target === $("veil")) closeDetail(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
+
+let toastTimer;
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3500);
+}
+
+/* ---------- загрузка ---------- */
+function loadFolders(){
+  ask("folders", "/api/folders?" + params())
+    .then(renderFolders).catch(quiet);
+}
+
+function loadPhotos(offset){
+  ask("photos", "/api/photos?" + params({offset: offset || 0, limit: state.limit}))
+    .then(d => renderList(d, offset > 0))
+    .catch(e => {
+      // молчаливый сбой здесь выглядит как пустая выборка, и искать причину
+      // приходится вслепую — поэтому говорим прямо
+      if (e.name === "AbortError") return;
+      console.error(e);
+      $("list").innerHTML = '<div class="empty">Could not load the list. ' +
+        'The server may still be busy — check the window it is running in.</div>';
+      $("sheetNote").textContent = "";
+      $("sheetFoot").innerHTML = "";
+    });
+}
+
+function loadStrip(){
+  ask("random", "/api/random?" + params({n: 10}))
+    .then(d => renderStrip(d.items)).catch(quiet);
+}
+
+function load(){
+  renderChips();
+  $("csv").href = "/api/export?" + params();
+  ask("stats", "/api/stats?" + params()).then(d => {
+    if (d.empty){
+      $("tally").textContent = "Database is empty";
+      document.querySelector(".wrap").innerHTML =
+        '<div class="empty" style="padding:40px 24px">The database is still empty. ' +
+        'Run this in the program folder:<br><code>python scan.py "D:\\Photos"</code></div>';
+      return;
+    }
+    $("tally").innerHTML = "<b>" + nf(d.total) + "</b> of " + nf(d.totalAll) + " photos · " +
+      (d.bytes/1073741824).toFixed(1) + " GB";
+    if (d.mixedMax) state.mixedMax = d.mixedMax;
+    if (d.version) $("ver").textContent = "v" + d.version;
+    $("span").textContent = d.first && d.last
+      ? d.first.slice(0,10) + " — " + d.last.slice(0,10) : "";
+    renderFilm(d.charts.timeline);
+    const odd = $("odd");
+    odd.innerHTML = "";
+    if (d.outliers){
+      odd.append(nf(d.outliers) + " photos dated outside " + d.yearRange[0] + "–" +
+        d.yearRange[1] + " are left out — usually a camera clock that was reset. ");
+      const b = document.createElement("button");
+      b.className = "more"; b.style.marginTop = "0";
+      b.textContent = "show them";
+      b.onclick = () => { state.filters.baddate = "1"; load(); };
+      odd.appendChild(b);
+    }
+    renderCols("month", d.charts.month, "month", {tick: it => it.l.slice(0,3)});
+    renderCols("hour", d.charts.hour, "hour", {night: true,
+      tick: (it, i) => String(i).padStart(2, "0")});
+    const exts = d.charts.ext || [];
+    $("extCard").hidden = exts.length < 2;
+    if (exts.length > 1){
+      renderRows("ext", exts, "ext", 8);
+      $("extNote").textContent = "a frame shot as RAW+JPEG counts in both formats";
+    }
+    renderRows("brand", d.charts.brand, "brand", 10);
+    renderRows("camera", d.charts.camera, "camera", 12);
+    renderRows("lens", d.charts.lens, "lens", 12);
+    renderRows("focal", d.charts.focal, "focal", 20);
+    const colors = d.charts.color || [];
+    if (colors.length){
+      renderRows("color", colors, "color", 11);
+      $("colorNote").textContent = "";
+    } else {
+      $("color").innerHTML = '<div class="hint">Images have not been analysed yet — ' +
+        'that is a separate pass over the pixels, and it takes a while.<br>The same ' +
+        'pass works out brightness, contrast and clipping.<br>Run ' +
+        '<code>scan-colors.bat</code> or <code>python scan.py --colors-only</code>, ' +
+        'then reload this page.</div>';
+      $("colorNote").textContent = "not collected";
+    }
+    [["tone", 4], ["brightness", 8], ["contrast", 8], ["clipping", 6]].forEach(([id, cap]) => {
+      const items = d.charts[id] || [];
+      $(id + "Card").hidden = !items.length;
+      if (items.length) renderRows(id, items, id, cap);
+    });
+    /* Показываем всегда, как только разбор изображений сделан. Прятать до
+       выбора основного цвета оказалось лишним: центральный цвет сам по себе
+       отбирает сюжет — все кадры с чёрным в середине, например. */
+    const cc = d.charts.colorCenter || [];
+    $("ccWrap").hidden = !colors.length;
+    if (colors.length) renderRows("colorCenter", cc, "color_center", 12);
+    renderRows("aperture", d.charts.aperture, "aperture", 12);
+    renderRows("exposure", d.charts.exposure, "exposure", 14);
+    renderRows("iso", d.charts.iso, "iso", 12);
+    renderRows("size", d.charts.size, "size", 12);
+    renderRows("dup", d.charts.dup || [], "dup", 4);
+    $("dupNote").textContent = d.dupGroups
+      ? nf(d.dupGroups) + plural(d.dupGroups, " file", " files") + " duplicated"
+      : "none found";
+    $("dupRule").textContent = d.dupRule === "content signature"
+      ? "Matched by content signature — the same file is found even under " +
+        "another name. Picking \u201chas duplicates\u201d sorts the list so copies sit together."
+      : "Matched by file name, size and capture time. Two different frames can " +
+        "share a name and a size, so the capture second decides. For a stricter " +
+        "answer run scan.py --hash-only and this switches to a content signature.";
+    countGroups();
+  }).catch(quiet);
+  if (state.view === "folders") loadFolders(); else loadPhotos(0);
+  loadStrip();
+  loadGeo();
+  loadTimeline("camera", {box: "tlCamera", note: "tlCameraNote", foot: "tlCameraFoot"});
+  loadTimeline("lens", {box: "tlLens", note: "tlLensNote", foot: "tlLensFoot"});
+}
+
+/* ---------- блоки ---------- */
+document.querySelectorAll(".group-head").forEach(head => {
+  head.onclick = () => {
+    const g = head.closest(".group");
+    const closed = g.classList.toggle("closed");
+    head.setAttribute("aria-expanded", String(!closed));
+    head.querySelector(".caret").textContent = closed ? "+" : "−";
+  };
+});
+
+/* Счётчик показывает карточки с данными: часть из них скрыта, пока не сделан
+   разбор изображений или пока в базе один формат файлов. */
+function countGroups(){
+  document.querySelectorAll(".group").forEach(g => {
+    const n = g.querySelectorAll(".group-body > .card:not([hidden])").length;
+    g.querySelector(".cnt").textContent = n;
+  });
+}
+
+/* ---------- органы управления ---------- */
+let qTimer;
+$("q").oninput = e => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => {
+    const v = e.target.value.trim();
+    if (v) state.filters.q = v; else delete state.filters.q;
+    load();
+  }, 350);
+};
+$("reshuffle").onclick = loadStrip;
+
+function setView(view){
+  state.view = view;
+  $("viewFiles").className = "toggle" + (view === "files" ? " on" : "");
+  $("viewFolders").className = "toggle" + (view === "folders" ? " on" : "");
+  const files = view === "files";
+  $("sortBy").disabled = !files;
+  $("sortDir").disabled = !files;
+  if (files) loadPhotos(0); else loadFolders();
+}
+$("viewFiles").onclick = () => setView("files");
+$("viewFolders").onclick = () => setView("folders");
+$("sortBy").onchange = () => { state.sort = $("sortBy").value; loadPhotos(0); };
+$("sortDir").onclick = () => {
+  state.dir = state.dir === "asc" ? "desc" : "asc";
+  $("sortDir").textContent = state.dir === "asc" ? "↑" : "↓";
+  loadPhotos(0);
+};
+["tlCamera", "tlLens"].forEach(id => {
+  $(id + "Span").onclick = () => {
+    state.tlSpan = state.tlSpan === "active" ? "all" : "active";
+    ["tlCamera", "tlLens"].forEach(other => {
+      $(other + "Span").className = "toggle" + (state.tlSpan === "all" ? " on" : "");
+    });
+    loadTimeline("camera", {box: "tlCamera", note: "tlCameraNote", foot: "tlCameraFoot"});
+    loadTimeline("lens", {box: "tlLens", note: "tlLensNote", foot: "tlLensFoot"});
+  };
+});
+$("eq").onclick = () => {
+  state.eq = !state.eq;
+  $("eq").className = "toggle" + (state.eq ? " on" : "");
+  delete state.filters.focal;
+  load();
+};
+
+load();
+</script>
+</body>
+</html>

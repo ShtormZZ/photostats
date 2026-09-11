@@ -1,0 +1,38 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # Windows is the target platform, Linux is there to catch path assumptions.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile
+        run: python -m compileall -q scan.py app.py launcher.py version.py tools
+
+      - name: License file
+        run: python tools/check_license.py
+
+      - name: Smoke test
+        run: python tools/smoke_test.py
