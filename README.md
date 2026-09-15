@@ -54,6 +54,8 @@ Add your photo folders once and they are remembered. Then:
 - **Analyse images** — colour, brightness, contrast, clipping. Much slower: it
   decodes every file.
 - **Sign files** — content signatures for exact duplicate matching.
+- **Check a folder** — pick a folder you have *not* scanned and it says how much
+  of it you already have. See below.
 - **Open interface** — starts the server and opens the browser.
 
 **Passes and the server run at the same time.** You can watch the statistics
@@ -70,6 +72,7 @@ directly, which is what CI uses:
 python scan.py "D:\Photos" "E:\Archive 2001-2010"    # EXIF
 python scan.py --colors-only                           # images
 python scan.py --hash-only                             # signatures
+python scan.py --check-dups "E:\Card"                  # check, no writing
 python app.py                                          # interface
 ```
 
@@ -154,6 +157,45 @@ unsigned one.
 
 Whichever rule is in use, look before you delete: the list gives you the full
 paths of every copy.
+
+### Checking a folder before you add it
+
+The duplicate panel answers the question for photos that are already in the
+archive. The other version of that question comes up earlier — a memory card, a
+disk someone handed you, a folder called `photos_backup_final`: is any of this
+new, or do I have it all already?
+
+```
+python scan.py --check-dups "E:\Card"
+```
+
+Or press **Check a folder** in the window and pick it. Every file in the folder
+is measured by the same rule the interface uses, looked up in the archive, and
+counted. At the end you get the summary:
+
+```
+Checked 812 files in 41 s.
+  duplicates: 763
+    749 already in the archive, 14 repeated inside the folder itself
+  new:        49
+
+Nothing was written to the database.
+```
+
+**Nothing is written.** The database is opened read-only, so the pass cannot add
+to it even by mistake — that is the point of having it. Decide from the numbers,
+then scan the folder for real, or don't.
+
+Files that are in the archive *at that very path* are counted apart, as `already
+scanned`, and are neither duplicates nor new: they are not copies of your
+archive, they **are** your archive. You see this line when you point the check
+at a folder you scanned earlier.
+
+The rule is the one the interface is using at that moment, and the pass says
+which. With signatures it reads 128 KB per file and finds renamed copies; on
+name, size and capture time it has to read the EXIF of every file, so it is
+slower and a renamed copy gets past it. That is the same trade the duplicate
+panel makes — `--hash-only` first, and the check gets strict too.
 
 Filters combine. Pick Canon and the lens panel narrows to Canon lenses; add
 July and you get July on Canon. Every panel keeps showing its own dimension in

@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -34,6 +35,8 @@ import time
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
+
+import dupkey
 
 try:
     from version import VERSION
@@ -1136,6 +1139,205 @@ def report_passed(passed_by):
               f"The --all switch includes everything.")
 
 
+# --------------------------------------------------------------------------
+# Проверка каталога: что из него уже лежит в архиве
+# --------------------------------------------------------------------------
+#
+# Вопрос, на который отвечает проход: если высыпать эту папку в архив, сколько
+# оттуда окажется копиями того, что уже есть? Ответ нужен до того, как файлы
+# попадут в базу, — поэтому база здесь открывается только на чтение, и это не
+# обещание в комментарии, а режим соединения: запись через него невозможна.
+#
+# Правило «это копия» берётся из dupkey.py — то же самое, по которому считает
+# дубликаты интерфейс. Иначе проверка обещала бы одно, а панель дубликатов потом
+# показывала другое.
+
+
+def open_db_ro(path):
+    """Соединение только на чтение: mode=ro запрещает запись на уровне SQLite."""
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
+    con.execute("PRAGMA busy_timeout = 10000")
+    return con
+
+
+def stop_on_break():
+    """Просит Windows считать CTRL_BREAK обычным Ctrl+C.
+
+    Кнопка Stop в окне запуска шлёт дочернему процессу CTRL_BREAK_EVENT: сигнал
+    Ctrl+C дошёл бы до всей группы процессов и остановил заодно само окно.
+    Python на CTRL_BREAK по умолчанию KeyboardInterrupt не возбуждает, а
+    заканчивает процесс на месте — проход обрывался бы ровно перед тем местом,
+    где печатается итог, и остановленная проверка не сказала бы ничего.
+
+    Проходам, которые пишут в базу, это не нужно: они сохраняются частями по
+    ходу дела, и их обрыв ничего не теряет. Поэтому обработчик ставит только
+    проверка — ей терять нечего, кроме ответа.
+    """
+    if not hasattr(signal, "SIGBREAK"):          # не Windows
+        return
+
+    def raise_interrupt(_sig, _frame):
+        raise KeyboardInterrupt
+
+    try:
+        signal.signal(signal.SIGBREAK, raise_interrupt)
+    except (ValueError, OSError):                # не главный поток
+        pass
+
+
+def candidate_keys(con, todo, by_sig, full, exe, workers):
+    """Отдаёт (путь, ключ) для каждого файла из todo.
+
+    По подписи файла достаточно прочитать сто двадцать восемь килобайт, EXIF не
+    нужен вовсе. По имени нужно время съёмки, то есть тот же разбор EXIF, что и
+    в обычном проходе, — отсюда и разница в скорости между двумя правилами.
+    """
+    if by_sig:
+        jobs = [(p, p, full) for p, _ in todo]
+        pool = ThreadPoolExecutor(max_workers=workers * 2)
+        try:
+            yield from pool.map(file_sig, jobs)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+        return
+
+    # Ключ по имени собираем не в Python, а тем же выражением и тем же движком,
+    # что и ключи в базе. SQLite приводит к нижнему регистру только латиницу, и
+    # str.lower() здесь разошёлся бы с базой на каждом имени с кириллицей.
+    key_sql = ("SELECT " + dupkey.name_key("c") +
+               " FROM (SELECT ? AS filename, ? AS size, ? AS taken,"
+               " ? AS date_src) c")
+
+    def read(chunk):
+        if exe:
+            tags = read_chunk_exiftool(exe, [p for p, _ in chunk])
+            return [make_row(p, st, tags.get(p, {})) for p, st in chunk]
+        return [make_row(p, st, read_one_fallback(p)) for p, st in chunk]
+
+    chunks = [todo[i:i + 150] for i in range(0, len(todo), 150)]
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        for rows in pool.map(read, chunks):
+            for row in rows:
+                key, = con.execute(key_sql, (row["filename"], row["size"],
+                                             row["taken"], row["date_src"])).fetchone()
+                yield row["path"], key
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def check_dups(db_path, roots, exts, min_size, workers=4):
+    """Сверяет каталог с архивом и печатает итог. В базу не пишет ничего."""
+    if not os.path.exists(db_path):
+        print(f"No database at {db_path}. Scan your folders first.")
+        return 1
+    stop_on_break()
+    try:
+        con = open_db_ro(db_path)
+        by_sig = dupkey.sigs_complete(con)
+        row = con.execute("SELECT v FROM meta WHERE k = 'sig_mode'").fetchone()
+        full = bool(row and row[0] == "full")
+        # Ключи архива целиком в память: сорок тысяч строк — это пара мегабайт,
+        # зато каждый файл потом проверяется без запроса к базе.
+        keys = {k for k, in con.execute(
+            f"SELECT {dupkey.dup_key(by_sig=by_sig)} FROM photos") if k}
+        paths = {p for p, in con.execute("SELECT path FROM photos")}
+    except sqlite3.Error as e:
+        print(f"Cannot read the database: {e}")
+        return 1
+    print(f"Checking against {len(paths)} photos in the archive.")
+    print(f"Rule: {dupkey.rule_name(by_sig)}.")
+    if not by_sig and paths:
+        print("  Signatures are not computed for every photo yet, so name, size\n"
+              "  and capture time are used. Sign files first for the strict rule —\n"
+              "  it also catches copies that were renamed.")
+    print(f"Looking at: {describe_exts(exts)}", flush=True)
+    print("Looking for files…", flush=True)
+
+    todo, tiny, unreadable = [], 0, 0
+    for path in walk_photos(roots, exts):
+        try:
+            st = os.stat(path)
+        except OSError:
+            unreadable += 1
+            continue
+        if st.st_size < min_size:
+            tiny += 1
+            continue
+        todo.append((path, st))
+
+    if tiny:
+        print(f"Skipped {tiny} file{'' if tiny == 1 else 's'} under "
+              f"{min_size // 1024} KB — thumbnails and the like, which a scan "
+              f"would leave out too.")
+    if not todo:
+        print("No photos to check in that folder.")
+        con.close()
+        return 0
+
+    # По подписям EXIF не нужен вовсе, и искать ExifTool незачем.
+    exe = None
+    if not by_sig:
+        exe, ver = find_exiftool()
+        print(f"Reading EXIF with {'ExifTool ' + ver if exe else 'exifread/Pillow'}.",
+              flush=True)
+    print(f"Checking {len(todo)} file{'' if len(todo) == 1 else 's'}. "
+          f"Ctrl+C stops it; the summary still comes.", flush=True)
+
+    dup_archive = dup_inside = same_path = new = failed = 0
+    seen = set()
+    started, done = time.time(), 0
+    stopped = False
+    try:
+        for path, key in candidate_keys(con, todo, by_sig, full, exe, workers):
+            done += 1
+            if key is None:                 # файл не прочитался
+                failed += 1
+            elif path in paths:
+                same_path += 1
+            elif key in keys:
+                dup_archive += 1
+            elif key in seen:
+                dup_inside += 1
+            else:
+                new += 1
+                seen.add(key)
+            if done % 200 == 0 or done == len(todo):
+                el = time.time() - started
+                speed = done / max(el, 0.001)
+                left = (len(todo) - done) / max(speed, 0.001)
+                print(f"\r  {done}/{len(todo)} ({100 * done / len(todo):5.1f}%)  "
+                      f"{speed:.0f} files/s  about {left / 60:.0f} min left    ",
+                      end="", flush=True)
+    except KeyboardInterrupt:
+        stopped = True
+    con.close()
+
+    print()
+    print(f"\nChecked {done} of {len(todo)} files." if stopped
+          else f"\nChecked {done} file{'' if done == 1 else 's'} "
+               f"in {time.time() - started:.0f} s.")
+    print(f"  duplicates: {dup_archive + dup_inside}")
+    if dup_inside:
+        print(f"    {dup_archive} already in the archive, "
+              f"{dup_inside} repeated inside the folder itself")
+    print(f"  new:        {new}")
+    if same_path:
+        # Не дубликат и не новый: это тот же самый файл, уже сосчитанный
+        # архивом. Приписать его к копиям значило бы сказать, что папку можно
+        # удалить, — а удалять пришлось бы то, на что база и ссылается.
+        print(f"  already scanned: {same_path} — these very files are in the "
+              f"archive\n                   (same path), not copies of them")
+    if failed:
+        print(f"  could not be read: {failed}")
+    if unreadable:
+        print(f"  skipped, unreadable: {unreadable}")
+    if stopped:
+        print("\nStopped early — the numbers above cover the files checked so far.")
+    print("\nNothing was written to the database.")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Scan a photo archive into a database")
     ap.add_argument("roots", nargs="*", help="folders with photos")
@@ -1163,13 +1365,26 @@ def main():
                     help="read whole files for the signature instead of head and tail")
     ap.add_argument("--recolor", action="store_true",
                     help="re-analyse images even where it was already done")
+    ap.add_argument("--check-dups", action="store_true", dest="check_dups",
+                    help="report how much of a folder is already in the archive; "
+                         "reads the database, never writes to it")
     args = ap.parse_args()
+    if args.check_dups and not args.roots:
+        ap.error("--check-dups needs the folder to check")
     if args.recolor and not args.roots:
         args.colors_only = True
     if (args.hash_only or args.hash_full) and not args.roots:
         args.hash_only = True
-    if not args.roots and not args.colors_only:
-        ap.error("give at least one folder (or use --colors-only)")
+    # Проход подписей папок не требует — он идёт по тому, что уже в базе.
+    # Забытый здесь hash_only ронял на разборе ключей и `scan.py --hash-only`
+    # из README, и кнопку «Sign files» в окне запуска.
+    if not args.roots and not (args.colors_only or args.hash_only):
+        ap.error("give at least one folder "
+                 "(or use --colors-only / --hash-only)")
+
+    if args.check_dups:
+        return check_dups(args.db, args.roots, active_exts(args),
+                          max(0, args.min_kb) * 1024, args.workers)
 
     if args.hash_only:
         if not os.path.exists(args.db):
@@ -1366,4 +1581,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

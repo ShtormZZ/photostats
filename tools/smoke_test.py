@@ -126,6 +126,75 @@ def api(path, **params):
         return json.load(r)
 
 
+def check_dups_pass(tmp, photos, db):
+    """--check-dups: the counts, and that the database really is left alone.
+
+    Both rules are exercised, because they disagree on purpose: a renamed copy
+    is invisible to name matching and obvious to a signature. If that difference
+    ever stops showing up here, one of the two rules has quietly stopped being
+    applied.
+    """
+    import hashlib
+    import shutil
+
+    print("\nfolder check")
+    incoming = os.path.join(tmp, "incoming")
+    os.makedirs(os.path.join(incoming, "sub"), exist_ok=True)
+    shutil.copy(os.path.join(photos, "green_field.jpg"),      # a plain copy
+                os.path.join(incoming, "green_field.jpg"))
+    shutil.copy(os.path.join(photos, "no_gps.jpg"),           # a renamed copy
+                os.path.join(incoming, "holiday.jpg"))
+    for name in ("new_shot.jpg", os.path.join("sub", "new_shot.jpg")):
+        dst = os.path.join(incoming, name)                    # not in the archive,
+        shutil.copy(os.path.join(photos, "light_subject.jpg"), dst)
+        with open(dst, "ab") as f:                            # and there twice
+            f.write(b"\x00" * 4096)
+
+    def run_check(folder=incoming):
+        out = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "scan.py"), "--check-dups",
+             folder, "--db", db],
+            capture_output=True, text=True, cwd=ROOT, timeout=300)
+        return out.returncode, out.stdout
+
+    def counts(text):
+        got = {}
+        for line in text.splitlines():
+            for field in ("duplicates", "new", "already scanned"):
+                if line.strip().startswith(field + ":"):
+                    got[field] = int(line.split(":")[1].split()[0])
+        return got
+
+    digest = lambda: hashlib.sha1(open(db, "rb").read()).hexdigest()
+
+    before = digest()
+    code, text = run_check()
+    got = counts(text)
+    check("check runs on the name rule", code == 0 and "name, size" in text)
+    # copy + one of the twins; the renamed copy gets past this rule
+    check("name rule counts", got.get("duplicates") == 2 and got.get("new") == 2,
+          str(got))
+    check("check writes nothing", digest() == before)
+
+    subprocess.run([sys.executable, os.path.join(ROOT, "scan.py"),
+                    "--hash-only", "--db", db],
+                   capture_output=True, text=True, cwd=ROOT, timeout=300)
+    before = digest()
+    code, text = run_check()
+    got = counts(text)
+    check("check runs on the signature rule",
+          code == 0 and "content signature" in text)
+    check("signature rule catches the renamed copy",
+          got.get("duplicates") == 3 and got.get("new") == 1, str(got))
+    check("check writes nothing under either rule", digest() == before)
+
+    # The archive's own folder is neither new nor duplicated: it is the archive.
+    got = counts(run_check(photos)[1])
+    check("a folder already scanned is counted apart",
+          got.get("duplicates") == 0 and got.get("new") == 0
+          and got.get("already scanned", 0) > 0, str(got))
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="photostats-smoke-")
     photos = os.path.join(tmp, "photos")
@@ -238,6 +307,8 @@ def main():
     finally:
         srv.terminate()
         srv.wait(timeout=10)
+
+    check_dups_pass(tmp, photos, db)
 
     print()
     if failures:

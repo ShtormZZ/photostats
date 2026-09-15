@@ -29,6 +29,8 @@ from hashlib import md5
 from flask import (Flask, Response, abort, g, jsonify, request, send_file,
                    send_from_directory)
 
+import dupkey
+
 try:
     from version import VERSION
 except ImportError:          # файл скопировали без version.py
@@ -141,46 +143,24 @@ CONTRAST_BUCKETS = [
     (0.20, 0.27, "pronounced"), (0.27, 1.01, "high"),
 ]
 
-# Чем опознавать копию файла. Имени и размера мало: два разных кадра вполне
-# могут совпасть и по тому, и по другому — у одной камеры одинаковые имена
-# повторяются, а размер JPEG задаётся сюжетом и попадает в те же байты чаще,
-# чем кажется. Поэтому в ключ входит ещё и точное время съёмки: два разных
-# кадра не совпадут до секунды, а копии одного файла совпадают всегда.
-#
-# Время берём только настоящее, из EXIF. Там, где его нет, стоит дата файла —
-# у копии она своя, и настоящие копии перестали бы находиться.
-#
-# Если проход `scan.py --hash-only` посчитал подписи содержимого у всех файлов,
-# ключом становится подпись: она отвечает на вопрос точно и находит копии даже
-# под другими именами. Пока подписи есть не у всех, они не используются вовсе —
-# смешивать два правила в одном ключе нельзя, копия с подписью не нашла бы
-# копию без неё.
+# Само правило — в dupkey.py: им же пользуется проверка каталога в scan.py, и
+# разъехаться эти два ответа не должны. Здесь остаётся только кеш на запрос.
 
 
 def sig_ready():
     """Подписи посчитаны у всех файлов? Ответ один на запрос."""
     if not hasattr(g, "sig_ready"):
         with db() as con:
-            miss, = con.execute(
-                "SELECT COUNT(*) FROM photos WHERE sig IS NULL").fetchone()
-        g.sig_ready = (miss == 0)
+            g.sig_ready = dupkey.sigs_complete(con)
     return g.sig_ready
 
 
 def name_key(alias=""):
-    """Ключ по имени, размеру и времени съёмки. Тем же текстом создан индекс
-    ix_dupkey — без него подсчёт размера группы перебирал всю таблицу на каждую
-    выводимую строку, и список выборки на архиве в сорок тысяч снимков строился
-    сорок секунд. Менять это выражение можно только вместе с индексом."""
-    p = alias + "." if alias else ""
-    return (f"lower({p}filename) || '|' || {p}size || '|' || "
-            f"CASE WHEN {p}date_src = 'exif' THEN {p}taken ELSE '' END")
+    return dupkey.name_key(alias)
 
 
 def dup_key(alias=""):
-    if sig_ready():
-        return (alias + "." if alias else "") + "sig"
-    return name_key(alias)
+    return dupkey.dup_key(alias, sig_ready())
 
 
 def dup_exists():
@@ -502,8 +482,7 @@ def api_stats():
         "version": VERSION,
         "mixedMax": MIXED_MAX,
         "dupGroups": dup_groups,
-        "dupRule": "content signature" if sig_ready()
-                   else "name, size and capture time",
+        "dupRule": dupkey.rule_name(sig_ready()),
         "yearRange": [lo_year, hi_year],
         "charts": {
             "timeline": timeline,

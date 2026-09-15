@@ -96,10 +96,11 @@ class Task:
     does not know what to press will not hover over things to find out.
     """
 
-    def __init__(self, app, key, label, note, args_fn, parent):
+    def __init__(self, app, key, label, note, args_fn, parent, writes=True):
         self.app, self.key, self.args_fn = app, key, args_fn
         self.proc = None
         self.label = label
+        self.writes = writes         # проходу нужна база на запись?
 
         box = ttk.Frame(parent)
         box.pack(fill="x", padx=14, pady=(0, 10))
@@ -123,7 +124,9 @@ class Task:
             self.state.config(text="stopping…")
             interrupt(self.proc)
             return
-        if self.app.busy_task() and self.app.busy_task() is not self:
+        # Занятой считается только запись. Проверка каталога базу не трогает,
+        # поэтому её ни ждать, ни откладывать не нужно — как и сервер.
+        if self.writes and self.app.busy_task() is not None:
             messagebox.showinfo(
                 "One at a time",
                 "Another pass is already writing to the database. Let it finish "
@@ -198,7 +201,7 @@ class App:
         self.ready = False
         root.title("photostats")
         set_window_icon(root)
-        root.minsize(760, 720)
+        root.minsize(760, 760)       # четыре прохода + лог; ниже лог схлопывается
 
         pad = {"padx": 14, "pady": (0, 8)}
         head = ttk.Frame(root)
@@ -250,8 +253,14 @@ class App:
              "Optional. Reads a little of every file so identical copies can be "
              "told apart for certain. Only needed for exact duplicate matching.",
              lambda: [venv_python(), "scan.py", "--hash-only"]),
+            ("check", "Check a folder",
+             "Asks of a folder you have not scanned yet: how much of it is "
+             "already in the archive? Counts copies and new files and says so at "
+             "the end. Reads the database, never writes to it.",
+             self.args_check),
         ):
-            self.tasks[key] = Task(self, key, label, note, fn, root)
+            self.tasks[key] = Task(self, key, label, note, fn, root,
+                                   writes=(key != "check"))
 
         ttk.Separator(root).pack(fill="x", padx=14, pady=(4, 10))
         srv = ttk.Frame(root)
@@ -421,8 +430,9 @@ class App:
     # ---------- задачи ----------
 
     def busy_task(self):
+        """Проход, который сейчас держит базу на запись. Читающие не в счёт."""
         for t in self.tasks.values():
-            if t.running():
+            if t.writes and t.running():
                 return t
         return None
 
@@ -432,6 +442,28 @@ class App:
             messagebox.showinfo("No folders", "Add at least one folder with photos.")
             return None
         args = [venv_python(), "scan.py"] + folders
+        if self.raw.get():
+            args.append("--raw")
+        return args
+
+    def args_check(self):
+        """Спрашивает папку отдельно, а не берёт список сверху.
+
+        Проверяют как раз то, чего в списке ещё нет: карту из фотоаппарата,
+        чужой диск, старую копию архива. Выбранная папка в настройках не
+        сохраняется — иначе она попала бы в следующий проход EXIF, а это ровно
+        то, от чего проверка и должна уберечь.
+        """
+        if not os.path.exists(os.path.join(ROOT, "photos.db")):
+            messagebox.showinfo(
+                "Nothing to compare with",
+                "The archive is empty. Read EXIF from your own folders first — "
+                "then a folder can be checked against them.")
+            return None
+        d = filedialog.askdirectory(title="Folder to check against the archive")
+        if not d:
+            return None
+        args = [venv_python(), "scan.py", "--check-dups", os.path.normpath(d)]
         if self.raw.get():
             args.append("--raw")
         return args

@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- A folder can be checked against the archive before it is added: **Check a
+  folder** in the window, or `scan.py --check-dups FOLDER`. It reports how many
+  of the files are copies of what you already have and how many are new. The
+  database is opened read-only, so the check cannot write to it; files that are
+  in the archive at that very path are counted apart from copies, since they are
+  the archive rather than duplicates of it. The rule is the one the duplicate
+  panel uses, and both now read it from one place — `dupkey.py`.
+- Fixed: `scan.py --hash-only` refused to start, and with it the **Sign files**
+  button. The argument check demanded a folder from a pass that works off the
+  database and takes none.
+- Fixed: stopping the folder check from the window printed nothing. Windows
+  sends CTRL_BREAK to a stopped task, which Python ends the process on rather
+  than raising KeyboardInterrupt, so the summary never got out.
+
 - The program has an icon: viewfinder corners around three bars, in the same
   palette as the interface. It sits on the launcher window, in the taskbar, on
   the browser tab and to the left of the name in the header. At 16 and 24 pixels
