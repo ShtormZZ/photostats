@@ -887,6 +887,12 @@ NO_UI = r"""<!DOCTYPE html><html lang="en"><meta charset="utf-8">
 
 @app.get("/favicon.ico")
 def favicon():
+    # Браузер просит иконку сам, не спрашивая разметку, и без этого маршрута
+    # каждая вкладка оставляла в логе 404. Файла может не быть — иконка
+    # собирается скриптом tools/make_icon.py, — тогда отвечаем пустотой, как
+    # отвечали раньше.
+    if WEB_DIR and os.path.isfile(os.path.join(WEB_DIR, "favicon.ico")):
+        return send_from_directory(WEB_DIR, "favicon.ico")
     return Response(status=204)
 
 

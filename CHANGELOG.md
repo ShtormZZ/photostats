@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+- The program has an icon: viewfinder corners around three bars, in the same
+  palette as the interface. It sits on the launcher window, in the taskbar, on
+  the browser tab and to the left of the name in the header. At 16 and 24 pixels
+  a separate drawing is used — just the bars, no frame, because at that size the
+  two run together. `tools/make_icon.py` redraws all of it.
+
 ## [1.13.0] — 2026-08-22
 
 - The launcher explains itself. Steps are numbered, every button and the RAW

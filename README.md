@@ -307,6 +307,17 @@ analyses it, starts the server and checks every endpoint including the CSV
 export and thumbnails. It touches nothing outside the temporary folder. The
 same script runs in CI on Windows and Linux.
 
+```
+python tools/make_icon.py
+```
+
+Redraws the icon — `web/favicon.ico` for the window and the browser tab,
+`web/icon.png` and `web/icon.svg` alongside it, and `web/mark.svg`, the same
+drawing without its tile, which is the one in the header of the interface. The
+shape lives in the script as a handful of numbers, so it is edited there and not
+in a graphics program. The files are committed; you only need this after
+changing them.
+
 ## Credits
 
 - [ExifTool](https://exiftool.org) by Phil Harvey — optional, for RAW and

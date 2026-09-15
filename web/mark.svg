@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="132.1 132.1 759.8 759.8" width="759.8" height="759.8" role="img" aria-label="photostats">
+  <title>photostats</title>
+  <g fill="none" stroke="#EDE8DF" stroke-width="53.2" stroke-linecap="butt" stroke-linejoin="miter">
+    <path d="M 158.7 317.4 L 158.7 158.7 L 317.4 158.7"/>
+    <path d="M 706.6 158.7 L 865.3 158.7 L 865.3 317.4"/>
+    <path d="M 865.3 706.6 L 865.3 865.3 L 706.6 865.3"/>
+    <path d="M 317.4 865.3 L 158.7 865.3 L 158.7 706.6"/>
+  </g>
+  <g fill="#E39B33">
+    <rect x="294.9" y="603.1" width="106.5" height="166.9" rx="22.5"/>
+    <rect x="458.8" y="460.8" width="106.5" height="309.2" rx="22.5"/>
+    <rect x="622.6" y="540.7" width="106.5" height="229.4" rx="22.5"/>
+  </g>
+</svg>

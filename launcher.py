@@ -173,6 +173,23 @@ class Task:
                           (f" · {left.group(1)} min" if left else ""))
 
 
+# Иконку держим ссылкой на объекте окна. PhotoImage живёт, пока на него кто-то
+# ссылается, а Tk ссылкой не считается: собранная сборщиком картинка оставляет
+# окно с пустым значком и без единой ошибки. На Windows берём ico — только он
+# доходит до панели задач, — в остальном png.
+def set_window_icon(root):
+    ico = os.path.join(ROOT, "web", "favicon.ico")
+    png = os.path.join(ROOT, "web", "icon.png")
+    try:
+        if WINDOWS and os.path.isfile(ico):
+            root.iconbitmap(default=ico)
+        elif os.path.isfile(png):
+            root._icon = tk.PhotoImage(file=png)
+            root.iconphoto(True, root._icon)
+    except tk.TclError:          # окно останется со стандартным значком
+        pass
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -180,6 +197,7 @@ class App:
         self.server = None
         self.ready = False
         root.title("photostats")
+        set_window_icon(root)
         root.minsize(760, 720)
 
         pad = {"padx": 14, "pady": (0, 8)}
