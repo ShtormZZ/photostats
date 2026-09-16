@@ -44,12 +44,12 @@ PORT = 5577
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
-except ImportError:          # проверяем при запуске, а не при импорте, —
-    tk = None                # иначе модуль нельзя было бы протестировать
+except ImportError:          # checked at startup rather than on import, or
+    tk = None                # the module could not be tested at all
 
 
 def nf(n):
-    return f"{n:,}".replace(",", "\u2009")      # тонкий пробел между тысячами
+    return f"{n:,}".replace(",", "\u2009")      # thin space between thousands
 
 
 def venv_python():
@@ -100,7 +100,7 @@ class Task:
         self.app, self.key, self.args_fn = app, key, args_fn
         self.proc = None
         self.label = label
-        self.writes = writes         # проходу нужна база на запись?
+        self.writes = writes         # does this pass need the database for writing?
 
         box = ttk.Frame(parent)
         box.pack(fill="x", padx=14, pady=(0, 10))
@@ -124,8 +124,8 @@ class Task:
             self.state.config(text="stopping…")
             interrupt(self.proc)
             return
-        # Занятой считается только запись. Проверка каталога базу не трогает,
-        # поэтому её ни ждать, ни откладывать не нужно — как и сервер.
+        # Only writing counts as busy. The folder check does not touch the
+        # database, so it neither waits nor is put off — no more than the server is.
         if self.writes and self.app.busy_task() is not None:
             messagebox.showinfo(
                 "One at a time",
@@ -176,10 +176,10 @@ class Task:
                           (f" · {left.group(1)} min" if left else ""))
 
 
-# Иконку держим ссылкой на объекте окна. PhotoImage живёт, пока на него кто-то
-# ссылается, а Tk ссылкой не считается: собранная сборщиком картинка оставляет
-# окно с пустым значком и без единой ошибки. На Windows берём ico — только он
-# доходит до панели задач, — в остальном png.
+# The icon is kept as a reference on the window object. A PhotoImage lives only
+# while something refers to it, and Tk does not count as a referrer: an image the
+# collector has taken leaves the window with a blank icon and not one error. On
+# Windows an ico is used — only that one reaches the taskbar — and a png elsewhere.
 def set_window_icon(root):
     ico = os.path.join(ROOT, "web", "favicon.ico")
     png = os.path.join(ROOT, "web", "icon.png")
@@ -189,7 +189,7 @@ def set_window_icon(root):
         elif os.path.isfile(png):
             root._icon = tk.PhotoImage(file=png)
             root.iconphoto(True, root._icon)
-    except tk.TclError:          # окно останется со стандартным значком
+    except tk.TclError:          # the window keeps the default icon
         pass
 
 
@@ -201,7 +201,7 @@ class App:
         self.ready = False
         root.title("photostats")
         set_window_icon(root)
-        root.minsize(760, 760)       # четыре прохода + лог; ниже лог схлопывается
+        root.minsize(760, 760)       # four passes plus the log; below this the log collapses
 
         pad = {"padx": 14, "pady": (0, 8)}
         head = ttk.Frame(root)
@@ -210,14 +210,14 @@ class App:
         self.setup_state = ttk.Label(head, text="checking the environment…")
         self.setup_state.pack(side="right")
 
-        # Главная подсказка. Описания у кнопок объясняют, что каждая делает, но
-        # растерянность вызывает другой вопрос — что нажимать сейчас. На него
-        # отвечает состояние базы, а не текст в инструкции.
+        # The main hint. The notes under the buttons say what each one does, but
+        # what leaves people at a loss is a different question — which one to press
+        # now. That is answered by the state of the database, not by instructions.
         self.next_step = ttk.Label(root, text="", foreground="#E39B33",
                                    wraplength=680, justify="left")
         self.next_step.pack(fill="x", padx=14, pady=(0, 12))
 
-        ttk.Label(root, text="1 · Photo folders").pack(anchor="w", padx=14)
+        ttk.Label(root, text="(1 step) Configure photo folders").pack(anchor="w", padx=14)
         box = ttk.Frame(root)
         box.pack(fill="both", padx=14, pady=(4, 6))
         self.folders = tk.Listbox(box, height=4, activestyle="none")
@@ -241,20 +241,20 @@ class App:
 
         self.tasks = {}
         for key, label, note, fn in (
-            ("exif", "2 · Read EXIF",
-             "Reads dates, camera, lens and settings from the files. Fast, and "
+            ("exif", "Read EXIF",
+             "(2 step) Reads dates, camera, lens and settings from the files. Fast, and "
              "enough on its own — everything except colour works after this.",
              self.args_exif),
-            ("images", "3 · Analyse images",
-             "Opens every photo to work out its colour, brightness and contrast. "
+            ("images", "Analyse images",
+             "(Optional) Opens every photo to work out its colour, brightness and contrast. "
              "Slow: hours on a large archive. You can stop it and carry on later.",
              lambda: [venv_python(), "scan.py", "--colors-only"]),
             ("sign", "Sign files",
-             "Optional. Reads a little of every file so identical copies can be "
+             "(Optional) Reads a little of every file so identical copies can be "
              "told apart for certain. Only needed for exact duplicate matching.",
              lambda: [venv_python(), "scan.py", "--hash-only"]),
             ("check", "Check a folder",
-             "Asks of a folder you have not scanned yet: how much of it is "
+             "(Optional) Asks of a folder you have not scanned yet: how much of it is "
              "already in the archive? Counts copies and new files and says so at "
              "the end. Reads the database, never writes to it.",
              self.args_check),
@@ -265,7 +265,7 @@ class App:
         ttk.Separator(root).pack(fill="x", padx=14, pady=(4, 10))
         srv = ttk.Frame(root)
         srv.pack(fill="x", **pad)
-        self.open_btn = ttk.Button(srv, text="4 · Open interface", command=self.open_ui)
+        self.open_btn = ttk.Button(srv, text="Open interface", command=self.open_ui)
         self.open_btn.pack(side="left")
         self.srv_state = ttk.Label(srv, text="server stopped")
         self.srv_state.pack(side="left", padx=10)
@@ -273,8 +273,8 @@ class App:
                                    state="disabled")
         self.stop_btn.pack(side="right")
         ttk.Label(root, foreground="#8B8598", wraplength=680, justify="left",
-                  text="Opens the statistics in your browser. Nothing leaves this "
-                       "computer. It can stay open while a pass is running — the "
+                  text="(3 step) Opens the statistics in your browser.  "
+                       "It can stay open while a pass is running — the "
                        "numbers fill in as the scan goes.").pack(
             fill="x", padx=14, pady=(3, 10))
 
@@ -289,7 +289,7 @@ class App:
         root.after(200, self.tick)
         threading.Thread(target=self.prepare, daemon=True).start()
 
-    # ---------- настройки ----------
+    # ---------- settings ----------
 
     def load(self):
         try:
@@ -321,11 +321,11 @@ class App:
             self.folders.delete(i)
         self.save()
 
-    # ---------- что делать дальше ----------
+    # ---------- what to do next ----------
 
     def db_state(self):
-        """Что уже сделано, по самой базе. Читаем напрямую: sqlite3 входит в
-        стандартную библиотеку, окружение для этого не нужно."""
+        """What is already done, read off the database itself. Read directly:
+        sqlite3 is in the standard library, no environment needed for this."""
         path = os.path.join(ROOT, "photos.db")
         if not os.path.exists(path):
             return {"total": 0}
@@ -339,14 +339,14 @@ class App:
                 out = {"total": row[0], "no_images": row[1] or 0,
                        "no_sig": row[2] or 0}
             except sqlite3.OperationalError:
-                # база от прежней версии, без колонок разбора: их допишет
-                # первый же запуск сканера или сервера
+                # a database from an earlier version, without the analysis
+                # columns: the first run of the scanner or the server adds them
                 total, = con.execute("SELECT COUNT(*) FROM photos").fetchone()
                 out = {"total": total, "no_images": total, "no_sig": total}
             con.close()
             return out
         except sqlite3.Error:
-            return None          # занята записью — оставим прежнюю подсказку
+            return None          # busy being written to — keep the previous hint
 
     def refresh_hint(self):
         st = self.db_state()
@@ -381,10 +381,10 @@ class App:
             task.state.config(text="done" if not left else f"{nf(left)} left")
             task.bar["value"] = 0 if not total else 100 * (total - left) / total
 
-    # ---------- окружение ----------
+    # ---------- environment ----------
 
     def prepare(self):
-        """Создаёт .venv и ставит библиотеки, если их ещё нет."""
+        """Creates .venv and installs the libraries if they are not there yet."""
         py = venv_python()
         if os.path.exists(py) and self.deps_ok(py):
             self.out.put(("ready", "environment ready"))
@@ -427,10 +427,10 @@ class App:
         if note:
             self.setup_state.config(text=note)
 
-    # ---------- задачи ----------
+    # ---------- tasks ----------
 
     def busy_task(self):
-        """Проход, который сейчас держит базу на запись. Читающие не в счёт."""
+        """The pass currently holding the database for writing. Readers do not count."""
         for t in self.tasks.values():
             if t.writes and t.running():
                 return t
@@ -447,12 +447,12 @@ class App:
         return args
 
     def args_check(self):
-        """Спрашивает папку отдельно, а не берёт список сверху.
+        """Asks for a folder of its own instead of taking the list above.
 
-        Проверяют как раз то, чего в списке ещё нет: карту из фотоаппарата,
-        чужой диск, старую копию архива. Выбранная папка в настройках не
-        сохраняется — иначе она попала бы в следующий проход EXIF, а это ровно
-        то, от чего проверка и должна уберечь.
+        What gets checked is precisely what is not in that list yet: a card out of
+        the camera, someone else's disk, an old copy of the archive. The chosen
+        folder is not saved into the settings — it would otherwise end up in the
+        next EXIF pass, which is exactly what the check is there to prevent.
         """
         if not os.path.exists(os.path.join(ROOT, "photos.db")):
             messagebox.showinfo(
@@ -468,7 +468,7 @@ class App:
             args.append("--raw")
         return args
 
-    # ---------- сервер ----------
+    # ---------- server ----------
 
     def open_ui(self):
         if not (self.server and self.server.poll() is None):
@@ -503,7 +503,7 @@ class App:
             interrupt(self.server)
         self.stop_btn.config(state="disabled")
 
-    # ---------- вывод ----------
+    # ---------- output ----------
 
     def log(self, text):
         self.text.config(state="normal")
@@ -514,7 +514,7 @@ class App:
         self.text.config(state="disabled")
 
     def tick(self):
-        """База меняется под нами, пока идёт проход, — подсказка это отражает."""
+        """The database changes under us while a pass runs; the hint follows it."""
         try:
             self.refresh_hint()
         except Exception:
@@ -545,7 +545,7 @@ class App:
             pass
         self.root.after(60, self.drain)
 
-    # ---------- закрытие ----------
+    # ---------- shutting down ----------
 
     def on_close(self):
         busy = self.busy_task()

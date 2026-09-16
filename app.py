@@ -8,10 +8,10 @@
 # Commercial licensing is available — see COMMERCIAL.md.
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-app.py — просмотр статистики фотоархива в браузере.
+app.py — the photo archive statistics, viewed in a browser.
 
-Запуск:
-    python app.py                 (откроет http://127.0.0.1:5577)
+Running it:
+    python app.py                 (opens http://127.0.0.1:5577)
     python app.py --db photos.db --port 5577 --no-browser
 """
 
@@ -33,14 +33,14 @@ import dupkey
 
 try:
     from version import VERSION
-except ImportError:          # файл скопировали без version.py
+except ImportError:          # the file was copied without version.py
     VERSION = "unknown"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def resolve_web_dir():
-    """index.html ищем в web\\, а если его переложили — рядом с app.py."""
+    """index.html is looked for in web\\, and next to app.py if it was moved."""
     for d in (os.path.join(APP_DIR, "web"), APP_DIR):
         if os.path.isfile(os.path.join(d, "index.html")):
             return d
@@ -55,10 +55,10 @@ NONE_LABEL = "not specified"
 app = Flask(__name__, static_folder=None)
 DB_PATH = os.path.join(APP_DIR, "photos.db")
 
-# Хронология строится сплошным рядом месяцев, поэтому один снимок со сбитой
-# датой растягивает ленту на десятилетия пустых кадров. За пределами этого
-# промежутка месяцы в ленту не попадают — но сами снимки не теряются и
-# доступны отдельной ссылкой в карточке.
+# The timeline is built as an unbroken run of months, so one photo with a
+# broken date stretches the strip over decades of empty cells. Months outside
+# this range stay out of the strip — but the photos themselves are not lost and
+# are reachable from a link of their own in the card.
 MIN_YEAR = 1990
 
 
@@ -68,14 +68,14 @@ def year_range():
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
                "August", "September", "October", "November", "December"]
 
-# порядок задан спектром, а не численностью: карточка читается как палитра
+# ordered by the spectrum, not by count: the card reads as a palette
 COLOR_ORDER = ["red", "orange", "brown", "yellow", "green",
                "cyan", "blue", "violet", "white", "gray", "black"]
 COLOR_UNKNOWN = "unknown"
 COLOR_MIXED = "mixed"
-# Если самая крупная цветовая группа занимает меньше этой доли кадра, ни один
-# цвет не преобладает — такой снимок считаем разноцветным. Порог применяется
-# в запросе, поэтому меняется без повторного разбора архива.
+# If the largest colour group holds less than this share of the frame, no colour
+# dominates — such a photo counts as mixed. The threshold applies in the query,
+# so it can be changed without re-analysing the archive.
 MIXED_MAX = 0.25
 COLOR_SWATCH = {
     "red": "#C8342E", "orange": "#E08A2B", "brown": "#8A5A3B",
@@ -143,12 +143,12 @@ CONTRAST_BUCKETS = [
     (0.20, 0.27, "pronounced"), (0.27, 1.01, "high"),
 ]
 
-# Само правило — в dupkey.py: им же пользуется проверка каталога в scan.py, и
-# разъехаться эти два ответа не должны. Здесь остаётся только кеш на запрос.
+# The rule itself is in dupkey.py: the folder check in scan.py uses the same one,
+# and those two answers must not drift apart. Only the per-request cache is here.
 
 
 def sig_ready():
-    """Подписи посчитаны у всех файлов? Ответ один на запрос."""
+    """Is every file signed? Worked out once per request."""
     if not hasattr(g, "sig_ready"):
         with db() as con:
             g.sig_ready = dupkey.sigs_complete(con)
@@ -168,8 +168,8 @@ def dup_exists():
     return f"{k} IN (SELECT {k} FROM photos GROUP BY 1 HAVING COUNT(*) > 1)"
 
 
-# Производные измерения: значение считается из чисел прямо в запросе, поэтому
-# пороги можно менять здесь, не пересчитывая архив заново.
+# Derived dimensions: the value is worked out from the numbers in the query
+# itself, so the thresholds can be changed here without re-analysing the archive.
 DERIVED_DIMS = {
     "tone": ("chroma", [
         ("colour", "chroma >= 0.02"),
@@ -183,7 +183,7 @@ DERIVED_DIMS = {
     ]),
 }
 
-# измерение -> (колонка, диапазоны). Колонка фокусного зависит от переключателя ЭФР.
+# dimension -> (column, ranges). The focal column depends on the 35mm-equivalent toggle.
 RANGE_DIMS = {
     "focal": (None, FOCAL_BUCKETS),
     "aperture": ("fnumber", APERTURE_BUCKETS),
@@ -201,12 +201,12 @@ def range_col(key):
 
 
 # --------------------------------------------------------------------------
-# База
+# Database
 # --------------------------------------------------------------------------
 
 
-# Сервер читает базу, пока сканер в неё пишет. Без ожидания блокировки почти
-# половина запросов падает с "database is locked" — замерено.
+# The server reads the database while the scanner writes to it. Without waiting
+# on the lock, nearly half the queries fail with "database is locked" — measured.
 BUSY_MS = 15000
 
 
@@ -214,7 +214,7 @@ def db():
     con = sqlite3.connect(DB_PATH, timeout=BUSY_MS / 1000)
     con.execute(f"PRAGMA busy_timeout = {BUSY_MS}")
     try:
-        con.execute("PRAGMA journal_mode = WAL")   # на сетевых дисках недоступен
+        con.execute("PRAGMA journal_mode = WAL")   # unavailable on network drives
     except sqlite3.Error:
         pass
     con.row_factory = sqlite3.Row
@@ -232,17 +232,17 @@ def focal_col():
 
 
 def build_where(skip=None):
-    """Собирает WHERE по активным фильтрам. skip — измерение (или несколько),
-    которое не учитываем, чтобы график сам себя не обрезал."""
+    """Assembles the WHERE from the active filters. skip is the dimension (or
+    several) left out, so that a chart does not truncate itself."""
     skips = set()
     if isinstance(skip, str):
         skips = {skip}
     elif skip:
         skips = set(skip)
 
-    # Значения приходят повторяющимися параметрами (month=9&month=10), а не
-    # списком через запятую: в именах камер и объективов запятая встречается,
-    # а в рамке карты она вообще разделяет координаты.
+    # Values arrive as repeated parameters (month=9&month=10) rather than a
+    # comma-separated list: commas occur in camera and lens names, and in the map
+    # bounds a comma separates the coordinates outright.
     clauses, params = [], []
     for key, col in SIMPLE_FILTERS.items():
         vals = request.args.getlist(key)
@@ -339,7 +339,7 @@ def counts(col, skip, labeller=None, order="cnt", limit=None):
 
 
 def bucket_counts(key):
-    """Раскладывает значения по диапазонам одним запросом, без выгрузки строк."""
+    """Sorts values into ranges in one query, without pulling the rows out."""
     col = range_col(key)
     buckets = RANGE_DIMS[key][1]
     case = " ".join([f"WHEN {col} IS NULL THEN '{NONE_KEY}'"] +
@@ -358,8 +358,8 @@ def bucket_counts(key):
 
 
 def derived_opts(key):
-    """Правило дубликатов зависит от того, посчитаны ли подписи, поэтому
-    собирается на каждый запрос, а не один раз при старте."""
+    """The duplicate rule depends on whether signatures have been computed, so it
+    is assembled per request rather than once at startup."""
     if key == "dup":
         return "filename", [("has duplicates", dup_exists()),
                             ("no duplicates", "NOT " + dup_exists())]
@@ -378,8 +378,9 @@ def derived_counts(key):
     return [{"k": n, "l": n, "v": got[n]} for n, _ in opts if got.get(n)]
 
 
-# Значения цвета в базах прежних версий записаны по-русски. Переводим их одним
-# запросом при запуске: пересчитывать пиксели ради переименования незачем.
+# Colour values in databases from earlier versions are written in Russian. They
+# are translated in one query at startup: there is no need to recount pixels just
+# to rename something.
 COLOR_RENAME = {
     "красный": "red", "оранжевый": "orange", "коричневый": "brown",
     "жёлтый": "yellow", "зелёный": "green", "голубой": "cyan", "синий": "blue",
@@ -405,8 +406,8 @@ def rename_colors(con):
 
 
 def color_expr(col="color"):
-    """Группа цвета с поправкой на преобладание — одно определение и для
-    подсчёта, и для отбора. col: color или color_center."""
+    """The colour group, corrected for dominance — one definition serving both the
+    counting and the filtering. col: color or color_center."""
     return (f"CASE WHEN {col} IS NULL THEN NULL "
             f"WHEN {col}_share < {MIXED_MAX} THEN '{COLOR_MIXED}' "
             f"ELSE {col} END")
@@ -417,7 +418,7 @@ def color_counts(col="color"):
     with db() as con:
         got = dict(con.execute(f"SELECT {color_expr(col)} AS k, COUNT(*) FROM photos "
                                f"{where} GROUP BY k", params).fetchall())
-    got.pop(None, None)                    # NULL — снимок ещё не разбирали
+    got.pop(None, None)                    # NULL — the photo has not been analysed yet
     order = COLOR_ORDER + [COLOR_MIXED, COLOR_UNKNOWN]
     return [{"k": n, "l": n, "v": got[n], "c": COLOR_SWATCH[n]}
             for n in order if got.get(n)]
@@ -441,13 +442,13 @@ def api_stats():
         sized, = con.execute(f"SELECT COALESCE(SUM(size),0) FROM photos {where}",
                              params).fetchone()
 
-    # хронология: непрерывный ряд месяцев без пропусков
+    # timeline: an unbroken run of months with no gaps
     raw = {i["k"]: i["v"] for i in counts("ym", skip=("ym", "year", "baddate"),
                                           order="key") if i["k"] != NONE_KEY}
     lo_year, hi_year = year_range()
     inside = {k: v for k, v in raw.items() if lo_year <= int(k[:4]) <= hi_year}
     outliers = sum(v for k, v in raw.items() if k not in inside)
-    if not inside:                 # весь архив вне промежутка — показываем как есть
+    if not inside:                 # the whole archive is outside the range — show it as is
         inside, outliers = raw, 0
 
     timeline = []
@@ -461,12 +462,12 @@ def api_stats():
                              "v": inside.get(key, 0)})
             y, m = (y + 1, 1) if m == 12 else (y, m + 1)
 
-    # часы: всегда 0…23
+    # hours: always 0…23
     hours_raw = {int(i["k"]): i["v"] for i in counts("hour", skip="hour", order="key")
                  if i["k"] != NONE_KEY}
     hours = [{"k": str(h), "l": f"{h:02d}:00", "v": hours_raw.get(h, 0)} for h in range(24)]
 
-    # месяцы года: всегда 12
+    # months of the year: always 12
     mon_raw = {int(i["k"]): i["v"] for i in counts("month", skip="month", order="key")
                if i["k"] != NONE_KEY}
     months = [{"k": str(m), "l": MONTH_NAMES[m - 1], "v": mon_raw.get(m, 0)}
@@ -510,23 +511,23 @@ def api_stats():
 
 @app.get("/api/timeline")
 def api_timeline():
-    """Помесячная доля выбранной камеры или объектива.
+    """The monthly share of the chosen camera or lens.
 
-    Ряд месяцев берём по всему архиву, а не по годам жизни самой камеры: так
-    видно, куда она попадает в общей истории и что было до и после. Доля
-    считается от всех снимков месяца, поэтому редкие месяцы не выглядят
-    провалом в использовании."""
+    The run of months is taken from the whole archive rather than from the years
+    the camera itself lived: that shows where it falls in the overall history and
+    what came before and after. The share is counted against every photo of that
+    month, so a thin month does not look like a lull in use."""
     dim = request.args.get("dim", "camera")
     if dim not in ("camera", "lens", "brand"):
         abort(400)
     top = max(1, min(int(request.args.get("top", 10)), 60))
-    span_mode = request.args.get("span", "active")   # active — только период работы
+    span_mode = request.args.get("span", "active")   # active — the period of use only
     lo_year, hi_year = year_range()
     good = lambda ym: ym and lo_year <= int(ym[:4]) <= hi_year
 
-    # знаменатель: весь архив под прочими фильтрами, без учёта самой техники
+    # denominator: the whole archive under the other filters, the gear itself aside
     where_all, params_all = build_where(skip=(dim, "ym", "year"))
-    # числитель: то же, но фильтр техники оставлен — панель показывает выбранное
+    # numerator: the same, but the gear filter stays — the panel shows the choice
     where_sel, params_sel = build_where(skip=("ym", "year"))
     with db() as con:
         per_month = {ym: c for ym, c in con.execute(
@@ -535,7 +536,7 @@ def api_timeline():
         raw = [(ym, k, c) for ym, k, c in con.execute(
             f"SELECT ym, {dim} AS k, COUNT(*) FROM photos {where_sel} "
             f"GROUP BY ym, k", params_sel) if good(ym)]
-        # точные даты первого и последнего кадра — по дате съёмки, не по месяцу
+        # exact dates of the first and last frame — by capture date, not by month
         dates = {(k or NONE_LABEL): (a, b) for k, a, b in con.execute(
             f"SELECT {dim} AS k, MIN(taken), MAX(taken) FROM photos {where_sel} "
             f"WHERE year BETWEEN ? AND ? GROUP BY k"
@@ -561,7 +562,7 @@ def api_timeline():
         by_key.setdefault(k or NONE_LABEL, {})[ym] = cnt
     ranked = sorted(by_key.items(), key=lambda kv: -sum(kv[1].values()))
     chosen = ranked[:top]
-    chosen.sort(key=lambda kv: min(kv[1]))          # по времени появления
+    chosen.sort(key=lambda kv: min(kv[1]))          # by when it first appeared
     rows = []
     for name, hits in chosen:
         first, last = dates.get(name, (None, None))
@@ -569,7 +570,7 @@ def api_timeline():
         if first and last:
             d0 = datetime.date.fromisoformat(first[:10])
             d1 = datetime.date.fromisoformat(last[:10])
-            days = (d1 - d0).days + 1          # оба крайних дня считаем рабочими
+            days = (d1 - d0).days + 1          # both end days count as days in service
         rows.append({
             "k": name,
             "total": sum(hits.values()),
@@ -578,9 +579,9 @@ def api_timeline():
             "activeMonths": len(hits),
             "v": [hits.get(ym, 0) for ym in months],
         })
-    # По умолчанию обрезаем ленту до периода работы: у камеры, прожившей год,
-    # остальные два десятка лет — пустые ячейки, в которых ничего не прочесть.
-    # Запас по краям оставляем, чтобы начало и конец не упирались в край.
+    # By default the strip is cut down to the period of use: for a camera that
+    # lived a year, the other two decades are empty cells with nothing to read in
+    # them. Some padding is left so the start and end do not sit against the edge.
     archive_months = len(months)
     if span_mode == "active" and rows:
         used = [i for i in range(len(months))
@@ -597,18 +598,19 @@ def api_timeline():
                     "span": span_mode, "archiveMonths": archive_months})
 
 
-# Сетка кластеризации: чем мельче ячейка, тем подробнее разбиение. Долгота
-# сжимается к полюсам, поэтому по ней ячейка шире — иначе на широте Москвы
-# кластеры вытянулись бы в узкие полосы.
+# The clustering grid: the smaller the cell, the finer the split. Longitude is
+# squeezed towards the poles, so its cell is wider — otherwise, at the latitude of
+# Moscow, clusters would be drawn out into narrow strips.
 GEO_CELLS = [10, 4, 2, 1, 0.4, 0.2, 0.08, 0.03, 0.012, 0.005, 0.002]
 
-TIMELINE_PAD = 6      # сколько месяцев запаса оставить по краям периода работы
+TIMELINE_PAD = 6      # how many months of padding to leave at the ends of the period of use
 
 
 @app.get("/api/geo")
 def api_geo():
-    """Скопления координат. Кластеры считаются на сервере: слать в браузер
-    сто тысяч точек незачем, да и рисовать их он будет заметно дольше."""
+    """Clusters of coordinates. They are worked out on the server: there is no
+    point sending a hundred thousand points to the browser, and it would take
+    noticeably longer to draw them."""
     level = max(0, min(int(request.args.get("level", 3)), len(GEO_CELLS) - 1))
     cell = GEO_CELLS[level]
     limit = max(1, min(int(request.args.get("limit", 400)), 2000))
@@ -641,9 +643,9 @@ def api_geo():
                     "levels": len(GEO_CELLS)})
 
 
-# Списком, а не строкой: направление надо приписать каждому столбцу. В
-# "ORDER BY filename, path DESC" обратный порядок достаётся только пути,
-# а имя остаётся по возрастанию — и сортировка молча не работает.
+# A list, not a string: the direction has to be attached to every column. In
+# "ORDER BY filename, path DESC" only the path gets the reverse order, the name
+# stays ascending — and the sort silently does not work.
 SORTS = {
     "taken": ["taken"],
     "name": ["filename COLLATE NOCASE", "path"],
@@ -655,7 +657,7 @@ SORTS = {
 
 @app.get("/api/folders")
 def api_folders():
-    """Папки, в которых лежат снимки текущей выборки."""
+    """The folders the photos of the current selection live in."""
     where, params = build_where()
     limit = max(1, min(int(request.args.get("limit", 300)), 2000))
     with db() as con:
@@ -673,13 +675,13 @@ def api_folders():
 @app.get("/api/photos")
 def api_photos():
     where, params = build_where()
-    # Порядок берём только из этого списка: значение приходит от клиента и
-    # попадает прямо в SQL, подставлять его как есть нельзя.
+    # The order is taken only from this list: the value comes from the client and
+    # goes straight into SQL, so it cannot be substituted as it arrives.
     field = request.args.get("sort", "taken")
     if field not in SORTS:
         field = "taken"
-    # при отборе дубликатов по умолчанию сортируем по имени, чтобы копии шли
-    # подряд и их можно было сравнить; явный выбор это не отменяет
+    # when filtering by duplicates, sort by name by default so copies sit next to
+    # each other and can be compared; an explicit choice still overrides this
     if request.args.get("dup") == "has duplicates" and "sort" not in request.args:
         field = "name"
     order = "DESC" if request.args.get("dir") == "desc" else "ASC"
@@ -706,7 +708,7 @@ def api_photos():
 
 @app.get("/api/random")
 def api_random():
-    """Несколько случайных снимков из текущей выборки — для полосы предпросмотра."""
+    """A few random photos from the current selection, for the preview strip."""
     where, params = build_where()
     n = max(1, min(int(request.args.get("n", 10)), 30))
     with db() as con:
@@ -739,13 +741,13 @@ def api_thumb(pid):
     try:
         from PIL import Image, ImageOps
         try:
-            import pillow_heif  # опционально, для HEIC
+            import pillow_heif  # optional, for HEIC
             pillow_heif.register_heif_opener()
         except Exception:
             pass
         with Image.open(path) as im:
             try:
-                im.draft("RGB", (size * 2, size * 2))   # быстрый путь для JPEG
+                im.draft("RGB", (size * 2, size * 2))   # the fast path for JPEG
             except Exception:
                 pass
             im = ImageOps.exif_transpose(im)
@@ -765,7 +767,7 @@ def api_thumb(pid):
 
 
 def raw_preview(path, size):
-    """Для RAW достаём встроенный JPEG-превью через ExifTool."""
+    """For RAW, pull the embedded JPEG preview out with ExifTool."""
     import shutil as sh
     exe = sh.which("exiftool") or sh.which("exiftool.exe")
     if not exe:
@@ -792,7 +794,7 @@ def raw_preview(path, size):
 
 @app.post("/api/reveal/<int:pid>")
 def api_reveal(pid):
-    """Показать файл в проводнике Windows."""
+    """Show the file in the Windows file manager."""
     with db() as con:
         row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
     if not row or not os.path.exists(row["path"]):
@@ -812,7 +814,7 @@ def api_reveal(pid):
 
 @app.post("/api/open/<int:pid>")
 def api_open(pid):
-    """Открыть файл программой по умолчанию."""
+    """Open the file with the default program."""
     with db() as con:
         row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
     if not row or not os.path.exists(row["path"]):
@@ -831,7 +833,7 @@ def api_open(pid):
 
 @app.get("/api/export")
 def api_export():
-    """Выгрузка текущей выборки в CSV."""
+    """Export the current selection to CSV."""
     import csv
     where, params = build_where()
     with db() as con:
@@ -866,10 +868,10 @@ NO_UI = r"""<!DOCTYPE html><html lang="en"><meta charset="utf-8">
 
 @app.get("/favicon.ico")
 def favicon():
-    # Браузер просит иконку сам, не спрашивая разметку, и без этого маршрута
-    # каждая вкладка оставляла в логе 404. Файла может не быть — иконка
-    # собирается скриптом tools/make_icon.py, — тогда отвечаем пустотой, как
-    # отвечали раньше.
+    # The browser asks for the icon on its own, without consulting the markup,
+    # and without this route every tab left a 404 in the log. The file may be
+    # missing — the icon is built by tools/make_icon.py — and then we answer with
+    # nothing, the way we used to.
     if WEB_DIR and os.path.isfile(os.path.join(WEB_DIR, "favicon.ico")):
         return send_from_directory(WEB_DIR, "favicon.ico")
     return Response(status=204)
@@ -910,8 +912,8 @@ def main():
     os.makedirs(CACHE_DIR, exist_ok=True)
     with db() as con:
         cols = {r[1] for r in con.execute("PRAGMA table_info(photos)")}
-        # сначала колонки, потом индексы: индекс по колонке, которой ещё нет,
-        # создать нельзя, а база могла остаться от прежней версии
+        # columns first, then indexes: an index on a column that does not exist
+        # yet cannot be created, and the database may be from an earlier version
         for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
                            ("color", "TEXT"), ("color_hex", "TEXT"),
                            ("color_share", "REAL"), ("color_center", "TEXT"),
@@ -922,7 +924,7 @@ def main():
             if name not in cols:
                 con.execute(f"ALTER TABLE photos ADD COLUMN {name} {decl}")
                 con.commit()
-        con.execute("DROP INDEX IF EXISTS ix_dup")      # ключ изменился
+        con.execute("DROP INDEX IF EXISTS ix_dup")      # the key changed
         con.execute(f"CREATE INDEX IF NOT EXISTS ix_dupkey ON photos({name_key()})")
         con.execute("CREATE INDEX IF NOT EXISTS ix_sig ON photos(sig)")
         con.commit()

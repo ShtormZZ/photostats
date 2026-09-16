@@ -3,8 +3,8 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title photostats
 
-rem Ищем Python 3.10 или новее. Сначала py -3: он не натыкается на заглушку
-rem python.exe из Магазина Windows, которая вместо запуска открывает магазин.
+rem Look for Python 3.10 or newer. Try py -3 first: it does not run into the
+rem Microsoft Store stub python.exe, which opens the Store instead of starting.
 set "PY="
 py -3 -c "import sys;raise SystemExit(0 if sys.version_info>=(3,10) else 1)" >nul 2>nul && set "PY=py -3"
 if not defined PY (

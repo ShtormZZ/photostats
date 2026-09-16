@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Comments and docstrings across the program are in English. They were Russian in
+  `app.py`, `scan.py`, `launcher.py`, `dupkey.py`, `web/index.html`, the batch file
+  and `.gitignore`, which put half the reasoning in the code out of reach of anyone
+  who does not read it. No code changed: the colour names in `COLOR_RENAME` and the
+  Cyrillic seconds suffix in `rstrip` are data and stayed as they were.
+
 - A folder can be checked against the archive before it is added: **Check a
   folder** in the window, or `scan.py --check-dups FOLDER`. It reports how many
   of the files are copies of what you already have and how many are new. The

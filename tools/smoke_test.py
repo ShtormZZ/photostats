@@ -62,14 +62,15 @@ def make_photos(folder):
         ("no_gps", (200, 90, 40), (200, 90, 40), 2024, 9, "Apple iPhone 13",
          "iPhone 13 back camera", 6, None),
     ]
-    # Кадры должны быть крупнее порога в 50 КБ, иначе сканер примет их за
-    # эскизы и пропустит — как и настоящие эскизы в архиве.
+    # The frames have to come out bigger than the 50 KB threshold, or the
+    # scanner takes them for thumbnails and leaves them out — as it does with
+    # the real thumbnails in an archive.
     import random
     random.seed(7)
     for name, bg, fg, year, month, cam, lens, focal, geo in spec:
         im = Image.new("RGB", (900, 700), bg)
         px = im.load()
-        for y in range(0, 700, 2):          # шум, иначе файл сожмётся в ничто
+        for y in range(0, 700, 2):          # noise, or the file compresses to nothing
             for x in range(0, 900, 2):
                 v = random.randint(-18, 18)
                 px[x, y] = tuple(max(0, min(255, c + v)) for c in bg)
@@ -245,9 +246,9 @@ def main():
               f"{len(page)} bytes")
         check("interface markup present", 'id="list"' in page and 'id="strip"' in page)
 
-        # Прилипшая шапка держится только внутри бокса родителя. Стоит вернуть
-        # body высоту в 100%, и она снова начнёт уезжать после первого экрана,
-        # причём молча — поэтому стережём правило здесь.
+        # A sticky header only holds inside its parent's box. Give body a height
+        # of 100% again and it starts scrolling away after the first screen once
+        # more, and silently at that — which is why the rule is guarded here.
         css = page[page.index("<style>"):page.index("</style>")]
         sticky = ".topbar{position:sticky;top:0" in css
         parent_ok = not re.search(r"(^|[\s,])body\s*\{[^}]*height\s*:\s*100%", css, re.M)

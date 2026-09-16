@@ -7,10 +7,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Photo archive — statistics</title>
-<!-- Вкладке отдаём ico, а не вектор, хотя вектор здесь же и лежит: браузер
-     предпочитает svg, а рисует его в 16 пикселей, где уголки видоискателя
-     слипаются со столбиками. В ico те же 16 и 24 нарисованы отдельно — одними
-     столбиками, без рамки. Всё это собирает tools/make_icon.py. -->
+<!-- The tab gets the ico, not the vector, although the vector is right here:
+     browsers prefer svg and then draw it at 16 pixels, where the viewfinder
+     corners run together with the bars. In the ico those same 16 and 24 are
+     drawn separately — bars only, no frame. tools/make_icon.py builds it all. -->
 <link rel="icon" href="favicon.ico" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
 <link rel="apple-touch-icon" href="icon.png">
 <style>
@@ -22,29 +22,30 @@
   --data:"Consolas","Cascadia Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
-/* Высоту body не задаём намеренно. С height:100% его бокс заканчивался на
-   первом экране, а прилипший элемент держится только внутри бокса родителя —
-   и шапка с фильтрами уезжала вверх, стоило прокрутить дальше одного экрана.
-   Фон и без того закрашивает весь холст: он поднимается от body к странице. */
+/* The height of body is deliberately not set. With height:100% its box ended at
+   the first screen, and a sticky element only holds inside its parent's box — so
+   the header and the filters scrolled away as soon as you went past one screen.
+   The background covers the whole canvas anyway: it rises from body to the page. */
 body{margin:0;background:var(--ground);color:var(--paper);font-family:var(--body);
   font-size:14px;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--safelight);outline-offset:2px}
 
-/* ---------- шапка ---------- */
-/* Шапка и плашки фильтров прилипают одним блоком: снимать фильтр, прокручивая
-   страницу вверх, приходилось на каждый щелчок. Высоту блока замеряет скрипт —
-   от неё зависит, где начинается правая колонка. */
+/* ---------- header ---------- */
+/* The header and the filter chips stick as one block: dropping a filter meant
+   scrolling the page back up on every click. The height of the block is measured
+   by the script — where the right column starts depends on it. */
 .topbar{position:sticky;top:0;z-index:30}
 .top{display:flex;align-items:center;gap:18px;padding:14px 20px;
   border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 .brand{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;
   font-weight:600;display:flex;align-items:center}
 .brand span{color:var(--safelight)}
-/* Знак — та же иконка, что у окна и у вкладки, только без плитки: её заливка
-   совпадает с цветом шапки, и от плитки осталась бы одна рамка вокруг знака.
-   Отступ задан самому знаку, а не через gap: во флексе «Photo» и <span> — два
-   отдельных элемента, и gap раздвинул бы ещё и половинки названия. */
+/* The mark is the same icon as the window and the tab carry, only without its
+   tile: the tile fill matches the header colour, and all that would be left of it
+   is a frame round the mark. The spacing is set on the mark itself rather than
+   with gap: in a flex row "Photo" and <span> are two separate items, and gap
+   would push the halves of the name apart as well. */
 .brand .mark{margin-right:11px;flex:none}
 .tally{font-family:var(--data);font-size:13px;color:var(--muted);white-space:nowrap}
 .ver{font-family:var(--data);font-size:10px;color:var(--emulsion);align-self:flex-start;
@@ -58,7 +59,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   color:var(--muted);letter-spacing:.04em}
 .tool:hover{border-color:var(--emulsion);color:var(--paper)}
 
-/* ---------- активные фильтры ---------- */
+/* ---------- active filters ---------- */
 .chips{display:flex;gap:8px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--line);
   background:var(--panel);align-items:center}
 .chips.off{display:none}
@@ -71,7 +72,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .clear-all{font-size:12px;color:var(--muted);text-decoration:underline}
 .clear-all:hover{color:var(--paper)}
 
-/* ---------- сетка ---------- */
+/* ---------- the grid ---------- */
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,42%);gap:0;
   align-items:start}
 .left{padding:20px;display:flex;flex-direction:column;gap:20px;min-width:0}
@@ -79,7 +80,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   top:var(--topbar,57px);height:calc(100vh - var(--topbar,57px));
   overflow-y:auto;min-width:0}
 
-/* ---------- блок карточек ---------- */
+/* ---------- group of cards ---------- */
 .group{display:flex;flex-direction:column;gap:14px}
 .group-head{display:flex;align-items:center;gap:12px;width:100%;padding:2px 0;text-align:left}
 .group-head .num{font-family:var(--data);font-size:11px;color:var(--emulsion)}
@@ -96,7 +97,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .group.closed .group-body{display:none}
 .group.closed .ttl{color:var(--muted)}
 
-/* ---------- карточка ---------- */
+/* ---------- a card ---------- */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px 18px 18px}
 .card-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
 .card-title{font-family:var(--display);font-size:13px;letter-spacing:.16em;text-transform:uppercase;
@@ -107,12 +108,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   border-radius:2px;padding:3px 7px}
 .toggle.on{color:#231A0B;background:var(--safelight);border-color:var(--safelight)}
 
-/* ---------- плёнка (хронология) ---------- */
+/* ---------- the film strip (timeline) ---------- */
 .film-scroll{overflow-x:auto;overflow-y:hidden;padding-bottom:4px}
-/* Ширину ленты и оси задаёт скрипт, поровну между месяцами. Раньше кадры были
-   гибкими без запрета на сжатие и ужимались в ширину карточки, а ось имела
-   жёсткие 10 точек на месяц и уезжала на тысячи точек вправо — годы второй
-   половины архива оказывались за пределами ленты. */
+/* The width of the strip and of the axis is set by the script, shared equally
+   between the months. The frames used to be flexible with no shrink guard and
+   squeezed themselves into the width of the card, while the axis had a rigid 10
+   pixels per month and ran thousands of pixels to the right — the years in the
+   second half of the archive ended up outside the strip. */
 .film{background:var(--frame);padding:5px 0;border-radius:2px;margin:0 auto}
 .perf{height:7px;background:repeating-linear-gradient(90deg,
   transparent 0 3px, var(--ground) 3px 9px, transparent 9px 12px)}
@@ -129,17 +131,17 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .yr:hover{color:var(--paper)}
 .yr.on{color:var(--safelight);font-weight:700}
 
-/* ---------- хронология техники ---------- */
+/* ---------- gear timeline ---------- */
 .tstats{display:flex;flex-wrap:wrap;gap:22px;margin-bottom:14px}
 .tstat{display:flex;flex-direction:column;gap:3px}
 .tstat span{font-family:var(--display);font-size:10px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--muted)}
 .tstat b{font-family:var(--data);font-size:14px;font-weight:400;color:var(--paper)}
 .tl{overflow-x:auto;overflow-y:hidden}
-/* Лента тянется по ширине карточки: ячейки делят её поровну, а не стоят
-   фиксированными в 9 точек, из-за чего короткий период занимал десятую часть
-   карточки. Потолок ширины не даёт трём месяцам расплыться в лопаты,
-   а margin auto держит ленту по центру. */
+/* The strip stretches across the width of the card: the cells divide it equally
+   instead of standing at a fixed 9 pixels, which left a short period taking up a
+   tenth of the card. A width ceiling keeps three months from spreading into
+   paddles, and margin auto holds the strip in the centre. */
 .tinner{margin:0 auto;width:100%}
 .tcells{display:flex;gap:1px;align-items:flex-end;height:88px;background:var(--frame);
   padding:5px 0;border-radius:2px;width:100%}
@@ -154,7 +156,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   white-space:nowrap;overflow:hidden}
 .tnote{font-family:var(--data);font-size:11px;color:var(--muted);margin-top:9px}
 
-/* ---------- вертикальные столбцы ---------- */
+/* ---------- vertical bars ---------- */
 .cols{display:flex;gap:4px;align-items:flex-end;height:130px}
 .cols.hours{gap:3px}
 .col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
@@ -162,15 +164,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .col .track{flex:1;display:flex;align-items:flex-end;background:#191820;border-radius:1px}
 .col i{display:block;width:100%;background:var(--emulsion);border-radius:1px 1px 0 0;
   transition:background .12s}
-/* день светлее ночи — и дорожка, и сам столбик */
+/* day is lighter than night — both the track and the bar itself */
 .col.day .track{background:#312E3B}
 .col.night .track{background:#0C0B10}
 .col.day i{background:#948DA3}
 .col.night i{background:#514C60}
 .col:hover i{background:#B3ABC2}
 .col.on i{background:var(--safelight)}
-/* высота подписи задана жёстко: пустая строка иначе схлопывалась
-   и сдвигала дорожку этого столбца вверх относительно соседних */
+/* the label height is fixed: an empty line otherwise collapsed and shifted
+   this column's track up relative to its neighbours */
 .col .tick{font-family:var(--data);font-size:10px;color:var(--muted);text-align:center;
   white-space:nowrap;overflow:hidden;height:13px;line-height:13px;flex:none}
 .col.on .tick{color:var(--safelight)}
@@ -178,7 +180,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   color:var(--muted)}
 .legend i{display:inline-block;width:16px;height:9px;border-radius:1px}
 
-/* ---------- горизонтальные строки ---------- */
+/* ---------- horizontal rows ---------- */
 .rows{display:flex;flex-direction:column;gap:3px}
 .row{display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;gap:10px;align-items:center;
   padding:3px 4px;border-radius:2px;text-align:left;width:100%}
@@ -206,7 +208,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   text-decoration:underline}
 .more:hover{color:var(--paper)}
 
-/* ---------- места съёмки ---------- */
+/* ---------- places ---------- */
 .geo-scale{display:flex;align-items:center;gap:9px;margin-bottom:12px}
 .geo-scale input{flex:1;accent-color:var(--safelight);min-width:60px}
 .geo-scale span{font-family:var(--data);font-size:11px;color:var(--muted);
@@ -225,7 +227,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   margin-bottom:12px;color:var(--paper);font-size:12.5px;line-height:1.5}
 .geo-err code{font-family:var(--data);font-size:11px;color:var(--muted)}
 
-/* ---------- полоса предпросмотра ---------- */
+/* ---------- preview strip ---------- */
 .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
 .seltools{display:flex;align-items:center;gap:6px;margin:0 0 12px}
 .seltools .sortlab{font-family:var(--data);font-size:11px;color:var(--muted)}
@@ -254,7 +256,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   text-align:left;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden}
 .cell:hover .cap{opacity:1}
 
-/* ---------- текстовый список ---------- */
+/* ---------- text list ---------- */
 .lhead,.lrow{display:grid;grid-template-columns:112px minmax(70px,1.1fr) 1fr 1fr 46px;
   gap:10px;align-items:baseline;padding:4px 6px;text-align:left;width:100%}
 .lhead{font-family:var(--display);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
@@ -268,8 +270,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .lrow .c-cam,.lrow .c-lens{color:var(--muted)}
 .lrow:hover .c-cam,.lrow:hover .c-lens{color:var(--paper)}
 .lrow.open{background:#2C2A34}
-/* Файлы с одним именем, но разного размера — разные группы. Без границы они
-   стоят вплотную и выглядят как ошибочно найденный дубликат. */
+/* Files sharing a name but differing in size are different groups. Without the
+   rule they sit flush together and look like a duplicate found in error. */
 .lrow.gsep{border-top:1px solid var(--line)}
 .lexp{display:flex;gap:12px;padding:10px 6px 14px;border-bottom:1px solid var(--line);
   align-items:flex-start}
@@ -292,7 +294,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .act2:hover{border-color:var(--safelight);color:var(--safelight)}
 .empty{color:var(--muted);font-size:13px;line-height:1.6;padding:30px 0}
 
-/* ---------- карточка снимка ---------- */
+/* ---------- photo card ---------- */
 .veil{position:fixed;inset:0;background:rgba(8,7,11,.88);display:none;z-index:60;
   align-items:center;justify-content:center;padding:24px}
 .veil.on{display:flex}
@@ -602,9 +604,9 @@ const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
   iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
   tone:"Tone", brightness:"Brightness", contrast:"Contrast", clipping:"Clipping",
   baddate:"Date"};
-/* Подписи диапазонов приходят с сервера — запоминаем их для плашек фильтров. */
+/* Range labels come from the server — kept here for the filter chips. */
 const seen = {};
-const order = {};        // порядок значений измерения — для выбора диапазона
+const order = {};        // the order of a dimension's values — for picking a range
 
 function remember(param, items){
   seen[param] = seen[param] || {};
@@ -616,8 +618,8 @@ const state = {filters:{}, eq:false, sort:"taken", dir:"asc", view:"files",
                limit:300, expanded:{}, mixedMax:0.20};
 const ctl = {};
 
-/* Отменяем предыдущий запрос того же вида: пока грузилась старая выборка,
-   пользователь мог уже щёлкнуть по другому столбику. */
+/* The previous request of the same kind is cancelled: while the old selection
+   was loading, the user may already have clicked a different bar. */
 function ask(key, url){
   if (ctl[key]) ctl[key].abort();
   ctl[key] = new AbortController();
@@ -627,9 +629,9 @@ const quiet = e => { if (e.name !== "AbortError") console.error(e); };
 const $ = id => document.getElementById(id);
 const nf = n => (n||0).toLocaleString("en-US");
 
-/* Значение фильтра — всегда массив, даже когда выбрано одно. Так множественный
-   выбор не требует отдельной ветки нигде, кроме подписи на плашке. Уходит на
-   сервер повторяющимися параметрами: month=9&month=10. */
+/* A filter value is always an array, even when one thing is picked. That way a
+   multiple selection needs no branch of its own anywhere except the text on the
+   chip. It goes to the server as repeated parameters: month=9&month=10. */
 function params(extra){
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(state.filters)){
@@ -644,10 +646,10 @@ function params(extra){
   return p;
 }
 
-const MULTI = ["year", "ym", "month", "hour"];      // где копится набор значений
+const MULTI = ["year", "ym", "month", "hour"];      // where a set of values accumulates
 const picked = p => state.filters[p] || [];
 const isOn = (p, k) => picked(p).includes(String(k));
-let lastPick = {};                                  // якорь для выбора диапазона
+let lastPick = {};                                  // the anchor for picking a range
 
 function toggleFilter(param, key, event){
   key = String(key);
@@ -655,8 +657,8 @@ function toggleFilter(param, key, event){
   let sel = picked(param).slice();
 
   if (multi && event && event.shiftKey && lastPick[param] !== undefined){
-    // Shift берёт всё между прошлым выбором и этим — сентябрь по октябрь
-    // одним движением, а не по щелчку на каждый месяц.
+    // Shift takes everything between the last pick and this one — September
+    // through October in one movement rather than a click per month.
     const all = (order[param] || []).map(String);
     const a = all.indexOf(lastPick[param]), b = all.indexOf(key);
     if (a >= 0 && b >= 0){
@@ -667,11 +669,11 @@ function toggleFilter(param, key, event){
   } else if (multi && event && (event.ctrlKey || event.metaKey)){
     sel = sel.includes(key) ? sel.filter(x => x !== key) : sel.concat(key);
   } else if (sel.length === 1 && sel[0] === key){
-    sel = [];                                        // повторный щелчок снимает
+    sel = [];                                        // clicking again clears it
   } else if (multi && sel.includes(key)){
     sel = sel.filter(x => x !== key);
   } else if (multi && sel.length){
-    sel = sel.concat(key);                           // обычный щелчок добавляет
+    sel = sel.concat(key);                           // an ordinary click adds
   } else {
     sel = [key];
   }
@@ -702,8 +704,8 @@ function chipText(param, val){
     }
     return v;
   };
-  // до трёх значений перечисляем, дальше — числом: иначе одна плашка займёт
-  // всю строку, а их может быть несколько
+  // up to three values are listed, beyond that a count: otherwise one chip takes
+  // the whole line, and there can be several of them
   return name + ": " + (list.length <= 3 ? list.map(one).join(", ")
                                          : list.length + " selected");
 }
@@ -739,9 +741,9 @@ function renderChips(){
   measureTop();
 }
 
-/* ---------- плёнка ---------- */
-const FILM_CELL_MAX = 14;   // потолок ширины кадра-месяца, точек
-const FILM_CELL_MIN = 2;    // ниже этого лента начинает прокручиваться
+/* ---------- the film strip ---------- */
+const FILM_CELL_MAX = 14;   // ceiling on the width of a month frame, in pixels
+const FILM_CELL_MIN = 2;    // below this the strip starts to scroll
 
 function renderFilm(items){
   remember("ym", items);
@@ -750,7 +752,7 @@ function renderFilm(items){
   const n = items.length;
   if (!n) return;
 
-  // одну и ту же ширину получают и лента, и ось — иначе они разъезжаются
+  // the strip and the axis get the same width — otherwise they drift apart
   const box = $("filmScroll");
   const span = Math.min(Math.max(box.clientWidth || 700, n * FILM_CELL_MIN),
                         n * FILM_CELL_MAX);
@@ -777,9 +779,9 @@ function renderFilm(items){
   Object.keys(years).sort().forEach(y => {
     const b = document.createElement("button");
     b.className = "yr" + (isOn("year", y) ? " on" : "");
-    b.style.flex = years[y] + " 0 0";        // доля оси = доля месяцев в ленте
-    // на узкой ленте под полный год места нет — ставим короткую форму,
-    // иначе ось осталась бы вовсе без подписей
+    b.style.flex = years[y] + " 0 0";        // the axis share equals the share of months in the strip
+    // on a narrow strip there is no room for a full year — the short form goes
+    // in, or the axis would be left with no labels at all
     const slot = years[y] * cellPx;
     b.textContent = slot >= 26 ? y : slot >= 15 ? "'" + y.slice(2) : "";
     b.title = y;
@@ -788,18 +790,19 @@ function renderFilm(items){
   });
 }
 
-/* ---------- места съёмки ----------
-   Список мест работает без сети. Тайлы карты грузятся только по кнопке и
-   только с явного согласия: это единственное обращение программы наружу, и по
-   запросам тайлов сторонний сервер видит, какие районы вы разглядываете. */
+/* ---------- places ----------
+   The list of places works with no network. Map tiles are fetched only from a
+   button press and only with explicit consent: this is the program's one and only
+   outbound request, and from those tile requests someone else's server can see
+   which areas you are looking at. */
 const LEAFLET = "https://unpkg.com/leaflet@1.9.4/dist/leaflet";
-/* Карта живёт между перерисовками. Раньше она создавалась заново при каждом
-   обновлении и заново подгонялась под все кластеры — выбранная точка терялась
-   вместе с масштабом и положением. */
+/* The map lives between redraws. It used to be created afresh on every update
+   and fitted to all the clusters again — the chosen point was lost along with the
+   zoom and the position. */
 let mapObj = null, mapLayer = null, mapHolder = null, mapFitted = false;
-let mapPicked = null;      // к какой точке карта уже подведена
+let mapPicked = null;      // which point the map has already been brought to
 state.geoLevel = 4;
-state.tlSpan = "active";        // лента по периоду работы, а не по всему архиву
+state.tlSpan = "active";        // the strip covers the period of use, not the whole archive
 state.mapOn = false;
 
 function loadAsset(tag, attrs){
@@ -926,9 +929,9 @@ function renderGeo(d){
 }
 
 function cssLoaded(){
-  /* Стили и код Leaflet грузятся по отдельности, и блокировщик может пропустить
-     один, но не другой. Без стилей карта молча остаётся пустым прямоугольником,
-     поэтому проверяем их наличие прямо на пробном элементе. */
+  /* The Leaflet styles and code load separately, and a blocker may let one
+     through but not the other. Without the styles the map silently stays an empty
+     rectangle, so their presence is checked on a probe element directly. */
   const probe = document.createElement("div");
   probe.className = "leaflet-pane";
   probe.style.display = "none";
@@ -944,7 +947,7 @@ function ensureMap(){
     mapHolder.id = "geoMap";
   }
   if (!mapObj){
-    // центр задаём сразу: карта без него считается неготовой
+    // the centre is set at once: without it the map counts as not ready
     mapObj = window.L.map(mapHolder, {center: [20, 0], zoom: 2});
     window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: "© OpenStreetMap",
@@ -964,7 +967,7 @@ function destroyMap(){
 function drawMap(body, d){
   const L = window.L;
   ensureMap();
-  body.appendChild(mapHolder);          // тот же элемент, не новый
+  body.appendChild(mapHolder);          // the same element, not a new one
   mapLayer.clearLayers();
 
   const sel = state.filters.geo;
@@ -993,8 +996,8 @@ function drawMap(body, d){
   });
 
   if (picked && sel !== mapPicked){
-    // подводим карту только в момент смены выбора: иначе любое другое действие
-    // возвращало бы её к точке и сбрасывало прокрутку, сделанную вручную
+    // the map is moved only when the selection changes: otherwise any other
+    // action would return it to the point and undo panning done by hand
     const b = picked.box;
     mapObj.fitBounds([[b[0], b[1]], [b[2], b[3]]], {padding: [40, 40], maxZoom: 15});
   } else if (!mapFitted && bounds.length){
@@ -1003,7 +1006,7 @@ function drawMap(body, d){
   mapPicked = sel || null;
   mapFitted = true;
 
-  // размеры контейнера известны только после раскладки страницы
+  // the container's size is only known once the page has been laid out
   requestAnimationFrame(() => mapObj && mapObj.invalidateSize());
   setTimeout(() => mapObj && mapObj.invalidateSize(), 300);
 }
@@ -1013,13 +1016,14 @@ function loadGeo(){
     .then(renderGeo).catch(quiet);
 }
 
-/* ---------- хронология техники ----------
-   Показываем только выбранную камеру или объектив: пока не выбрано, панель
-   ничего не строит и запрос не уходит. Ряд месяцев — по всему архиву, а не по
-   годам жизни самой камеры, чтобы видеть, что было до и после. Высота столбика
-   — доля месяца, снятая ею: иначе годы редкой съёмки выглядели бы перерывом. */
-const TL_CELL_MAX = 72;   // потолок ширины ячейки месяца, точек
-const TL_CELL_MIN = 4;    // ниже этого лента начинает прокручиваться
+/* ---------- gear timeline ----------
+   Only the chosen camera or lens is shown: until something is picked, the panel
+   builds nothing and no request goes out. The run of months covers the whole
+   archive rather than the years the camera itself lived, so that what came before
+   and after is visible. The height of a bar is the share of that month shot with
+   it: otherwise years of occasional shooting would look like a break. */
+const TL_CELL_MAX = 72;   // ceiling on the width of a month cell, in pixels
+const TL_CELL_MIN = 4;    // below this the strip starts to scroll
 
 const TL_HINT = {
   camera: 'Pick a camera in the "Camera models" panel — this will show ' +
@@ -1063,8 +1067,9 @@ function renderTimeline(ids, data, param){
   });
   box.appendChild(stats);
 
-  // ширина ленты: делим карточку между месяцами, но не шире потолка на ячейку —
-  // иначе три месяца превратились бы в три лопаты во весь экран
+  // strip width: the card is divided between the months, but no wider than the
+  // per-cell ceiling — or three months would turn into three paddles filling the
+  // screen
   const inner = document.createElement("div");
   inner.className = "tinner";
   const n = data.months.length;
@@ -1101,8 +1106,8 @@ function renderTimeline(ids, data, param){
   Object.keys(years).sort().forEach(y => {
     const b = document.createElement("button");
     b.className = "yr" + (isOn("year", y) ? " on" : "");
-    b.style.flex = years[y] + " 0 0";        // доля оси = доля месяцев в ленте
-    // подпись ставим, только если под неё есть место, иначе она обрежется
+    b.style.flex = years[y] + " 0 0";        // the axis share equals the share of months in the strip
+    // a label goes in only if there is room for it, or it gets clipped
     b.textContent = years[y] * cellPx >= 30 ? y : "";
     b.title = y;
     b.onclick = e => toggleFilter("year", y, e);
@@ -1120,7 +1125,7 @@ function renderTimeline(ids, data, param){
 }
 
 function loadTimeline(dim, ids){
-  if (!state.filters[dim]){          // не выбрано — запрос не нужен
+  if (!state.filters[dim]){          // nothing picked — no request needed
     renderTimeline(ids, null, dim);
     return;
   }
@@ -1128,7 +1133,7 @@ function loadTimeline(dim, ids){
     .then(d => renderTimeline(ids, d, dim)).catch(quiet);
 }
 
-/* ---------- вертикальные столбцы ---------- */
+/* ---------- vertical bars ---------- */
 function renderCols(id, items, param, opts){
   remember(param, items);
   const box = $(id); box.innerHTML = "";
@@ -1147,7 +1152,7 @@ function renderCols(id, items, param, opts){
   });
 }
 
-/* ---------- горизонтальные строки ---------- */
+/* ---------- horizontal rows ---------- */
 function renderRows(id, items, param, cap){
   remember(param, items);
   const box = $(id); box.innerHTML = "";
@@ -1176,9 +1181,9 @@ function renderRows(id, items, param, cap){
     const m = document.createElement("button");
     m.className = "more";
     m.textContent = showAll ? "show fewer" : "show all " + items.length;
-    // Развернуть список — дело оформления, отбор от этого не меняется.
-    // Перерисовываем одну панель по тем же данным: load() перезапрашивал бы
-    // всё, включая выборку, и сбрасывал бы её прокрутку и раскрытые строки.
+    // Expanding a list is a matter of presentation, the selection is unchanged
+    // by it. One panel is redrawn from the same data: load() would refetch
+    // everything, the selection included, resetting its scroll and open rows.
     m.onclick = () => {
       state.expanded[id] = !showAll;
       renderRows(id, items, param, cap);
@@ -1187,17 +1192,19 @@ function renderRows(id, items, param, cap){
   }
 }
 
-/* ---------- полоса предпросмотра ----------
-   Миниатюры грузим строго по одной: браузер держит к серверу не более шести
-   соединений, и параллельная пачка картинок блокировала бы клики по графикам. */
+/* ---------- preview strip ----------
+   Thumbnails are loaded strictly one at a time: a browser holds no more than six
+   connections to a server, and a parallel batch of pictures would block clicks on
+   the charts. */
 let thumbGen = 0;
 const thumbQ = [];
 let thumbBusy = false;
 
-/* Все миниатюры — и в полосе, и в раскрытых строках — идут через одну очередь,
-   по одной за раз: браузер держит к серверу не более шести соединений, и
-   параллельная пачка картинок блокировала бы клики по графикам. Смена выборки
-   поднимает номер поколения, и всё недогруженное отменяется. */
+/* Every thumbnail — in the strip and in the expanded rows alike — goes through
+   one queue, one at a time: a browser holds no more than six connections to a
+   server, and a parallel batch of pictures would block clicks on the charts.
+   Changing the selection raises the generation number, and anything still
+   loading is cancelled. */
 function queueThumb(el, id, size){
   thumbQ.push({el, id, size, gen: thumbGen});
   pumpThumbs();
@@ -1208,7 +1215,7 @@ async function pumpThumbs(){
   thumbBusy = true;
   while (thumbQ.length){
     const job = thumbQ.shift();
-    if (job.gen !== thumbGen) continue;          // выборка сменилась, кадр не нужен
+    if (job.gen !== thumbGen) continue;          // the selection changed, this frame is not wanted
     await new Promise(done => {
       const img = new Image();
       img.onload = () => {
@@ -1227,7 +1234,7 @@ async function pumpThumbs(){
 
 function renderStrip(items){
   const box = $("strip");
-  thumbGen++;                      // всё, что грузилось раньше, больше не нужно
+  thumbGen++;                      // whatever was loading before is no longer wanted
   box.innerHTML = "";
   items.forEach(it => {
     const b = document.createElement("button");
@@ -1242,7 +1249,7 @@ function renderStrip(items){
   });
 }
 
-/* ---------- текстовый список ---------- */
+/* ---------- text list ---------- */
 let listItems = [];
 
 function act(action, id){
@@ -1252,11 +1259,12 @@ function act(action, id){
     .catch(() => toast("Could not open the file"));
 }
 
-/* Сводка под строкой. Раскрытые строки не закрывают друг друга: так можно
-   разложить рядом несколько кадров и сравнить их, не теряя места в списке. */
+/* The summary under a row. Expanded rows do not close one another: that way
+   several frames can be laid out side by side and compared without losing your
+   place in the list. */
 function expandRow(row, it){
   const next = row.nextElementSibling;
-  if (next && next.classList.contains("lexp")){   // повторный клик — свернуть
+  if (next && next.classList.contains("lexp")){   // clicking again collapses it
     next.remove();
     row.classList.remove("open");
     return;
@@ -1338,8 +1346,9 @@ function expandRow(row, it){
 
 let lastGroup = null;
 
-/* Папки текущей выборки. Когда отобран месяц или камера, полезнее сначала
-   увидеть, где эти снимки лежат, а уже потом перебирать их по одному. */
+/* The folders of the current selection. With a month or a camera filtered, it is
+   more useful to see where those photos live before paging through them one by
+   one. */
 function renderFolders(data){
   const box = $("list");
   box.innerHTML = "";
@@ -1354,7 +1363,7 @@ function renderFolders(data){
     b.className = "frow" + (isOn("folder", it.folder) ? " on" : "");
     b.innerHTML = '<span class="fpath"></span><span class="fspan"></span>' +
                   '<span class="fnum"></span>';
-    // direction:rtl обрезает путь слева — хвост важнее начала
+    // direction:rtl clips the path from the left — the tail matters more
     b.querySelector(".fpath").textContent = it.folder + "\u200e";
     b.querySelector(".fpath").title = it.folder;
     b.querySelector(".fspan").textContent =
@@ -1407,7 +1416,7 @@ function renderList(data, append){
   }
 }
 
-/* ---------- карточка снимка ---------- */
+/* ---------- photo card ---------- */
 function openDetail(it){
   const d = $("detail");
   const rows = [
@@ -1487,7 +1496,7 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3500);
 }
 
-/* ---------- загрузка ---------- */
+/* ---------- loading ---------- */
 function loadFolders(){
   ask("folders", "/api/folders?" + params())
     .then(renderFolders).catch(quiet);
@@ -1497,8 +1506,8 @@ function loadPhotos(offset){
   ask("photos", "/api/photos?" + params({offset: offset || 0, limit: state.limit}))
     .then(d => renderList(d, offset > 0))
     .catch(e => {
-      // молчаливый сбой здесь выглядит как пустая выборка, и искать причину
-      // приходится вслепую — поэтому говорим прямо
+      // a silent failure here looks like an empty selection, and the cause has
+      // to be hunted blind — so it is said outright
       if (e.name === "AbortError") return;
       console.error(e);
       $("list").innerHTML = '<div class="empty">Could not load the list. ' +
@@ -1572,9 +1581,9 @@ function load(){
       $(id + "Card").hidden = !items.length;
       if (items.length) renderRows(id, items, id, cap);
     });
-    /* Показываем всегда, как только разбор изображений сделан. Прятать до
-       выбора основного цвета оказалось лишним: центральный цвет сам по себе
-       отбирает сюжет — все кадры с чёрным в середине, например. */
+    /* Always shown once the image analysis is done. Hiding it until a dominant
+       colour was picked turned out to be needless: the centre colour filters by
+       subject on its own — every frame with something black in the middle, say. */
     const cc = d.charts.colorCenter || [];
     $("ccWrap").hidden = !colors.length;
     if (colors.length) renderRows("colorCenter", cc, "color_center", 12);
@@ -1601,7 +1610,7 @@ function load(){
   loadTimeline("lens", {box: "tlLens", note: "tlLensNote", foot: "tlLensFoot"});
 }
 
-/* ---------- блоки ---------- */
+/* ---------- groups ---------- */
 document.querySelectorAll(".group-head").forEach(head => {
   head.onclick = () => {
     const g = head.closest(".group");
@@ -1611,8 +1620,8 @@ document.querySelectorAll(".group-head").forEach(head => {
   };
 });
 
-/* Счётчик показывает карточки с данными: часть из них скрыта, пока не сделан
-   разбор изображений или пока в базе один формат файлов. */
+/* The counter shows the cards that have data: some of them stay hidden until the
+   image analysis is done, or while the database holds a single file format. */
 function countGroups(){
   document.querySelectorAll(".group").forEach(g => {
     const n = g.querySelectorAll(".group-body > .card:not([hidden])").length;
@@ -1620,7 +1629,7 @@ function countGroups(){
   });
 }
 
-/* ---------- органы управления ---------- */
+/* ---------- controls ---------- */
 let qTimer;
 $("q").oninput = e => {
   clearTimeout(qTimer);

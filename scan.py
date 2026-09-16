@@ -8,15 +8,15 @@
 # Commercial licensing is available — see COMMERCIAL.md.
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-scan.py — обходит папки с фотографиями, читает EXIF и складывает всё в SQLite.
+scan.py — walks folders of photographs, reads their EXIF and puts it all in SQLite.
 
-Запуск:
+Running it:
     python scan.py "D:\\Photos" "E:\\Archive 2001-2010"
-    python scan.py D:\\Фото --db photos.db --full
+    python scan.py D:\\Pictures --db photos.db --full
 
-Читает EXIF через ExifTool (если он найден — поддерживает RAW и все нестандартные
-теги), иначе откатывается на библиотеку exifread. Повторный запуск обрабатывает
-только новые и изменившиеся файлы.
+Reads EXIF through ExifTool where it is found — that covers RAW and every
+maker-specific tag — and falls back to the exifread library otherwise. A repeat
+run only processes files that are new or have changed.
 """
 
 import argparse
@@ -40,7 +40,7 @@ import dupkey
 
 try:
     from version import VERSION
-except ImportError:          # файл скопировали без version.py
+except ImportError:          # the file was copied without version.py
     VERSION = "unknown"
 
 try:
@@ -49,14 +49,15 @@ except Exception:
     pass
 
 # --------------------------------------------------------------------------
-# Какие файлы считаем фотографиями
+# Which files count as photographs
 # --------------------------------------------------------------------------
 
-# Ровно два расширения. .jpe и .jfif — тоже JPEG, но так сохраняют картинки
-# из браузера, а не камеры; кому нужно, добавит их ключом --ext.
+# Exactly two extensions. .jpe and .jfif are JPEG too, but that is how a browser
+# saves pictures rather than how a camera names them; anyone who wants them can
+# add them with --ext.
 JPEG_EXT = {".jpg", ".jpeg"}
 RASTER_EXT = JPEG_EXT | {
-    ".jpe", ".jfif",        # тоже JPEG, но по умолчанию не берём — см. выше
+    ".jpe", ".jfif",        # JPEG as well, but left out by default — see above
     ".png", ".tif", ".tiff", ".heic", ".heif", ".webp", ".avif", ".bmp", ".gif",
 }
 RAW_EXT = {
@@ -64,12 +65,12 @@ RAW_EXT = {
     ".rw2", ".raf", ".dng", ".pef", ".ptx", ".raw", ".rwl", ".3fr", ".fff",
     ".iiq", ".erf", ".mos", ".mrw", ".x3f", ".srw", ".kdc", ".dcr", ".mef",
 }
-PHOTO_EXT = RASTER_EXT | RAW_EXT          # всё, что программа вообще умеет читать
-DEFAULT_EXT = set(JPEG_EXT)               # что берём, если не сказано иное
+PHOTO_EXT = RASTER_EXT | RAW_EXT          # everything the program can read at all
+DEFAULT_EXT = set(JPEG_EXT)               # what is taken unless told otherwise
 
-# Файлы мельче этого — эскизы, аватарки, сохранённые из переписки картинки.
-# В статистике они только мешают: тянут вниз распределение размеров и дают
-# ложные дубликаты, потому что одинаковых эскизов много.
+# Files smaller than this are thumbnails, avatars and pictures saved out of chat
+# apps. In the statistics they only get in the way: they drag down the size
+# distribution and invent duplicates, since identical thumbnails are everywhere.
 MIN_SIZE = 50 * 1024
 
 SKIP_DIRS = {
@@ -78,7 +79,7 @@ SKIP_DIRS = {
 }
 
 # --------------------------------------------------------------------------
-# Нормализация брендов и моделей
+# Normalising brands and models
 # --------------------------------------------------------------------------
 
 BRAND_MAP = {
@@ -135,7 +136,7 @@ def norm_brand(make):
 
 
 def norm_model(brand, model):
-    """Полное имя камеры без дублирования бренда: 'Canon' + 'Canon EOS 20D'."""
+    """The full camera name without repeating the brand: 'Canon' + 'Canon EOS 20D'."""
     if not model:
         return None
     m = " ".join(str(model).split()).strip(" .,")
@@ -143,7 +144,7 @@ def norm_model(brand, model):
         return None
     if brand:
         if m.lower().startswith(brand.lower()):
-            m = brand + m[len(brand):]          # единое написание бренда
+            m = brand + m[len(brand):]          # one spelling of the brand
         elif m.split()[0].lower() not in brand.lower():
             m = f"{brand} {m}"
     return m
@@ -156,14 +157,14 @@ def norm_lens(*candidates):
         s = " ".join(str(c).split()).strip(" .,")
         if not s or s.lower() in ("unknown", "n/a", "----", "0", "----."):
             continue
-        if re.fullmatch(r"[\d.\s]+", s):          # мусор вида "0 0 0 0"
+        if re.fullmatch(r"[\d.\s]+", s):          # junk of the "0 0 0 0" kind
             continue
         return s
     return None
 
 
 # --------------------------------------------------------------------------
-# База данных
+# The database
 # --------------------------------------------------------------------------
 
 SCHEMA = """
@@ -182,7 +183,7 @@ CREATE TABLE IF NOT EXISTS photos (
     ym          TEXT,      -- 'YYYY-MM'
     day         INTEGER,
     hour        INTEGER,
-    weekday     INTEGER,   -- 0 = понедельник
+    weekday     INTEGER,   -- 0 = Monday
     brand       TEXT,
     camera      TEXT,
     lens        TEXT,
@@ -190,24 +191,24 @@ CREATE TABLE IF NOT EXISTS photos (
     focal35     REAL,
     iso         INTEGER,
     fnumber     REAL,
-    shutter     TEXT,      -- для показа: '1/125'
-    exposure    REAL,      -- то же в секундах, для распределения
+    shutter     TEXT,      -- for display: '1/125'
+    exposure    REAL,      -- the same in seconds, for the distribution
     width       INTEGER,
     height      INTEGER,
-    lat         REAL,      -- координаты из EXIF, знаковые градусы
+    lat         REAL,      -- coordinates from EXIF, signed degrees
     lon         REAL,
-    sig         TEXT,      -- подпись содержимого; NULL = проход не делали
-    color       TEXT,      -- группа основного цвета; NULL = ещё не разбирали
-    color_hex   TEXT,      -- средний оттенок этой группы, для образца
-    color_share REAL,      -- какую долю кадра она занимает
-    color_center       TEXT,   -- то же по центральной половине площади кадра
+    sig         TEXT,      -- content signature; NULL = the pass was never run
+    color       TEXT,      -- dominant colour group; NULL = not analysed yet
+    color_hex   TEXT,      -- the average shade of that group, for the swatch
+    color_share REAL,      -- what share of the frame it holds
+    color_center       TEXT,   -- the same over the middle half of the frame area
     color_center_hex   TEXT,
     color_center_share REAL,
-    brightness  REAL,      -- средняя яркость, 0…1
-    contrast    REAL,      -- разброс яркости
-    chroma      REAL,      -- доля цветных точек; около нуля — чёрно-белый кадр
-    clip_hi     REAL,      -- доля выбитых в белое точек
-    clip_lo     REAL       -- доля провалившихся в чёрное
+    brightness  REAL,      -- average brightness, 0…1
+    contrast    REAL,      -- the spread of brightness
+    chroma      REAL,      -- share of coloured pixels; near zero means a black and white frame
+    clip_hi     REAL,      -- share of pixels blown out to white
+    clip_lo     REAL       -- share of pixels crushed to black
 );
 CREATE INDEX IF NOT EXISTS ix_year   ON photos(year);
 CREATE INDEX IF NOT EXISTS ix_ym     ON photos(ym);
@@ -232,18 +233,19 @@ COLUMNS = [
 ]
 
 
-# Сколько ждать освобождения базы. Сканер и сервер работают одновременно, и без
-# ожидания почти половина запросов падает с "database is locked": на замере из
-# трёх секунд одновременной работы это 891 ошибка чтения и 513 записи.
+# How long to wait for the database to free up. The scanner and the server run at
+# the same time, and without waiting nearly half the queries fail with "database
+# is locked": over a measured three seconds of concurrent work that was 891 read
+# errors and 513 write errors.
 BUSY_MS = 15000
 
 
 def tune(con):
-    """Режимы, без которых параллельная работа сканера и сервера невозможна."""
+    """The modes without which the scanner and the server cannot run together."""
     con.execute(f"PRAGMA busy_timeout = {BUSY_MS}")
-    # WAL пропускает читателя и писателя одновременно и даёт в полтора раза
-    # больше чтений. На сетевых дисках он недоступен — тогда молча остаётся
-    # обычный журнал, и спасает только ожидание блокировки выше.
+    # WAL lets a reader and a writer through at once and gives half again as many
+    # reads. On network drives it is unavailable — the ordinary journal then stays
+    # in place silently, and only the lock wait above saves the situation.
     try:
         con.execute("PRAGMA journal_mode = WAL")
     except sqlite3.Error:
@@ -252,10 +254,11 @@ def tune(con):
 
 
 def open_db(path):
-    """Таблицы, потом миграция, и только потом индексы: индекс по новой колонке
-    нельзя создать раньше, чем миграция её добавит в уже существующую базу."""
+    """Tables, then the migration, and only then the indexes: an index on a new
+    column cannot be created before the migration adds it to a database that
+    already exists."""
     con = tune(sqlite3.connect(path, timeout=BUSY_MS / 1000))
-    # комментарии убираем до разбора: в них встречается точка с запятой
+    # comments are stripped before parsing: they contain semicolons
     clean = "\n".join(re.sub(r"--.*$", "", ln) for ln in SCHEMA.splitlines())
     stmts = [x.strip() for x in clean.split(";") if x.strip()]
     for st in stmts:
@@ -270,7 +273,7 @@ def open_db(path):
 
 
 def migrate(con):
-    """Достраивает базы, собранные прежними версиями программы."""
+    """Builds up databases made by earlier versions of the program."""
     cols = {r[1] for r in con.execute("PRAGMA table_info(photos)")}
     for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
                        ("color", "TEXT"), ("color_hex", "TEXT"),
@@ -295,7 +298,7 @@ def migrate(con):
 
 
 # --------------------------------------------------------------------------
-# Разбор значений
+# Parsing values
 # --------------------------------------------------------------------------
 
 _DT_RE = re.compile(r"(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
@@ -347,7 +350,7 @@ def to_int(v):
 
 
 def fmt_shutter(sec):
-    """0.008 -> '1/125'. Для показа; для статистики хранится само число."""
+    """0.008 -> '1/125'. For display; the number itself is stored for statistics."""
     if not sec:
         return None
     if sec >= 1:
@@ -356,7 +359,7 @@ def fmt_shutter(sec):
 
 
 def shutter_seconds(txt):
-    """Обратный разбор: '1/125' -> 0.008. Нужен для миграции старых баз."""
+    """The reverse: '1/125' -> 0.008. Needed when migrating old databases."""
     if not txt:
         return None
     t = str(txt).strip().rstrip("sс")
@@ -370,8 +373,9 @@ def shutter_seconds(txt):
 
 
 def gps_value(raw, ref):
-    """Координата из EXIF: либо готовое число, либо градусы-минуты-секунды.
-    Полушарие задаётся отдельным тегом, S и W означают отрицательное значение."""
+    """A coordinate from EXIF: either a ready number or degrees-minutes-seconds.
+    The hemisphere comes in a tag of its own, where S and W mean a negative
+    value."""
     if raw is None:
         return None
     val = None
@@ -402,13 +406,13 @@ def make_geo(tags):
         return None, None
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None, None
-    if abs(lat) < 1e-6 and abs(lon) < 1e-6:      # нулевой остров — почти всегда мусор
+    if abs(lat) < 1e-6 and abs(lon) < 1e-6:      # null island — almost always junk
         return None, None
     return round(lat, 6), round(lon, 6)
 
 
 def make_row(path, st, tags):
-    """tags — словарь EXIF-полей (уже унифицированный)."""
+    """tags is a dictionary of EXIF fields, already made uniform."""
     dt = None
     src = "exif"
     for k in ("DateTimeOriginal", "CreateDate", "DateTimeDigitized", "ModifyDate"):
@@ -459,7 +463,7 @@ def make_row(path, st, tags):
 
 
 # --------------------------------------------------------------------------
-# Чтение EXIF — ExifTool
+# Reading EXIF — ExifTool
 # --------------------------------------------------------------------------
 
 EXIFTOOL_TAGS = [
@@ -472,7 +476,7 @@ EXIFTOOL_TAGS = [
 
 
 def find_exiftool():
-    """Ищем в PATH, затем рядом со скриптом. Возвращаем (путь, версия)."""
+    """Look in PATH, then next to the script. Returns (path, version)."""
     candidates = []
     for name in ("exiftool", "exiftool.exe"):
         p = shutil.which(name)
@@ -488,7 +492,7 @@ def find_exiftool():
         ver = exiftool_version(cand)
         if ver:
             return cand, ver
-        # exe есть, но не запускается — почти всегда потерян exiftool_files
+        # the exe is there but will not run — nearly always a lost exiftool_files
         near = os.path.join(os.path.dirname(cand), "exiftool_files")
         print(f"  ! {cand} does not run.")
         if not os.path.isdir(near):
@@ -532,7 +536,7 @@ def read_chunk_exiftool(exe, paths):
 
 
 # --------------------------------------------------------------------------
-# Чтение EXIF — резервный вариант без ExifTool
+# Reading EXIF — the fallback without ExifTool
 # --------------------------------------------------------------------------
 
 BASE_IFD = {0x010F: "Make", 0x0110: "Model", 0x0132: "ModifyDate"}
@@ -604,20 +608,20 @@ def read_one_fallback(path):
 
 
 # --------------------------------------------------------------------------
-# Подпись содержимого
+# The content signature
 # --------------------------------------------------------------------------
 
-SIG_HEAD = 64 * 1024        # сколько байт берём с начала и с конца файла
+SIG_HEAD = 64 * 1024        # how many bytes are taken from the start and the end of a file
 
 
 def file_sig(job):
-    """Подпись файла: размер плюс начало и конец содержимого.
+    """The signature of a file: its size plus the start and end of its content.
 
-    Читать файл целиком незачем. У снимка в 4,5 МБ совпадение размера, первых
-    и последних 64 килобайт означает совпадение содержимого — разойтись они
-    могут разве что в специально собранном файле. Зато вместо ста семидесяти
-    гигабайт с диска читается пять, и проход занимает минуты, а не часы.
-    Полное чтение включается ключом --hash-full."""
+    There is no point reading the whole file. For a 4.5 MB photo, matching size
+    and matching first and last 64 kilobytes mean matching content — they can
+    differ only in a deliberately built file. In exchange, five gigabytes are read
+    off the disk instead of a hundred and seventy, and the pass takes minutes
+    rather than hours. --hash-full turns on reading everything."""
     pid, path, full = job
     try:
         size = os.path.getsize(path)
@@ -637,7 +641,7 @@ def file_sig(job):
 
 
 def sign_files(con, workers, full=False):
-    """Считает подписи там, где их ещё нет. Прерывается и продолжается."""
+    """Computes signatures where there are none yet. Stops and resumes."""
     mode = "full" if full else "partial"
     row = con.execute("SELECT v FROM meta WHERE k = 'sig_mode'").fetchone()
     if row and row[0] != mode:
@@ -686,102 +690,103 @@ def sign_files(con, workers, full=False):
 
 
 # --------------------------------------------------------------------------
-# Основной цвет кадра
+# The dominant colour of a frame
 # --------------------------------------------------------------------------
 
-# Группы оттенков по кругу, в градусах: (верхняя граница, имя).
-# Фиолетовый добавлен к перечисленным девяти: между синим и красным иначе
-# остаётся пробел, и сирень с закатным небом распределялись бы наугад.
-# Чтобы вернуться к девяти группам, замените "фиолетовый" на "синий".
+# Hue groups round the circle, in degrees: (upper bound, name).
+# Violet was added to the nine listed: between blue and red there would otherwise
+# be a gap, and lilac and a sunset sky would be assigned at random.
+# To go back to nine groups, replace "violet" with "blue".
 HUE_GROUPS = [(15, "red"), (45, "orange"), (70, "yellow"),
               (165, "green"), (215, "cyan"), (260, "blue"),
               (335, "violet")]
 CHROMATIC = {"red", "orange", "brown", "yellow", "green",
              "cyan", "blue", "violet"}
 
-# Коричневый, оранжевый и жёлтый — одна тёплая семья: между собой их делит не
-# оттенок, а яркость и чистота. При выборе главного цвета они считаются вместе,
-# иначе осенний кадр проигрывает цельному зелёному, хотя тёплого в нём больше:
-# листья разойдутся на 14% оранжевого, 12% жёлтого и 8% коричневого против 30%
-# мха. Победившая семья называется по самой многочисленной группе.
+# Brown, orange and yellow are one warm family: what splits them from each other
+# is not hue but brightness and purity. When the dominant colour is chosen they
+# count together, or an autumn frame loses to a solid green although there is more
+# warm in it: the leaves scatter into 14% orange, 12% yellow and 8% brown against
+# 30% moss. The winning family is named after its largest group.
 WARM = {"brown", "orange", "yellow"}
 
-# То же самое случается на любой границе оттенков, если сюжет через неё
-# переходит: глубокое небо с градиентом 206–219° делится на голубой и синий и
-# проигрывает траве, хотя неба в кадре вдвое больше. Поэтому две соседние
-# группы считаются одним цветом, когда их точки образуют непрерывную полосу —
-# то есть по обе стороны от границы оттенков что-то есть. Далёкие друг от друга
-# зелень и небо так не слипнутся: у границы между ними пусто.
-# Границы вокруг зелёного намеренно пропущены. Именно по ним чаще всего
-# проходит граница между разными сюжетами: золотая листва рядом с мхом, кроны
-# рядом с небом или водой. Слить их — значит стереть то, ради чего метрика и
-# нужна: осенний кадр снова стал бы зелёным.
+# The same happens at any hue boundary the subject runs across: a deep sky graded
+# from 206 to 219° splits into cyan and blue and loses to grass, although there is
+# twice as much sky in the frame. So two neighbouring groups count as one colour
+# when their pixels form a continuous band — that is, when there is something on
+# both sides of the hue boundary. Greenery and sky, far apart, do not merge this
+# way: the boundary between them is empty.
+# The boundaries around green are deliberately left out. They are exactly where
+# one subject usually ends and another begins: golden leaves beside moss, tree
+# crowns against sky or water. Merging them would erase what the metric is for:
+# an autumn frame would come out green again.
 NEIGHBOURS = [({"warm"}, {"red"}, 15), ({"cyan"}, {"blue"}, 215),
               ({"blue"}, {"violet"}, 260), ({"violet"}, {"red"}, 335)]
-TOUCH_BAND = 18      # насколько близко к границе точка считается пограничной
-TOUCH_MIN = 0.03     # какую долю пары должны составлять точки с каждой стороны
+TOUCH_BAND = 18      # how close to the boundary a pixel counts as being on it
+TOUCH_MIN = 0.03     # what share of the pair the pixels on each side must make up
 
-GRAY_SAT = 0.10     # ниже этой насыщенности точка считается ахроматической
-BLACK_VAL = 0.16    # ниже этой яркости — чёрная, каким бы ни был оттенок
-DARK_VAL = 0.28     # до этой яркости цвет засчитывается только при высокой чистоте
-DARK_SAT = 0.80     # какой должна быть чистота цвета, чтобы тёмная точка не стала чёрной
+GRAY_SAT = 0.10     # below this saturation a pixel counts as achromatic
+BLACK_VAL = 0.16    # below this brightness it is black, whatever the hue
+DARK_VAL = 0.28     # up to this brightness a colour only counts when its purity is high
+DARK_SAT = 0.80     # the purity a dark pixel needs if it is not to become black
 
-# Коричневый — это тёплый оттенок, который либо тёмный, либо приглушённый.
-# Своего места на круге у него нет: шоколад и яркий апельсин отличаются не
-# оттенком, а яркостью, поэтому он выделяется внутри красно-жёлтой дуги.
-# Коричневый — только тёмный тёплый тон: дерево, кора, шоколад, земля.
-# Светлые приглушённые тёплые тона коричневыми не считаются — пшеничное поле
-# и песок глаз читает как золотые, а не как коричневые.
-BROWN_HUE = (8, 50)        # дуга оттенков, где коричневый возможен, в градусах
-# Дуга захватывает и красную сторону круга: прелая листва и лесная подстилка
-# лежат на 345–8°, и без этого они попадали в красный — а оттуда вытягивали за
-# собой название всей тёплой семьи. Чистый тёмно-красный там тоже встречается
-# (вино, кирпич), поэтому на этом участке действует потолок чистоты.
+# Brown is a warm hue that is either dark or muted. It has no place of its own on
+# the circle: chocolate and a bright orange differ in brightness, not in hue, so it
+# is picked out from inside the red-to-yellow arc.
+# Brown is only the dark warm tone: wood, bark, chocolate, earth. Light muted warm
+# tones do not count as brown — a wheat field and sand read to the eye as golden
+# rather than brown.
+BROWN_HUE = (8, 50)        # the arc of hues where brown is possible, in degrees
+# The arc reaches onto the red side of the circle as well: rotting leaves and leaf
+# litter lie at 345 to 8°, and without this they landed in red — and dragged the
+# name of the whole warm family along with them. Pure dark red occurs there too
+# (wine, brick), so a purity ceiling applies over that stretch.
 BROWN_RED_LO = 345
 BROWN_RED_SAT = 0.45
-BROWN_VAL = 0.62           # тёплый оттенок темнее этого — коричневый
-BROWN_SAT_MIN = 0.18       # но не почти-серый: тёплый серый остаётся серым
+BROWN_VAL = 0.62           # a warm hue darker than this is brown
+BROWN_SAT_MIN = 0.18       # but not nearly grey: a warm grey stays grey
 
-# Золотой — светлый приглушённый тёплый тон. Оттенок у него оранжевый, 30–50°,
-# но сочным апельсином он не выглядит: солома, песок и сепия читаются как
-# жёлтые. Отличает их чистота: у апельсина она под единицу, у поля вдвое ниже.
+# Gold is the light muted warm tone. Its hue is orange, 30 to 50°, but it does not
+# look like a ripe orange: straw, sand and sepia read as yellow. Purity tells them
+# apart: for an orange it is close to one, for a field half that.
 GOLD_HUE = (30, 50)
-GOLD_SAT = 0.55            # выше этой чистоты тон остаётся оранжевым
-GOLD_VAL = 0.62            # ниже этой яркости он уже коричневый
+GOLD_SAT = 0.55            # above this purity the tone stays orange
+GOLD_VAL = 0.62            # below this brightness it is brown already
 
-OLIVE_HUE = (55, 70)       # где жёлтый вообще может оказаться оливковым
-OLIVE_MAX = 0.30           # ниже этого произведения жёлтый читается зелёным
+OLIVE_HUE = (55, 70)       # where yellow can turn out to be olive at all
+OLIVE_MAX = 0.30           # below this product yellow reads as green
 WHITE_VAL = 0.82
-CHROMA_MIN = 0.25   # доля цветных точек, начиная с которой кадр считаем цветным
-CENTER_AREA = 0.50  # какую долю площади занимает центральная область кадра
-CLIP_HI = 0.98      # ярче этого — света выбиты в белое
-CLIP_LO = 0.016     # темнее этого — тени провалились в чёрное
+CHROMA_MIN = 0.25   # share of coloured pixels from which a frame counts as colour
+CENTER_AREA = 0.50  # what share of the area the centre region of the frame holds
+CLIP_HI = 0.98      # brighter than this and the highlights are blown out to white
+CLIP_LO = 0.016     # darker than this and the shadows are crushed to black
 UNKNOWN = "unknown"
 
-# Версия правил разбора. При её изменении программа сама пересчитывает архив:
-# иначе снимки, разобранные прежними правилами, молча остались бы в старых
-# группах и статистика перестала бы быть однородной.
+# The version of the analysis rules. When it changes the program re-analyses the
+# archive itself: otherwise photos analysed under the earlier rules would silently
+# stay in their old groups and the statistics would stop being consistent.
 ALGO_VERSION = 11
 
-# Версия набора полей EXIF. При её изменении сканер перечитывает метаданные
-# всех файлов: иначе новое поле осталось бы пустым у всех, кто уже в базе.
-# Разбор изображений при этом не теряется — он лежит в отдельных колонках.
+# The version of the EXIF field set. When it changes the scanner re-reads the
+# metadata of every file: otherwise a new field would stay empty for everything
+# already in the database. The image analysis is not lost in the process — it sits
+# in columns of its own.
 EXIF_VERSION = 2
 
 
 def pixel_group(r, g, b):
-    """Одна точка — одна группа.
+    """One pixel, one group.
 
-    Тёплые тона делятся по яркости и чистоте: тёмные — коричневые, светлые
-    приглушённые — золотые, то есть жёлтые, а сочные остаются оранжевыми.
-    Нижний порог чистоты не даёт увести в коричневый тёплый серый, который от
-    него в полушаге.
+    Warm tones are split by brightness and purity: the dark ones are brown, the
+    light muted ones are gold, that is to say yellow, and the vivid ones stay
+    orange. The lower purity threshold keeps a warm grey, which is half a step
+    away, from being drawn into brown.
 
-    К тёмным точкам правило строже. Тёмно-коричневый (70, 35, 20) формально
-    имеет красноватый оттенок, но глазом читается как тень, а не как цвет —
-    чистоты в нём чуть больше половины. А вот (57, 4, 3), где на красный
-    приходится почти вся яркость, остаётся красным, хоть и тёмным. Разделяет
-    эти случаи именно чистота цвета, поэтому в тёмной зоне поднят её порог."""
+    The rule is stricter for dark pixels. A dark brown (70, 35, 20) formally has a
+    reddish hue, but the eye reads it as shadow rather than colour — its purity is
+    a little over half. Whereas (57, 4, 3), where red accounts for almost all the
+    brightness, stays red, dark though it is. What separates these cases is purity
+    exactly, which is why its threshold is raised in the dark zone."""
     h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
     if v < BLACK_VAL:
         return "black"
@@ -801,11 +806,11 @@ def pixel_group(r, g, b):
     for edge, name in HUE_GROUPS:
         if deg < edge:
             return name
-    return "red"                      # хвост круга, 335…360
+    return "red"                      # the tail of the circle, 335…360
 
 
 def band_touches(hues, edge, total):
-    """Полоса переходит через границу оттенков, если точки есть с обеих сторон."""
+    """A band crosses a hue boundary when there are pixels on both sides of it."""
     lo = sum(n for d, n in hues.items() if 0 < (edge - d) % 360 <= TOUCH_BAND)
     hi = sum(n for d, n in hues.items() if 0 <= (d - edge) % 360 < TOUCH_BAND)
     need = max(1, int(total * TOUCH_MIN))
@@ -813,19 +818,19 @@ def band_touches(hues, edge, total):
 
 
 def winner(tally, sums, hues, total):
-    """Побеждает самая многочисленная группа; соседние сливаются, если сюжет
-    переходит через границу оттенков.
+    """The largest group wins; neighbours merge when the subject runs across a hue
+    boundary.
 
-    Ахроматические группы участвуют отдельно от цветных: если цветных точек
-    набралось хотя бы четверть, серое небо или чёрный фон в конкурсе не
-    участвуют — иначе почти весь архив оказался бы серым."""
+    Achromatic groups compete separately from the coloured ones: if at least a
+    quarter of the pixels have colour, a grey sky or a black background stays out
+    of the contest — otherwise almost the whole archive would come out grey."""
     if not total:
         return None, None, None, 0.0
     chroma = sum(n for k, n in tally.items() if k in CHROMATIC) / total
     allowed = CHROMATIC if chroma >= CHROMA_MIN else set(tally) - CHROMATIC
     cand = {k: n for k, n in tally.items() if k in allowed} or dict(tally)
 
-    # тёплые считаем одной группой: их делит яркость, а не оттенок
+    # warm tones count as one group: what splits them is brightness, not hue
     groups = {}
     warm = {k: n for k, n in cand.items() if k in WARM}
     if warm:
@@ -844,7 +849,7 @@ def winner(tally, sums, hues, total):
         if size(pair) > size(best) and band_touches(hues, edge, size(pair)):
             best = pair
 
-    win = max(best, key=cand.get)              # называем по главной группе
+    win = max(best, key=cand.get)              # named after the leading group
     n = size(best)
     acc = [0, 0, 0]
     for k in best:
@@ -855,29 +860,32 @@ def winner(tally, sums, hues, total):
 
 
 def image_stats(im):
-    """Один проход по точкам уменьшенной копии — цвет и характеристики света.
+    """One pass over the pixels of the scaled copy — the colour and the light.
 
-    Цвет определяется голосованием по точкам. Усреднять RGB по кадру нельзя:
-    у пёстрого снимка среднее всегда выходит бурым — цвета, которого в кадре
-    нет вовсе.
+    Colour is decided by a vote among the pixels. Averaging RGB over the frame is
+    not an option: for a varied photo the average always comes out muddy — a
+    colour that is nowhere in the frame at all.
 
-    Отдельно считается центральная область — половина площади кадра, вырезанная
-    по середине. Основной цвет описывает в первую очередь фон, центральный —
-    то, что в кадре снято. Порознь они мало что дают, а вместе позволяют искать
-    сюжет: чёрный кот на белой простыне это белый основной и чёрный центральный.
+    The centre region is counted separately — half the frame area, cut from the
+    middle. The dominant colour describes the background first of all, the centre
+    one describes what was photographed. Apart they say little; together they let
+    you search by subject: a black cat on a white sheet is white dominant and
+    black centre.
 
-    Заодно считаем яркость, контраст, долю цветных точек и потери в светах и
-    тенях: точки уже разобраны, всё это обходится в несколько сложений."""
-    # tobytes() даёт те же точки и не зависит от версии Pillow,
-    # в отличие от getdata(), объявленного устаревшим в 13-й
+    Brightness, contrast, the share of coloured pixels and the losses in the
+    highlights and shadows are counted along the way: the pixels have been walked
+    already, and all of this costs a few additions."""
+    # tobytes() gives the same pixels and does not depend on the Pillow version,
+    # unlike getdata(), which was deprecated in 13
     raw = im.tobytes()
     w, hgt = im.size
     total = len(raw) // 3
     if not total:
         return None
 
-    # сторона центрального квадрата: половина площади — это сторона в √2 раз
-    # меньше, то есть примерно 0,707 от кадра. Краёв область не касается.
+    # the side of the centre square: half the area means a side smaller by a
+    # factor of √2, that is about 0.707 of the frame. The region does not touch
+    # the edges.
     side = max(1, round(min(w, hgt) * CENTER_AREA ** 0.5))
     cx0 = (w - side) // 2
     cy0 = (hgt - side) // 2
@@ -885,7 +893,7 @@ def image_stats(im):
 
     tally, sums = Counter(), defaultdict(lambda: [0, 0, 0])
     ctally, csums = Counter(), defaultdict(lambda: [0, 0, 0])
-    hues, chues = Counter(), Counter()      # для проверки непрерывности полосы
+    hues, chues = Counter(), Counter()      # for checking that the band is continuous
     ctotal = 0
     lum_sum = lum_sq = 0.0
     hi = lo = 0
@@ -915,7 +923,7 @@ def image_stats(im):
             if key in CHROMATIC:
                 chues[deg] += 1
 
-        # яркость по восприятию: глаз чувствительнее всего к зелёному
+        # perceived brightness: the eye is most sensitive to green
         lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
         lum_sum += lum
         lum_sq += lum * lum
@@ -928,7 +936,7 @@ def image_stats(im):
     cwin, chexv, cshare, _ = winner(ctally, csums, chues, ctotal)
 
     mean = lum_sum / total
-    var = max(lum_sq / total - mean * mean, 0.0)      # разброс яркости = контраст
+    var = max(lum_sq / total - mean * mean, 0.0)      # the spread of brightness is the contrast
 
     return {
         "color": win,
@@ -946,12 +954,12 @@ def image_stats(im):
 
 
 def load_small(path, exe=None, grid=48):
-    """Уменьшенная копия кадра для разбора.
+    """A scaled-down copy of the frame, for analysis.
 
-    JPEG сжимается прямо при декодировании, поэтому полный размер в память не
-    поднимается. Уменьшаем строго NEAREST, то есть берём существующие точки, а
-    не усредняем соседние: ночной кадр из чёрного фона и жёлтых огней при
-    сглаживании превратился бы в сплошной бурый."""
+    A JPEG is shrunk during decoding itself, so the full size never comes into
+    memory. The scaling is strictly NEAREST, that is, existing pixels are taken
+    rather than neighbours averaged: with smoothing, a night frame of black
+    background and yellow lights would turn into solid mud."""
     try:
         from PIL import Image
         try:
@@ -967,7 +975,7 @@ def load_small(path, exe=None, grid=48):
             return im.convert("RGB").resize((grid, grid), Image.NEAREST)
     except Exception:
         pass
-    if exe:                                # RAW: берём встроенное превью
+    if exe:                                # RAW: take the embedded preview
         import io
         for tag in ("-ThumbnailImage", "-PreviewImage", "-JpgFromRaw"):
             try:
@@ -987,12 +995,12 @@ STAT_KEYS = ["color", "color_hex", "color_share",
              "color_center", "color_center_hex", "color_center_share",
              "brightness", "contrast",
              "chroma", "clip_hi", "clip_lo"]
-# длина всегда равна STAT_KEYS: добавили метрику — заглушка подстроилась сама
+# the length always matches STAT_KEYS: add a metric and the blank follows by itself
 FAILED = (UNKNOWN,) + (None,) * (len(STAT_KEYS) - 1)
 
 
 def stats_of(job):
-    """Задание для рабочего процесса: (id, путь, путь к exiftool)."""
+    """A job for a worker process: (id, path, path to exiftool)."""
     pid, path, exe = job
     im = load_small(path, exe)
     if im is None:
@@ -1007,9 +1015,9 @@ def stats_of(job):
 
 
 def analyze_colors(con, exe, workers, reset=False):
-    """Разбирает только те снимки, у которых разбора ещё не было: проход можно
-    прервать и продолжить другим запуском. Условие включает brightness, чтобы
-    базы, собранные до появления метрик света, дополнились сами."""
+    """Analyses only the photos that have not been analysed yet: the pass can be
+    interrupted and carried on by another run. The condition includes brightness so
+    that databases built before the light metrics existed fill themselves in."""
     row = con.execute("SELECT v FROM meta WHERE k = 'color_algo'").fetchone()
     stored = int(row[0]) if row else 0
     if reset or stored != ALGO_VERSION:
@@ -1076,12 +1084,12 @@ def analyze_colors(con, exe, workers, reset=False):
 
 
 # --------------------------------------------------------------------------
-# Обход файловой системы
+# Walking the file system
 # --------------------------------------------------------------------------
 
 def walk_photos(roots, exts, passed_by=None):
-    """Отдаёт файлы с расширениями из exts. Остальные знакомые форматы
-    считает в passed_by, чтобы потом подсказать про --raw и --all."""
+    """Yields files whose extension is in exts. Other formats it recognises are
+    counted into passed_by, so that --raw and --all can be suggested later."""
     for root in roots:
         root = os.path.abspath(root)
         if os.path.isfile(root):
@@ -1100,7 +1108,7 @@ def walk_photos(roots, exts, passed_by=None):
 
 
 def active_exts(args):
-    """--ext задаёт список целиком, --raw добавляет RAW сверху, --all берёт всё."""
+    """--ext sets the whole list, --raw adds RAW on top, --all takes everything."""
     if args.all_formats:
         return set(PHOTO_EXT)
     if args.ext:
@@ -1124,7 +1132,7 @@ def describe_exts(exts):
 
 
 def report_passed(passed_by):
-    """Сообщает, что рядом лежали файлы форматов, которые мы не взяли."""
+    """Reports that files of formats we did not take were lying alongside."""
     if not passed_by:
         return
     raw = {e: n for e, n in passed_by.items() if e in RAW_EXT}
@@ -1140,40 +1148,42 @@ def report_passed(passed_by):
 
 
 # --------------------------------------------------------------------------
-# Проверка каталога: что из него уже лежит в архиве
+# Checking a folder: how much of it is already in the archive
 # --------------------------------------------------------------------------
 #
-# Вопрос, на который отвечает проход: если высыпать эту папку в архив, сколько
-# оттуда окажется копиями того, что уже есть? Ответ нужен до того, как файлы
-# попадут в базу, — поэтому база здесь открывается только на чтение, и это не
-# обещание в комментарии, а режим соединения: запись через него невозможна.
+# The question this pass answers: if this folder were tipped into the archive,
+# how much of it would turn out to be copies of what is already there? The answer
+# is needed before the files reach the database — which is why the database is
+# opened read-only here, and that is not a promise in a comment but the mode of
+# the connection: writing through it is impossible.
 #
-# Правило «это копия» берётся из dupkey.py — то же самое, по которому считает
-# дубликаты интерфейс. Иначе проверка обещала бы одно, а панель дубликатов потом
-# показывала другое.
+# The rule for "this is a copy" comes from dupkey.py — the same one the interface
+# counts duplicates by. Otherwise the check would promise one thing and the
+# duplicates panel would then show another.
 
 
 def open_db_ro(path):
-    """Соединение только на чтение: mode=ro запрещает запись на уровне SQLite."""
+    """A read-only connection: mode=ro forbids writing at the SQLite level."""
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
     con.execute("PRAGMA busy_timeout = 10000")
     return con
 
 
 def stop_on_break():
-    """Просит Windows считать CTRL_BREAK обычным Ctrl+C.
+    """Asks Windows to treat CTRL_BREAK as an ordinary Ctrl+C.
 
-    Кнопка Stop в окне запуска шлёт дочернему процессу CTRL_BREAK_EVENT: сигнал
-    Ctrl+C дошёл бы до всей группы процессов и остановил заодно само окно.
-    Python на CTRL_BREAK по умолчанию KeyboardInterrupt не возбуждает, а
-    заканчивает процесс на месте — проход обрывался бы ровно перед тем местом,
-    где печатается итог, и остановленная проверка не сказала бы ничего.
+    The Stop button in the launcher window sends CTRL_BREAK_EVENT to the child
+    process: a Ctrl+C signal would reach the whole process group and stop the
+    window itself along with it. On CTRL_BREAK, Python does not raise
+    KeyboardInterrupt by default but ends the process where it stands — the pass
+    would break off right before the point where the summary is printed, and a
+    stopped check would say nothing at all.
 
-    Проходам, которые пишут в базу, это не нужно: они сохраняются частями по
-    ходу дела, и их обрыв ничего не теряет. Поэтому обработчик ставит только
-    проверка — ей терять нечего, кроме ответа.
+    Passes that write to the database do not need this: they save in parts as they
+    go, and breaking one off loses nothing. So only the check installs the handler
+    — it has nothing to lose but its answer.
     """
-    if not hasattr(signal, "SIGBREAK"):          # не Windows
+    if not hasattr(signal, "SIGBREAK"):          # not Windows
         return
 
     def raise_interrupt(_sig, _frame):
@@ -1181,16 +1191,17 @@ def stop_on_break():
 
     try:
         signal.signal(signal.SIGBREAK, raise_interrupt)
-    except (ValueError, OSError):                # не главный поток
+    except (ValueError, OSError):                # not the main thread
         pass
 
 
 def candidate_keys(con, todo, by_sig, full, exe, workers):
-    """Отдаёт (путь, ключ) для каждого файла из todo.
+    """Yields (path, key) for every file in todo.
 
-    По подписи файла достаточно прочитать сто двадцать восемь килобайт, EXIF не
-    нужен вовсе. По имени нужно время съёмки, то есть тот же разбор EXIF, что и
-    в обычном проходе, — отсюда и разница в скорости между двумя правилами.
+    By signature it is enough to read a hundred and twenty-eight kilobytes and no
+    EXIF is needed at all. By name the capture time is needed, which means the same
+    EXIF work as in an ordinary pass — hence the difference in speed between the
+    two rules.
     """
     if by_sig:
         jobs = [(p, p, full) for p, _ in todo]
@@ -1201,9 +1212,10 @@ def candidate_keys(con, todo, by_sig, full, exe, workers):
             pool.shutdown(wait=False, cancel_futures=True)
         return
 
-    # Ключ по имени собираем не в Python, а тем же выражением и тем же движком,
-    # что и ключи в базе. SQLite приводит к нижнему регистру только латиницу, и
-    # str.lower() здесь разошёлся бы с базой на каждом имени с кириллицей.
+    # The name key is assembled not in Python but by the same expression and the
+    # same engine as the keys in the database. SQLite lowercases only Latin
+    # letters, and str.lower() here would disagree with the database on every name
+    # with Cyrillic in it.
     key_sql = ("SELECT " + dupkey.name_key("c") +
                " FROM (SELECT ? AS filename, ? AS size, ? AS taken,"
                " ? AS date_src) c")
@@ -1227,7 +1239,7 @@ def candidate_keys(con, todo, by_sig, full, exe, workers):
 
 
 def check_dups(db_path, roots, exts, min_size, workers=4):
-    """Сверяет каталог с архивом и печатает итог. В базу не пишет ничего."""
+    """Checks a folder against the archive and prints the summary. Writes nothing."""
     if not os.path.exists(db_path):
         print(f"No database at {db_path}. Scan your folders first.")
         return 1
@@ -1237,8 +1249,8 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
         by_sig = dupkey.sigs_complete(con)
         row = con.execute("SELECT v FROM meta WHERE k = 'sig_mode'").fetchone()
         full = bool(row and row[0] == "full")
-        # Ключи архива целиком в память: сорок тысяч строк — это пара мегабайт,
-        # зато каждый файл потом проверяется без запроса к базе.
+        # The archive's keys go into memory whole: forty thousand rows is a couple
+        # of megabytes, and every file is then checked without a query.
         keys = {k for k, in con.execute(
             f"SELECT {dupkey.dup_key(by_sig=by_sig)} FROM photos") if k}
         paths = {p for p, in con.execute("SELECT path FROM photos")}
@@ -1275,7 +1287,8 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
         con.close()
         return 0
 
-    # По подписям EXIF не нужен вовсе, и искать ExifTool незачем.
+    # Under the signature rule no EXIF is needed, so there is no point looking
+    # for ExifTool.
     exe = None
     if not by_sig:
         exe, ver = find_exiftool()
@@ -1291,7 +1304,7 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
     try:
         for path, key in candidate_keys(con, todo, by_sig, full, exe, workers):
             done += 1
-            if key is None:                 # файл не прочитался
+            if key is None:                 # the file could not be read
                 failed += 1
             elif path in paths:
                 same_path += 1
@@ -1323,9 +1336,10 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
               f"{dup_inside} repeated inside the folder itself")
     print(f"  new:        {new}")
     if same_path:
-        # Не дубликат и не новый: это тот же самый файл, уже сосчитанный
-        # архивом. Приписать его к копиям значило бы сказать, что папку можно
-        # удалить, — а удалять пришлось бы то, на что база и ссылается.
+        # Neither a duplicate nor new: this is the very same file, already counted
+        # by the archive. Putting it among the copies would be to say the folder
+        # can be deleted — and what would be deleted is what the database points
+        # at.
         print(f"  already scanned: {same_path} — these very files are in the "
               f"archive\n                   (same path), not copies of them")
     if failed:
@@ -1375,9 +1389,9 @@ def main():
         args.colors_only = True
     if (args.hash_only or args.hash_full) and not args.roots:
         args.hash_only = True
-    # Проход подписей папок не требует — он идёт по тому, что уже в базе.
-    # Забытый здесь hash_only ронял на разборе ключей и `scan.py --hash-only`
-    # из README, и кнопку «Sign files» в окне запуска.
+    # The signature pass needs no folders — it works off what is already in the
+    # database. Forgetting hash_only here made argument parsing reject both
+    # `scan.py --hash-only` from the README and the Sign files button.
     if not args.roots and not (args.colors_only or args.hash_only):
         ap.error("give at least one folder "
                  "(or use --colors-only / --hash-only)")
@@ -1440,7 +1454,7 @@ def main():
         if st.st_size < args.min_size:
             tiny += 1
             if path in known:
-                tiny_known.append(path)   # попал в базу прежним запуском
+                tiny_known.append(path)   # got into the database on an earlier run
             continue
         prev = known.get(path)
         if prev and abs(prev[0] - st.st_size) < 1 and abs(prev[1] - st.st_mtime) < 2:
@@ -1453,8 +1467,8 @@ def main():
                         [(p,) for p in tiny_known])
         con.commit()
 
-    # выбывшими считаем только те, которых действительно нет на диске,
-    # иначе смена набора форматов вычистила бы из базы ранее собранные RAW
+    # only files genuinely absent from the disk count as gone, or changing the set
+    # of formats would sweep previously collected RAW out of the database
     gone = {p for p in gone if not os.path.exists(p)}
     if gone:
         con.executemany("DELETE FROM photos WHERE path = ?", [(p,) for p in gone])
@@ -1483,9 +1497,9 @@ def main():
                   "  usually stay empty. Install ExifTool — winget install "
                   "-e --id OliverBetz.ExifTool", flush=True)
 
-    # Обновляем только колонки EXIF. Прежнее INSERT OR REPLACE переписывало
-    # строку целиком и обнуляло разбор изображения — перечитать метаданные
-    # значило бы потерять цвет и свет по всему архиву.
+    # Only the EXIF columns are updated. The earlier INSERT OR REPLACE rewrote the
+    # whole row and cleared the image analysis — re-reading the metadata would have
+    # meant losing colour and light across the whole archive.
     upd = ", ".join(f"{c}=excluded.{c}" for c in COLUMNS if c != "path")
     sql = (f"INSERT INTO photos ({','.join(COLUMNS)}) "
            f"VALUES ({','.join(':' + c for c in COLUMNS)}) "

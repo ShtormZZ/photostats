@@ -7,54 +7,57 @@
 # the Free Software Foundation. See LICENSE for the full text.
 # Commercial licensing is available — see COMMERCIAL.md.
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Единственное место, где живёт правило «это копия»; его читают app.py и scan.py.
+"""The single place where the rule "this is a copy" lives; app.py and scan.py read it.
 
-Правило одно на программу намеренно. Панель дубликатов в интерфейсе и проверка
-каталога в окне запуска должны отвечать на один и тот же вопрос одинаково: если
-проверка скажет «этот файл уже есть», а интерфейс потом его копией не посчитает,
-верить нельзя ни тому, ни другому ответу.
+One rule per program, deliberately. The duplicates panel in the interface and the
+folder check in the launcher window have to answer the same question the same way:
+if the check says "you already have this file" and the interface then does not count
+it as a copy, neither answer can be trusted.
 """
 
 import sqlite3
 
-# Чем опознавать копию файла. Имени и размера мало: два разных кадра вполне
-# могут совпасть и по тому, и по другому — у одной камеры одинаковые имена
-# повторяются, а размер JPEG задаётся сюжетом и попадает в те же байты чаще,
-# чем кажется. Поэтому в ключ входит ещё и точное время съёмки: два разных
-# кадра не совпадут до секунды, а копии одного файла совпадают всегда.
+# What identifies a copy of a file. Name and size are not enough: two different
+# frames can easily match on both — one camera repeats file names, and the size
+# of a JPEG is dictated by the subject and lands on the same byte count more
+# often than you would expect. So the key also takes in the exact capture time:
+# two different frames never share the same second, while copies of one file
+# always do.
 #
-# Время берём только настоящее, из EXIF. Там, где его нет, стоит дата файла —
-# у копии она своя, и настоящие копии перестали бы находиться.
+# Only a real time counts, the one from EXIF. Where there is none the file date
+# stands in — a copy has its own, and real copies would stop being found.
 #
-# Если проход `scan.py --hash-only` посчитал подписи содержимого у всех файлов,
-# ключом становится подпись: она отвечает на вопрос точно и находит копии даже
-# под другими именами. Пока подписи есть не у всех, они не используются вовсе —
-# смешивать два правила в одном ключе нельзя, копия с подписью не нашла бы
-# копию без неё.
+# If the `scan.py --hash-only` pass has computed content signatures for every
+# file, the signature becomes the key: it answers the question outright and finds
+# copies even under other names. While some files still lack one, signatures are
+# not used at all — mixing two rules in one key is not allowed, since a signed
+# copy would be unable to find an unsigned one.
 
 
 def name_key(alias=""):
-    """Ключ по имени, размеру и времени съёмки. Тем же текстом создан индекс
-    ix_dupkey — без него подсчёт размера группы перебирал всю таблицу на каждую
-    выводимую строку, и список выборки на архиве в сорок тысяч снимков строился
-    сорок секунд. Менять это выражение можно только вместе с индексом."""
+    """Key by name, size and capture time. The index ix_dupkey is built from this
+    same text — without it, counting the size of a group walked the whole table for
+    every row shown, and the selection list on an archive of forty thousand frames
+    took forty seconds to build. Change this expression only together with the
+    index."""
     p = alias + "." if alias else ""
     return (f"lower({p}filename) || '|' || {p}size || '|' || "
             f"CASE WHEN {p}date_src = 'exif' THEN {p}taken ELSE '' END")
 
 
 def dup_key(alias="", by_sig=False):
-    """Выражение ключа для запроса. by_sig — результат sigs_complete()."""
+    """The key expression for a query. by_sig is the result of sigs_complete()."""
     if by_sig:
         return (alias + "." if alias else "") + "sig"
     return name_key(alias)
 
 
 def sigs_complete(con):
-    """Подпись посчитана у каждого снимка?
+    """Does every photo have a signature?
 
-    База прежней версии колонки sig ещё не знает. Это не ошибка и не повод
-    падать: значит, прохода подписей не было, и ключом остаётся имя.
+    A database from an earlier version does not know the sig column yet. That is
+    not an error and no reason to fall over: it means the signature pass was never
+    run, and the name stays the key.
     """
     try:
         miss, = con.execute(
@@ -65,5 +68,5 @@ def sigs_complete(con):
 
 
 def rule_name(by_sig):
-    """Как правило называется в выводе — тем же текстом, что в интерфейсе."""
+    """What the rule is called in the output — the same words the interface uses."""
     return "content signature" if by_sig else "name, size and capture time"
