@@ -110,6 +110,15 @@ def make_photos(folder):
     Image.new("RGB", (90, 70), (30, 30, 30)).save(
         os.path.join(folder, "thumbnail.jpg"), quality=80)
 
+    # Stars in EXIF, the way a camera writes them when you press its star
+    # button. Two frames carry one, so "rated" and "not rated" are both covered.
+    for name, stars in (("green_field", 4), ("no_gps", 2)):
+        p = os.path.join(folder, name + ".jpg")
+        with Image.open(p) as im:
+            ex = im.getexif()
+            ex[0x4746] = stars
+            im.save(p, exif=ex.tobytes(), quality=92)
+
     # a real duplicate: the same file, same name and size, in a subfolder
     import shutil
     backup = os.path.join(folder, "backup")
@@ -125,6 +134,80 @@ def api(path, **params):
         url += "?" + urllib.parse.urlencode(params)
     with urllib.request.urlopen(url, timeout=20) as r:
         return json.load(r)
+
+
+
+def post(path):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, json.load(e)
+
+
+def rating_checks(db, photos):
+    """Stars out of EXIF, your own marks over the top, and the line between them.
+
+    The two are separate columns on purpose, and the check that matters most is
+    the last one: a pass that re-reads metadata must not be able to wipe a rating
+    you set by hand.
+    """
+    print("\nrating")
+    import sqlite3
+    con = sqlite3.connect(db)
+    stars = dict(con.execute("SELECT filename, rating FROM photos "
+                             "WHERE rating IS NOT NULL"))
+    con.close()
+    check("EXIF stars read", stars.get("green_field.jpg") == 4
+          and stars.get("no_gps.jpg") == 2, str(stars))
+
+    # Two frames at four stars, not one: green_field is stamped before it is
+    # copied into backup/, so the copy carries the rating as a copy should.
+    chart = {i["k"]: i["v"] for i in api("/api/stats")["charts"]["rating"]}
+    check("rating chart counts EXIF stars",
+          chart.get("4") == 2 and chart.get("2") == 1, str(chart))
+
+    ids = {}
+    for p in api("/api/photos", limit=50)["items"]:
+        ids.setdefault(p["filename"], []).append(p["id"])
+    unrated = ids["light_subject.jpg"][0]
+    rated = [p["id"] for p in api("/api/photos", limit=50)["items"]
+             if p["filename"] == "green_field.jpg" and p["rating"] == 4][0]
+
+    code, body = post(f"/api/mark/{unrated}?value=5")
+    check("a mark can be set", code == 200 and body.get("mark") == "5", str(body))
+    check("mark shows up as a rating",
+          [p["filename"] for p in api("/api/photos", rating="5")["items"]]
+          == ["light_subject.jpg"])
+
+    post(f"/api/mark/{rated}?value=great")
+    names = [p["filename"] for p in api("/api/photos", rating="great")["items"]]
+    check("a mark wins over the EXIF stars", names == ["green_field.jpg"], str(names))
+    check("the overridden EXIF value no longer matches",
+          not [p for p in api("/api/photos", rating="4")["items"]
+               if p["id"] == rated])
+
+    post(f"/api/mark/{rated}?value=")
+    back = [p["id"] for p in api("/api/photos", rating="4")["items"]]
+    check("clearing a mark hands the photo back to EXIF", rated in back, str(back))
+
+    code, body = post(f"/api/mark/{unrated}?value=7")
+    check("an unknown rating is refused", code == 400, str(body))
+
+    order = [p["filename"] for p in
+             api("/api/photos", sort="rating", dir="desc", limit=50)["items"]]
+    check("sorting by rating puts the rated first",
+          order[0] == "light_subject.jpg", str(order[:3]))
+
+    # The scanner owns every column but this one. If `mark` ever joins COLUMNS,
+    # or the upsert stops excluding it, this is what notices.
+    subprocess.run([sys.executable, os.path.join(ROOT, "scan.py"), photos,
+                    "--db", db, "--full"],
+                   capture_output=True, text=True, cwd=ROOT, timeout=300)
+    kept = api("/api/photos", rating="5")["items"]
+    check("a full re-scan leaves your marks alone",
+          [p["filename"] for p in kept] == ["light_subject.jpg"], str(len(kept)))
 
 
 def check_dups_pass(tmp, photos, db):
@@ -305,6 +388,8 @@ def main():
                                     timeout=20) as r:
             thumb = r.read()
         check("thumbnails", r.status == 200 and thumb[:2] == b"\xff\xd8", f"{len(thumb)} bytes")
+
+        rating_checks(db, photos)
     finally:
         srv.terminate()
         srv.wait(timeout=10)

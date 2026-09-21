@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- The photo card opens to the whole browser window on a double-click of the
+  picture: card, margins and metadata all step aside. Escape backs out of it one
+  step at a time rather than closing everything at once. A sharper copy is
+  fetched to match — the thumbnail ceiling went from 1400 to 2800 pixels, which
+  is what a full window on a dense display actually needs, and the bigger copy
+  only replaces the one on screen once it has arrived, so nothing blinks.
+
+- Photos have a rating. Stars are read from the file's own EXIF (`Rating`, the
+  tag a camera writes and Explorer shows — not `xmp:Rating`, so Lightroom's own
+  stars stay invisible), and you can rate photos in the interface on top of that:
+  one to five stars, a red ✗ for a bad frame, or 5+ for the best. One of the three
+  at a time, and clicking what is set clears it, which hands the photo back to
+  whatever EXIF said. A group of its own lists the scale, the selection can be
+  sorted by it, and the control sits both in an expanded row and over a thumbnail
+  in the preview strip.
+  Ratings you give live in the database and nowhere else; no file is ever written
+  to. They are kept in a `mark` column the scanner does not own, so re-reading
+  metadata — which this release does, `EXIF_VERSION` having changed — cannot wipe
+  them.
+
 - Comments and docstrings across the program are in English. They were Russian in
   `app.py`, `scan.py`, `launcher.py`, `dupkey.py`, `web/index.html`, the batch file
   and `.gitignore`, which put half the reasoning in the code out of reach of anyone
@@ -25,6 +45,10 @@ All notable changes to this project are documented here. The format follows
 - Fixed: stopping the folder check from the window printed nothing. Windows
   sends CTRL_BREAK to a stopped task, which Python ends the process on rather
   than raising KeyboardInterrupt, so the summary never got out.
+- Fixed: the map in **Places** painted over the photo card, so opening a photo
+  while the map was shown left the map on top of the picture. Leaflet stacks its
+  own tiles, controls and attribution far higher than anything in the interface,
+  and none of it stayed inside the map's box.
 
 - The program has an icon: viewfinder corners around three bars, in the same
   palette as the interface. It sits on the launcher window, in the taskbar, on

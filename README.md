@@ -105,6 +105,8 @@ Panels are grouped, and each group folds away.
 **When** — a film-strip timeline of the whole archive, months of the year,
 time of day with day and night on separate tracks.
 
+**Rating** — stars, and two marks of your own. See below.
+
 **EXIF metrics** — camera brands, models, lenses, focal lengths, aperture,
 shutter speed, ISO, file size, format and duplicates. Pick a camera or a lens and a second
 panel appears: when it arrived, when the last frame was taken, how many days it
@@ -116,6 +118,29 @@ clipping in highlights and shadows. These need the image analysis pass.
 
 **Where** — clusters of coordinates from EXIF, as a list and, if you ask for
 it, on a map.
+
+### Rating
+
+Stars are read out of the file's own EXIF — tag `Rating`, which is what a camera
+writes when you press its star button and what Windows Explorer shows. Nothing
+else is read: Lightroom keeps its stars in `xmp:Rating` or in its catalogue, so
+a photo rated only in Lightroom arrives here unrated.
+
+You can also rate photos here, over the top of the camera. Hover a thumbnail in
+the preview strip, or open a row in the list, and the control is there: a red
+**✗** for a bad frame, **one to five stars**, and **5+** for the ones worth
+keeping above the rest. Only one of the three can be on at a time, which is why
+they sit in a single row — clicking what is already set clears it.
+
+**Your ratings go into the database and nowhere else.** The files are never
+written to. Clearing a rating you set hands the photo back to whatever EXIF
+said, so the camera's own stars are never lost.
+
+The panel lists the scale best first, with everything unrated at the bottom, and
+the selection can be sorted by rating from the *sort* box. The same control is in
+the photo card, to the right of the picture.
+
+### Duplicates
 
 Duplicates are found by name, exact byte size **and capture time**. Name and
 size alone are not enough: one camera repeats file names, and two different
@@ -213,6 +238,12 @@ scrolling back to the top.
 On the right is the current selection: ten random photos from it, then a text
 list where any row expands into a thumbnail and a summary with buttons to open
 the file or show it in the file manager. The selection exports to CSV.
+
+Clicking a thumbnail opens the photo card: the picture, everything known about
+it, and the rating. **Double-click the picture and it takes the whole browser
+window** — no card, no metadata, just the photograph, with a sharper copy fetched
+to match. Double-click again, or press Escape, and the card comes back; Escape
+again closes it.
 
 Sort that list by capture time, file name, file size, camera or folder, either
 way round. Or switch it to **folders** — the folders those photos live in, with

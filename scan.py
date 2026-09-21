@@ -197,6 +197,11 @@ CREATE TABLE IF NOT EXISTS photos (
     height      INTEGER,
     lat         REAL,      -- coordinates from EXIF, signed degrees
     lon         REAL,
+    rating      INTEGER,   -- stars from EXIF, 1…5; NULL = the file has none
+    -- Your own mark, set in the interface: '1'…'5', 'bad' or 'great'. Deliberately
+    -- not in COLUMNS, so that re-reading EXIF cannot overwrite it — the scanner
+    -- owns every other column here, and this is the one column it must not touch.
+    mark        TEXT,
     sig         TEXT,      -- content signature; NULL = the pass was never run
     color       TEXT,      -- dominant colour group; NULL = not analysed yet
     color_hex   TEXT,      -- the average shade of that group, for the swatch
@@ -229,7 +234,7 @@ COLUMNS = [
     "path", "folder", "filename", "ext", "size", "mtime", "taken", "date_src",
     "year", "month", "ym", "day", "hour", "weekday", "brand", "camera", "lens",
     "focal", "focal35", "iso", "fnumber", "shutter", "exposure", "width", "height",
-    "lat", "lon",
+    "lat", "lon", "rating",
 ]
 
 
@@ -276,6 +281,7 @@ def migrate(con):
     """Builds up databases made by earlier versions of the program."""
     cols = {r[1] for r in con.execute("PRAGMA table_info(photos)")}
     for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
+                       ("rating", "INTEGER"), ("mark", "TEXT"),
                        ("color", "TEXT"), ("color_hex", "TEXT"),
                        ("color_share", "REAL"), ("color_center", "TEXT"),
                        ("color_center_hex", "TEXT"),
@@ -347,6 +353,31 @@ def to_float(v):
 def to_int(v):
     f = to_float(v.split()[0] if isinstance(v, str) and v.split() else v)
     return int(f) if f else None
+
+
+# Percent values Windows writes alongside the star count, and the star each one
+# stands for. Some tools fill in only the percentage.
+RATING_PERCENT = ((99, 5), (75, 4), (50, 3), (25, 2), (1, 1))
+
+
+def rating_stars(tags):
+    """Stars from EXIF, 1…5, or None.
+
+    Only the EXIF side is read: Rating (0x4746) is what a camera writes when you
+    press the star button, and what Windows Explorer shows. Lightroom keeps its
+    stars in xmp:Rating or in its own catalogue, neither of which is EXIF, so a
+    file rated only in Lightroom arrives here unrated.
+
+    A Rating of 0 is the tag saying "unrated" in so many words, and is stored as
+    NULL like an absent tag: the difference would show up nowhere but would need
+    explaining in every panel.
+    """
+    v = to_int(tags.get("Rating"))
+    if v is None:
+        pct = to_int(tags.get("RatingPercent"))
+        if pct is not None:
+            v = next((s for p, s in RATING_PERCENT if pct >= p), 0)
+    return v if v and 1 <= v <= 5 else None
 
 
 def fmt_shutter(sec):
@@ -459,6 +490,7 @@ def make_row(path, st, tags):
         "height": to_int(tags.get("ImageHeight")),
         "lat": geo[0],
         "lon": geo[1],
+        "rating": rating_stars(tags),
     }
 
 
@@ -472,6 +504,7 @@ EXIFTOOL_TAGS = [
     "-FocalLength", "-FocalLengthIn35mmFormat", "-ISO", "-FNumber",
     "-ExposureTime", "-ImageWidth", "-ImageHeight",
     "-GPSLatitude", "-GPSLongitude",
+    "-Rating", "-RatingPercent",
 ]
 
 
@@ -539,7 +572,8 @@ def read_chunk_exiftool(exe, paths):
 # Reading EXIF — the fallback without ExifTool
 # --------------------------------------------------------------------------
 
-BASE_IFD = {0x010F: "Make", 0x0110: "Model", 0x0132: "ModifyDate"}
+BASE_IFD = {0x010F: "Make", 0x0110: "Model", 0x0132: "ModifyDate",
+            0x4746: "Rating", 0x4749: "RatingPercent"}
 GPS_IFD = {1: "GPSLatitudeRef", 2: "GPSLatitude",
            3: "GPSLongitudeRef", 4: "GPSLongitude"}
 EXIF_IFD = {
@@ -568,6 +602,8 @@ def read_one_fallback(path):
             "FocalLength": get("EXIF FocalLength"),
             "FocalLengthIn35mmFormat": get("EXIF FocalLengthIn35mmFilm"),
             "ISO": get("EXIF ISOSpeedRatings"),
+            "Rating": get("Image Rating"),
+            "RatingPercent": get("Image RatingPercent"),
             "FNumber": get("EXIF FNumber"),
             "ExposureTime": get("EXIF ExposureTime"),
             "ImageWidth": get("EXIF ExifImageWidth"),
@@ -771,7 +807,7 @@ ALGO_VERSION = 11
 # metadata of every file: otherwise a new field would stay empty for everything
 # already in the database. The image analysis is not lost in the process — it sits
 # in columns of its own.
-EXIF_VERSION = 2
+EXIF_VERSION = 3
 
 
 def pixel_group(r, g, b):

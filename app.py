@@ -168,6 +168,39 @@ def dup_exists():
     return f"{k} IN (SELECT {k} FROM photos GROUP BY 1 HAVING COUNT(*) > 1)"
 
 
+# One rating, two columns behind it. `rating` is what the scanner read out of
+# EXIF and rewrites on every pass; `mark` is what you set here and nothing else
+# ever writes. Your mark wins where there is one, so rating a photo in the
+# interface replaces what the camera said without destroying it — clear the mark
+# and the camera's stars come back.
+#
+# The two could not be one column. The scanner updates every column it owns from
+# the file, so a shared one would lose your marks the first time EXIF_VERSION
+# changed and the archive re-read itself.
+MARK_BAD = "bad"
+MARK_GREAT = "great"
+MARKS = {"1", "2", "3", "4", "5", MARK_BAD, MARK_GREAT}
+# Best first: this is the order the panel lists them in, not the order of counts.
+RATING_ORDER = [MARK_GREAT, "5", "4", "3", "2", "1", MARK_BAD]
+RATING_LABELS = {MARK_GREAT: "5+", MARK_BAD: "✗ bad"}
+
+
+def rating_key():
+    """The rating the interface shows and filters by. Matches ix_rating."""
+    return "COALESCE(mark, CAST(rating AS TEXT))"
+
+
+def rating_rank():
+    """The same rating as a number, so ORDER BY puts 5+ above 5 and bad below 1."""
+    k = rating_key()
+    return (f"CASE WHEN {k} IS NULL THEN -1 WHEN {k} = '{MARK_GREAT}' THEN 6 "
+            f"WHEN {k} = '{MARK_BAD}' THEN 0 ELSE CAST({k} AS INTEGER) END")
+
+
+def rating_label(v):
+    return RATING_LABELS.get(v) or "★" * int(v)
+
+
 # Derived dimensions: the value is worked out from the numbers in the query
 # itself, so the thresholds can be changed here without re-analysing the archive.
 DERIVED_DIMS = {
@@ -289,6 +322,18 @@ def build_where(skip=None):
             joined = " OR ".join(f"({c})" for c in conds)
             clauses.append(f"({guard} IS NOT NULL AND ({joined}))")
 
+    vals = request.args.getlist("rating")
+    if vals and "rating" not in skips:
+        expr = rating_key()
+        parts = []
+        for v in vals:
+            if v == NONE_KEY:
+                parts.append(f"{expr} IS NULL")
+            else:
+                parts.append(f"{expr} = ?")
+                params.append(v)
+        clauses.append("(" + " OR ".join(parts) + ")")
+
     if request.args.get("baddate") and "baddate" not in skips:
         lo, hi = year_range()
         clauses.append("(year < ? OR year > ?)")
@@ -336,6 +381,19 @@ def counts(col, skip, labeller=None, order="cnt", limit=None):
 # --------------------------------------------------------------------------
 # API
 # --------------------------------------------------------------------------
+
+
+def rating_counts():
+    """Best first, unrated last — counts would put the empty majority on top."""
+    items = counts(rating_key(), skip="rating", labeller=rating_label)
+    rank = {k: i for i, k in enumerate(RATING_ORDER)}
+    items.sort(key=lambda it: rank.get(it["k"], len(rank)))
+    for it in items:
+        if it["k"] == NONE_KEY:
+            # "not specified" is right for a missing lens and wrong here: nobody
+            # specifies a rating, they give one or they do not
+            it["l"] = "not rated"
+    return items
 
 
 def bucket_counts(key):
@@ -505,6 +563,7 @@ def api_stats():
             "contrast": bucket_counts("contrast"),
             "clipping": derived_counts("clipping"),
             "dup": derived_counts("dup"),
+        "rating": rating_counts(),
         },
     })
 
@@ -652,6 +711,7 @@ SORTS = {
     "size": ["size"],
     "camera": ["camera", "taken"],
     "folder": ["folder COLLATE NOCASE", "filename COLLATE NOCASE"],
+    "rating": [rating_rank(), "taken"],
 }
 
 
@@ -692,7 +752,7 @@ def api_photos():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera, lens,"
             f" focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
-            f" lat, lon,"
+            f" lat, lon, rating, mark,"
             f" (SELECT COUNT(*) FROM photos d"
             f"  WHERE {dup_key('d')} = {dup_key('photos')}) AS dup_n,"
             f" color, color_hex, color_share, color_center, color_center_hex,"
@@ -715,7 +775,8 @@ def api_random():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera,"
             f" lens, focal, focal35, iso, fnumber, shutter, exposure, width, height,"
-            f" size, ext, lat, lon, color, color_hex, color_share, color_center,"
+            f" size, ext, lat, lon, rating, mark,"
+            f" color, color_hex, color_share, color_center,"
             f" color_center_hex, color_center_share, brightness, contrast,"
             f" chroma, clip_hi, clip_lo"
             f" FROM photos {where} ORDER BY RANDOM() LIMIT ?", params + [n]).fetchall()
@@ -724,7 +785,10 @@ def api_random():
 
 @app.get("/api/thumb/<int:pid>")
 def api_thumb(pid):
-    size = max(64, min(int(request.args.get("s", 260)), 1400))
+    # The ceiling is what the whole-window view in the photo card asks for on a
+    # dense display. It used to be 1400, which is plenty for the card itself but
+    # visibly soft once the picture fills a 2560-pixel screen.
+    size = max(64, min(int(request.args.get("s", 260)), 2800))
     with db() as con:
         row = con.execute("SELECT path, mtime FROM photos WHERE id=?", (pid,)).fetchone()
     if not row:
@@ -790,6 +854,27 @@ def raw_preview(path, size):
         except Exception:
             continue
     return None
+
+
+@app.post("/api/mark/<int:pid>")
+def api_mark(pid):
+    """Set or clear your own rating. The only write the interface ever makes.
+
+    An empty value clears the mark, which is not the same as rating something
+    zero: it hands the photo back to whatever EXIF said.
+    """
+    value = (request.args.get("value") or "").strip()
+    if value and value not in MARKS:
+        return jsonify({"ok": False, "error": "Unknown rating"}), 400
+    with db() as con:
+        changed = con.execute("UPDATE photos SET mark = ? WHERE id = ?",
+                              (value or None, pid)).rowcount
+        con.commit()
+        if not changed:
+            return jsonify({"ok": False, "error": "No such photo"}), 404
+        row = con.execute("SELECT rating, mark FROM photos WHERE id = ?",
+                          (pid,)).fetchone()
+    return jsonify({"ok": True, "rating": row["rating"], "mark": row["mark"]})
 
 
 @app.post("/api/reveal/<int:pid>")
@@ -915,6 +1000,7 @@ def main():
         # columns first, then indexes: an index on a column that does not exist
         # yet cannot be created, and the database may be from an earlier version
         for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
+                           ("rating", "INTEGER"), ("mark", "TEXT"),
                            ("color", "TEXT"), ("color_hex", "TEXT"),
                            ("color_share", "REAL"), ("color_center", "TEXT"),
                            ("color_center_hex", "TEXT"),
@@ -927,6 +1013,7 @@ def main():
         con.execute("DROP INDEX IF EXISTS ix_dup")      # the key changed
         con.execute(f"CREATE INDEX IF NOT EXISTS ix_dupkey ON photos({name_key()})")
         con.execute("CREATE INDEX IF NOT EXISTS ix_sig ON photos(sig)")
+        con.execute(f"CREATE INDEX IF NOT EXISTS ix_rating ON photos({rating_key()})")
         con.commit()
         if "exposure" not in cols:
             print("Upgrading the database for new metrics…")

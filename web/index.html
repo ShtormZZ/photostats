@@ -213,7 +213,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .geo-scale input{flex:1;accent-color:var(--safelight);min-width:60px}
 .geo-scale span{font-family:var(--data);font-size:11px;color:var(--muted);
   white-space:nowrap}
-#geoMap{height:340px;border-radius:3px;background:var(--frame);margin-bottom:12px}
+/* z-index:0 on a positioned box is what keeps the map underneath the photo card.
+   Leaflet stacks its own parts high — panes at 400, controls at 800, the corners
+   at 1000 — and none of that is contained unless the holder is a stacking
+   context, so the tiles and the attribution used to paint over the .veil (60). */
+#geoMap{height:340px;border-radius:3px;background:var(--frame);margin-bottom:12px;
+  position:relative;z-index:0}
 .geo-warn{border:1px solid var(--line);border-radius:3px;padding:12px 14px;
   margin-bottom:14px;color:var(--muted);font-size:12.5px;line-height:1.6}
 .geo-warn b{color:var(--paper);font-weight:600}
@@ -226,6 +231,38 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .geo-err{border:1px solid #7A4A2C;border-radius:3px;padding:10px 12px;
   margin-bottom:12px;color:var(--paper);font-size:12.5px;line-height:1.5}
 .geo-err code{font-family:var(--data);font-size:11px;color:var(--muted)}
+
+/* ---------- rating ----------
+   One control, three kinds of value, and only one of them can be on at a time —
+   the buttons sit in one row so that is visible without reading anything. The
+   stars light up to the one under the cursor, the way they do everywhere else. */
+.rate{display:inline-flex;align-items:center;gap:1px;white-space:nowrap}
+.rate button{padding:0 2px;line-height:1;color:var(--emulsion);
+  font-size:15px;border-radius:2px;transition:color .1s}
+.rate .star{font-size:16px}
+.rate .bad{font-size:14px;padding-right:5px}
+.rate .great{font-size:11px;font-family:var(--display);letter-spacing:.06em;
+  font-weight:600;padding-left:5px}
+.rate button:hover{color:var(--paper)}
+.rate .star.on{color:var(--safelight)}
+.rate .bad.on,.rate .bad:hover{color:#D9534F}
+.rate .great.on{color:var(--safelight)}
+.rate .sep{width:1px;height:13px;background:var(--line);margin:0 3px;flex:none}
+.rate .lab{font-family:var(--data);font-size:10.5px;color:var(--emulsion);
+  margin-left:7px}
+.rate.busy{opacity:.45;pointer-events:none}
+/* In the row of per-photo actions the rating comes first and keeps its distance:
+   without it the stars read as one more button in the row. */
+.acts2 .rate{margin-right:10px;padding-right:12px;border-right:1px solid var(--line)}
+
+/* The panel rows: the same glyphs, so a row and a control read as one thing. */
+.rt{display:inline-flex;align-items:center;gap:1px;font-size:14px;line-height:1}
+.rt .on{color:var(--safelight)}
+.rt .off{color:var(--frame)}
+.rt.bad{color:#D9534F}
+.rt.great{font-family:var(--display);font-size:11px;font-weight:600;
+  letter-spacing:.08em;color:var(--safelight)}
+.rt.none{font-size:12.5px;color:var(--muted)}
 
 /* ---------- preview strip ---------- */
 .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
@@ -244,17 +281,44 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .strip-head .lbl{font-family:var(--display);font-size:11px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--muted)}
 .strip{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:18px}
-.cell{position:relative;aspect-ratio:1;background:var(--frame) no-repeat center/cover;
+/* The cell is wrapped rather than holding the rating itself: a button inside a
+   button is invalid markup, and every click on a star would open the photo. */
+.cellwrap{position:relative}
+/* Scoped to the wrapper on purpose. "cell" is a word two different things want,
+   and an unscoped rule turned the place count in the Where panel into a
+   full-width square of empty thumbnail. */
+.cellwrap .cell{position:relative;display:block;width:100%;aspect-ratio:1;
+  background:var(--frame) no-repeat center/cover;
   border-radius:2px;overflow:hidden;padding:0;border:1px solid transparent}
-.cell.in{background-color:#0E0D11}
-.cell:hover{border-color:var(--safelight)}
-.cell .noimg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--data);font-size:10px;color:var(--muted)}
-.cell.in .noimg{display:none}
-.cell .cap{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;font-family:var(--data);
+.cellwrap .cell.in{background-color:#0E0D11}
+.cellwrap .cell:hover{border-color:var(--safelight)}
+.cellwrap .cell .noimg{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-family:var(--data);font-size:10px;color:var(--muted)}
+.cellwrap .cell.in .noimg{display:none}
+.cellwrap .cell .cap{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;
+  font-family:var(--data);
   font-size:9px;background:linear-gradient(transparent,rgba(10,9,13,.92));color:var(--paper);
   text-align:left;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden}
-.cell:hover .cap{opacity:1}
+.cellwrap .cell:hover .cap{opacity:1}
+/* Rating a batch is quicker over the pictures than down the list, so the strip
+   carries the control too. A cell is about 120 px wide, which the full control
+   does not fit into, so here it loses its dividers and its "from EXIF" note.
+   Until the cell is hovered only the rating actually set is shown — the whole
+   row of empty stars over every thumbnail buried the photographs. */
+.cellwrap .rate{position:absolute;left:0;right:0;top:0;justify-content:center;
+  padding:3px 0 5px;background:linear-gradient(rgba(10,9,13,.92),transparent);
+  opacity:0;transition:opacity .15s}
+.cellwrap:hover .rate,.cellwrap .rate:focus-within,.cellwrap .rate.set{opacity:1}
+.cellwrap .rate .lab,.cellwrap .rate .sep{display:none}
+/* The glyphs sit on top of the photograph, and a photograph can be any colour —
+   the shadow is what keeps a red cross legible over a white frame. */
+.cellwrap .rate button{font-size:11px;padding:0 1px;transition:opacity .15s;
+  text-shadow:0 1px 2px rgba(10,9,13,.9)}
+.cellwrap .rate .star{font-size:12px}
+.cellwrap .rate .bad{font-size:12px;padding-right:3px}
+.cellwrap .rate .great{font-size:9px;padding-left:3px}
+.cellwrap .rate.set button:not(.on){opacity:0}
+.cellwrap:hover .rate button,.cellwrap .rate:focus-within button{opacity:1}
 
 /* ---------- text list ---------- */
 .lhead,.lrow{display:grid;grid-template-columns:112px minmax(70px,1.1fr) 1fr 1fr 46px;
@@ -300,7 +364,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .veil.on{display:flex}
 .detail{background:var(--panel);border:1px solid var(--line);border-radius:4px;max-width:1000px;
   width:100%;max-height:92vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.5fr) 300px}
-.detail img{width:100%;height:100%;max-height:92vh;object-fit:contain;background:#0E0D11;display:block}
+.detail img{width:100%;height:100%;max-height:92vh;object-fit:contain;background:#0E0D11;display:block;
+  cursor:zoom-in}
+/* Double-click and the picture takes the whole window: the card, its margins and
+   the metadata all get out of the way, which is the only way to actually look at
+   a photograph. Double-click again, or Escape, and the card comes back. */
+.veil.full{padding:0;background:#0A090D}
+.veil.full .detail{max-width:none;width:100vw;height:100vh;max-height:100vh;
+  grid-template-columns:1fr;border:0;border-radius:0;overflow:hidden}
+.veil.full .meta{display:none}
+.veil.full .detail img{max-height:100vh;height:100vh;cursor:zoom-out;background:#0A090D}
 .meta{padding:18px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
 .meta h3{font-family:var(--display);font-size:14px;letter-spacing:.1em;text-transform:uppercase;
   margin:0;word-break:break-all}
@@ -309,6 +382,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .meta dd{margin:0;font-family:var(--data);word-break:break-word}
 .meta .path{font-family:var(--data);font-size:11px;color:var(--muted);word-break:break-all;
   line-height:1.5}
+/* The large view is where a photo actually gets judged, so the control is full
+   size here and carries its label. It sits above the buttons, which stay pinned
+   to the bottom — rating is something you do to the picture, not an action on
+   the file like opening it. */
+.ratebox{display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ratebox .rlab{font-family:var(--display);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted)}
+.ratebox .rate button{font-size:17px;padding:0 3px}
+.ratebox .rate .star{font-size:19px}
+.ratebox .rate .bad{font-size:16px}
+.ratebox .rate .great{font-size:12px}
 .acts{display:flex;flex-direction:column;gap:7px;margin-top:auto}
 .act{border:1px solid var(--line);border-radius:3px;padding:8px;font-size:12.5px;text-align:center}
 .act:hover{border-color:var(--safelight);color:var(--safelight)}
@@ -400,9 +485,32 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     </section>
     </div>
   </div>
-  <div class="group" id="g-exif">
+  <div class="group" id="g-rating">
     <button class="group-head" aria-expanded="true">
       <span class="num">02</span>
+      <span class="ttl">Rating</span>
+      <span class="rule"></span>
+      <span class="cnt"></span>
+      <span class="caret">−</span>
+    </button>
+    <div class="group-body">
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Rating</div>
+        <div class="grow"></div>
+        <div class="card-note" id="rateNote"></div>
+      </div>
+      <div class="rows" id="rating"></div>
+      <div class="card-note" style="margin-top:9px">Stars come from the file's own
+        EXIF — what the camera wrote when you pressed its star button. Rate a photo
+        here and your rating takes over; clear it and the camera's stars come back.
+        Your ratings live in this database only, never in the files.</div>
+    </section>
+    </div>
+  </div>
+  <div class="group" id="g-exif">
+    <button class="group-head" aria-expanded="true">
+      <span class="num">03</span>
       <span class="ttl">EXIF metrics</span>
       <span class="rule"></span>
       <span class="cnt"></span>
@@ -489,7 +597,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   </div>
   <div class="group" id="g-image">
     <button class="group-head" aria-expanded="true">
-      <span class="num">03</span>
+      <span class="num">04</span>
       <span class="ttl">Image metrics</span>
       <span class="rule"></span>
       <span class="cnt"></span>
@@ -535,7 +643,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   </div>
   <div class="group" id="g-geo">
     <button class="group-head" aria-expanded="true">
-      <span class="num">04</span>
+      <span class="num">05</span>
       <span class="ttl">Where</span>
       <span class="rule"></span>
       <span class="cnt"></span>
@@ -571,6 +679,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
         <option value="size">file size</option>
         <option value="camera">camera</option>
         <option value="folder">folder</option>
+        <option value="rating">rating</option>
       </select>
       <button class="toggle" id="sortDir" title="Reverse order">↑</button>
     </div>
@@ -602,6 +711,7 @@ const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
   camera:"Camera", lens:"Lens", focal:"Focal", year:"Year", folder:"Folder",
   q:"Search", ext:"Format", geo:"Place", aperture:"Aperture", exposure:"Shutter",
   iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
+  rating:"Rating",
   tone:"Tone", brightness:"Brightness", contrast:"Contrast", clipping:"Clipping",
   baddate:"Date"};
 /* Range labels come from the server — kept here for the filter chips. */
@@ -838,8 +948,8 @@ function renderGeo(d){
   scale.className = "geo-scale";
   scale.innerHTML = '<span>coarse</span><input type="range" min="0" max="' +
     (d.levels - 1) + '" value="' + d.level + '"><span>fine</span>' +
-    '<span class="cell"></span>';
-  scale.querySelector(".cell").textContent = nf(d.clusters.length) +
+    '<span class="geo-count"></span>';
+  scale.querySelector(".geo-count").textContent = nf(d.clusters.length) +
     plural(d.clusters.length, " place", " places");
   scale.querySelector("input").oninput = e => {
     state.geoLevel = +e.target.value;
@@ -1192,6 +1302,155 @@ function renderRows(id, items, param, cap){
   }
 }
 
+/* ---------- rating ----------
+   The rating shown is your own where you set one, and the camera's EXIF stars
+   otherwise — one scale, two sources, exactly as the server sorts and counts it.
+   Clearing a rating is not the same as rating nothing: it hands the photo back
+   to whatever EXIF said. */
+const RATE_ORDER = ["great", "5", "4", "3", "2", "1", "bad"];   // best first, unrated last
+
+function effRating(it){
+  return it.mark || (it.rating ? String(it.rating) : null);
+}
+
+/* The glyph for one value, for a panel row. Stars keep their empty places so
+   rows line up under one another instead of ragging left. */
+function ratingGlyph(k){
+  const s = document.createElement("span");
+  if (k === NONE){ s.className = "rt none"; s.textContent = "not rated"; return s; }
+  if (k === "great"){ s.className = "rt great"; s.textContent = "5+"; return s; }
+  if (k === "bad"){ s.className = "rt bad"; s.textContent = "✗ bad"; return s; }
+  s.className = "rt";
+  for (let i = 1; i <= 5; i++){
+    const star = document.createElement("span");
+    star.className = i <= +k ? "on" : "off";
+    star.textContent = i <= +k ? "★" : "☆";
+    s.appendChild(star);
+  }
+  return s;
+}
+
+/* The panel. Its own renderer rather than renderRows: the values are a fixed
+   scale that never needs "show all", and the glyphs are the point of it. */
+function renderRating(items){
+  state.ratingItems = items;
+  remember("rating", items);
+  const box = $("rating");
+  box.innerHTML = "";
+  const max = Math.max(1, ...items.map(i => i.v));
+  items.forEach(it => {
+    const b = document.createElement("button");
+    b.className = "row" + (isOn("rating", it.k) ? " on" : "");
+    b.innerHTML = '<span class="name"></span><span class="bar"><i></i></span>' +
+                  '<span class="num"></span>';
+    b.querySelector(".name").appendChild(ratingGlyph(it.k));
+    b.querySelector(".bar > i").style.width = Math.max(1, it.v / max * 100) + "%";
+    b.querySelector(".num").textContent = nf(it.v);
+    b.onclick = e => toggleFilter("rating", it.k, e);
+    box.appendChild(b);
+  });
+  const rated = items.filter(i => i.k !== NONE).reduce((s, i) => s + i.v, 0);
+  $("rateNote").textContent = rated ? nf(rated) + " rated" : "none rated yet";
+}
+
+/* Counts are patched here rather than refetched. A reload would pull a fresh
+   set of random photos and collapse every open row — while working down a batch
+   that is worse than a number being a moment out of date, and the next filter
+   click brings exact figures anyway. */
+function bumpRating(from, to){
+  const items = state.ratingItems;
+  if (!items) return;
+  const find = k => items.find(i => i.k === (k || NONE));
+  const a = find(from), b = find(to);
+  if (a) a.v = Math.max(0, a.v - 1);
+  if (b) b.v += 1;
+  if (!b && to){
+    items.push({k: to, l: to, v: 1});
+    items.sort((x, y) => (RATE_ORDER.indexOf(x.k) + 1 || 99) -
+                         (RATE_ORDER.indexOf(y.k) + 1 || 99));
+  }
+  renderRating(items);
+}
+
+/* One control, used in the list, over a thumbnail and in the large view. Every
+   copy on screen showing the same photo is refreshed, so rating it in one place
+   does not leave a stale row somewhere else. */
+function ratingControl(it){
+  const wrap = document.createElement("span");
+  wrap.className = "rate";
+  wrap.dataset.pid = it.id;
+
+  const add = (cls, text, value, title) => {
+    const b = document.createElement("button");
+    b.className = cls;
+    b.textContent = text;
+    b.title = title;
+    b.onclick = ev => { ev.stopPropagation(); setMark(it, value); };
+    wrap.appendChild(b);
+    return b;
+  };
+
+  const cur = effRating(it);
+  add("bad" + (cur === "bad" ? " on" : ""), "✗", "bad", "Bad photo");
+  const sep = document.createElement("i"); sep.className = "sep";
+  wrap.appendChild(sep);
+  for (let i = 1; i <= 5; i++){
+    const on = cur && cur !== "bad" && cur !== "great" && +cur >= i;
+    const b = add("star" + (on ? " on" : ""), on ? "★" : "☆", String(i),
+                  i + (i === 1 ? " star" : " stars"));
+    // light the run up to the star under the cursor, so what a click will do is
+    // visible before it happens
+    b.onmouseenter = () => wrap.querySelectorAll(".star").forEach((s, n) => {
+      s.textContent = n < i ? "★" : "☆";
+      s.style.color = n < i ? "var(--safelight)" : "";
+    });
+  }
+  wrap.onmouseleave = () => wrap.querySelectorAll(".star").forEach((s, n) => {
+    const c = effRating(it);
+    const on = c && c !== "bad" && c !== "great" && +c > n;
+    s.textContent = on ? "★" : "☆";
+    s.style.color = "";
+    s.classList.toggle("on", !!on);
+  });
+  wrap.appendChild(document.createElement("i")).className = "sep";
+  add("great" + (cur === "great" ? " on" : ""), "5+", "great", "Excellent photo");
+  if (!it.mark && it.rating){
+    const lab = document.createElement("span");
+    lab.className = "lab";
+    lab.textContent = "from EXIF";
+    wrap.appendChild(lab);
+  }
+  wrap.classList.toggle("set", !!cur);
+  return wrap;
+}
+
+/* Clicking the value a photo already has clears it — the same button both sets
+   and unsets, so there is no separate "clear" nobody would look for. */
+function setMark(it, value){
+  const before = effRating(it);
+  const next = (it.mark === value) ? "" : value;
+  document.querySelectorAll('.rate[data-pid="' + it.id + '"]')
+    .forEach(el => el.classList.add("busy"));
+  fetch("/api/mark/" + it.id + "?value=" + encodeURIComponent(next), {method: "POST"})
+    .then(r => r.json())
+    .then(r => {
+      if (!r.ok){ toast(r.error || "Could not save the rating"); return; }
+      it.mark = r.mark;
+      it.rating = r.rating;
+      const after = effRating(it);
+      if (after !== before) bumpRating(before, after);
+      refreshRating(it);
+    })
+    .catch(() => toast("Could not save the rating"))
+    .finally(() => document.querySelectorAll('.rate[data-pid="' + it.id + '"]')
+      .forEach(el => el.classList.remove("busy")));
+}
+
+function refreshRating(it){
+  document.querySelectorAll('.rate[data-pid="' + it.id + '"]')
+    .forEach(old => old.replaceWith(ratingControl(it)));
+}
+
 /* ---------- preview strip ----------
    Thumbnails are loaded strictly one at a time: a browser holds no more than six
    connections to a server, and a parallel batch of pictures would block clicks on
@@ -1237,6 +1496,8 @@ function renderStrip(items){
   thumbGen++;                      // whatever was loading before is no longer wanted
   box.innerHTML = "";
   items.forEach(it => {
+    const wrap = document.createElement("div");
+    wrap.className = "cellwrap";
     const b = document.createElement("button");
     b.className = "cell";
     b.innerHTML = '<span class="noimg"></span><span class="cap"></span>';
@@ -1244,7 +1505,9 @@ function renderStrip(items){
     b.querySelector(".cap").textContent = (it.taken || "").slice(0, 10);
     b.title = it.filename + "\n" + (it.taken || "");
     b.onclick = () => openDetail(it);
-    box.appendChild(b);
+    wrap.appendChild(b);
+    wrap.appendChild(ratingControl(it));
+    box.appendChild(wrap);
     queueThumb(b, it.id, 200);
   });
 }
@@ -1327,6 +1590,7 @@ function expandRow(row, it){
     line(it.dup_n + " files look identical — pick \u201chas duplicates\u201d to see them together");
 
   const acts = box.querySelector(".acts2");
+  acts.appendChild(ratingControl(it));
   [["show in explorer", () => act("reveal", it.id)],
    ["open file", () => act("open", it.id)],
    ["whole folder", () => { state.filters.folder = it.folder; load(); }],
@@ -1453,7 +1717,9 @@ function openDetail(it){
       : it.color_center + (cshare ? "  ·  " + cshare : "")]);
   }
   d.innerHTML = '<img alt=""><div class="meta"><h3></h3><dl></dl>' +
-    '<div class="path"></div><div class="acts">' +
+    '<div class="path"></div>' +
+    '<div class="ratebox"><span class="rlab">Rating</span></div>' +
+    '<div class="acts">' +
     '<button class="act primary" data-a="reveal">Show in explorer</button>' +
     '<button class="act" data-a="open">Open file</button>' +
     '<button class="act" data-a="folder">All photos in this folder</button>' +
@@ -1475,6 +1741,13 @@ function openDetail(it){
     dd.appendChild(document.createTextNode(v));
     dl.append(dt, dd);
   });
+  d.querySelector(".ratebox").appendChild(ratingControl(it));
+  d.querySelector("img").title = "Double-click for the whole window";
+  d.ondblclick = e => {
+    // In the card only the picture reacts, or double-clicking a button would
+    // throw you into the whole-window view. Once there, anywhere does.
+    if (full() || e.target.tagName === "IMG") toggleFull(it);
+  };
   d.querySelectorAll(".act").forEach(b => b.onclick = () => {
     const a = b.dataset.a;
     if (a === "close") return closeDetail();
@@ -1486,9 +1759,36 @@ function openDetail(it){
   });
   $("veil").classList.add("on");
 }
-function closeDetail(){ $("veil").classList.remove("on"); $("detail").innerHTML = ""; }
+const full = () => $("veil").classList.contains("full");
+
+/* The card shows a 1400-pixel copy, which is right for a 640-pixel-wide slot and
+   soft once it fills the window. The bigger one is fetched on the way in and
+   swapped only when it has arrived, so the view never blinks white in between. */
+function toggleFull(it){
+  const on = $("veil").classList.toggle("full");
+  const img = $("detail").querySelector("img");
+  if (!img) return;
+  img.title = on ? "Double-click to come back" : "Double-click for the whole window";
+  if (!on) return;
+  const want = Math.max(1400, Math.min(2800,
+    Math.round(window.innerWidth * (window.devicePixelRatio || 1))));
+  if (want <= 1400) return;
+  const big = new Image();
+  big.onload = () => { if (full()) img.src = big.src; };
+  big.src = "/api/thumb/" + it.id + "?s=" + want;
+}
+
+function closeDetail(){
+  $("veil").classList.remove("on", "full");
+  $("detail").innerHTML = "";
+}
 $("veil").onclick = e => { if (e.target === $("veil")) closeDetail(); };
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
+/* Escape backs out one step at a time: out of the whole-window view first, and
+   only then out of the photo — closing both at once loses your place. */
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (full()) $("veil").classList.remove("full"); else closeDetail();
+});
 
 let toastTimer;
 function toast(msg){
@@ -1592,6 +1892,7 @@ function load(){
     renderRows("iso", d.charts.iso, "iso", 12);
     renderRows("size", d.charts.size, "size", 12);
     renderRows("dup", d.charts.dup || [], "dup", 4);
+    renderRating(d.charts.rating || []);
     $("dupNote").textContent = d.dupGroups
       ? nf(d.dupGroups) + plural(d.dupGroups, " file", " files") + " duplicated"
       : "none found";
