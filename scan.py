@@ -37,6 +37,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 
 import dupkey
+import tags
 
 try:
     from version import VERSION
@@ -274,6 +275,11 @@ def open_db(path):
         if st.upper().startswith("CREATE INDEX"):
             con.execute(st)
     con.commit()
+    # Tags live in a table of their own and are not part of SCHEMA above: the
+    # statements there are split on semicolons, and a trigger body holds one.
+    # The scanner never writes a tag — it needs the table only so that the
+    # trigger is in place when rows for vanished files are dropped.
+    tags.ensure_schema(con)
     return con
 
 
@@ -733,7 +739,12 @@ def sign_files(con, workers, full=False):
 # Violet was added to the nine listed: between blue and red there would otherwise
 # be a gap, and lilac and a sunset sky would be assigned at random.
 # To go back to nine groups, replace "violet" with "blue".
-HUE_GROUPS = [(15, "red"), (45, "orange"), (70, "yellow"),
+# The orange/yellow boundary is at 40°, not the 45° the wheel would suggest. A
+# sunlit autumn crown measures 35 to 50° at a purity near 1.0, and the eye calls
+# all of it yellow; at 45° the larger half of such a frame fell on the orange
+# side and a golden maple came out orange. Below 40° are the hues nobody calls
+# yellow — skin, terracotta, a ripe orange — so they keep their name.
+HUE_GROUPS = [(15, "red"), (40, "orange"), (70, "yellow"),
               (165, "green"), (215, "cyan"), (260, "blue"),
               (335, "violet")]
 CHROMATIC = {"red", "orange", "brown", "yellow", "green",
@@ -779,7 +790,17 @@ BROWN_HUE = (8, 50)        # the arc of hues where brown is possible, in degrees
 # (wine, brick), so a purity ceiling applies over that stretch.
 BROWN_RED_LO = 345
 BROWN_RED_SAT = 0.45
-BROWN_VAL = 0.62           # a warm hue darker than this is brown
+# A warm hue darker than this is brown: half brightness, a brightest channel
+# below 128. Everything lighter is an ochre, and calling ochre brown made brown
+# the commonest colour in the archive — 30% of the frames measured here at the
+# old 0.62, still 22% at 0.55, and 13% at this line, where it stops crowding
+# out everything else. What it gives up goes where the eye puts it: the muted
+# light tones to gold, that is yellow, the vivid ones to orange.
+#
+# Not lower, though. At 0.45 brown is down to 5% and orange inherits the whole
+# surplus, tans and all — the dominance moves rather than goes, and a beige at
+# 25° called orange is further from the eye than the brown it replaced.
+BROWN_VAL = 0.50
 BROWN_SAT_MIN = 0.18       # but not nearly grey: a warm grey stays grey
 
 # Gold is the light muted warm tone. Its hue is orange, 30 to 50°, but it does not
@@ -787,7 +808,11 @@ BROWN_SAT_MIN = 0.18       # but not nearly grey: a warm grey stays grey
 # apart: for an orange it is close to one, for a field half that.
 GOLD_HUE = (30, 50)
 GOLD_SAT = 0.55            # above this purity the tone stays orange
-GOLD_VAL = 0.62            # below this brightness it is brown already
+# The same line as BROWN_VAL, seen from the other side: above it a muted warm
+# tone is gold, below it brown. They are written as one value because they are
+# one boundary — moved apart, the gap between them would be muted warm pixels
+# that are neither, and they would fall through to be named by hue alone.
+GOLD_VAL = BROWN_VAL
 
 OLIVE_HUE = (55, 70)       # where yellow can turn out to be olive at all
 OLIVE_MAX = 0.30           # below this product yellow reads as green
@@ -801,7 +826,7 @@ UNKNOWN = "unknown"
 # The version of the analysis rules. When it changes the program re-analyses the
 # archive itself: otherwise photos analysed under the earlier rules would silently
 # stay in their old groups and the statistics would stop being consistent.
-ALGO_VERSION = 11
+ALGO_VERSION = 13
 
 # The version of the EXIF field set. When it changes the scanner re-reads the
 # metadata of every file: otherwise a new field would stay empty for everything
@@ -885,13 +910,27 @@ def winner(tally, sums, hues, total):
         if size(pair) > size(best) and band_touches(hues, edge, size(pair)):
             best = pair
 
-    win = max(best, key=cand.get)              # named after the leading group
     n = size(best)
     acc = [0, 0, 0]
     for k in best:
         for i in range(3):
             acc[i] += sums[k][i]
-    hexv = "#%02X%02X%02X" % (acc[0] // n, acc[1] // n, acc[2] // n)
+    mean = [c // n for c in acc]
+    hexv = "#%02X%02X%02X" % tuple(mean)
+
+    # A merged family is named by its own average colour, not by whichever group
+    # in it has the most pixels. Counting decided it before, and a plurality of
+    # 43% then named the whole 92%: a golden maple came out brown because its
+    # shaded half outnumbered each of the lit halves separately. The average is
+    # also the swatch shown beside the name, so the two can no longer contradict
+    # each other. The name has to be a group that is really in the frame, or the
+    # panel would offer a colour that selects nothing — where the average falls
+    # outside the family, counting decides as before.
+    win = max(best, key=cand.get)
+    if len(best) > 1:
+        named = pixel_group(*mean)
+        if named in best:
+            win = named
     return win, hexv, round(n / total, 3), chroma
 
 

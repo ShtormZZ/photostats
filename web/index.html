@@ -262,7 +262,36 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .rt.bad{color:#D9534F}
 .rt.great{font-family:var(--display);font-size:11px;font-weight:600;
   letter-spacing:.08em;color:var(--safelight)}
-.rt.none{font-size:12.5px;color:var(--muted)}
+
+/* ---------- tags ----------
+   The editor is one control used in an expanded row and in the photo card. It
+   is not on a thumbnail in the strip the way the rating is: a rating is one
+   click, a tag is typing, and a text field over a 120-pixel picture is a field
+   nobody can aim at. */
+.tagctl{display:flex;flex-wrap:wrap;align-items:center;gap:5px;position:relative}
+.tagctl .tg{display:inline-flex;align-items:center;gap:3px;background:var(--frame);
+  border:1px solid var(--line);border-radius:10px;padding:1px 3px 1px 9px;
+  font-size:11.5px;color:var(--paper)}
+.tagctl .tg button{color:var(--muted);font-size:12px;line-height:1;padding:0 3px}
+.tagctl .tg button:hover{color:#D9534F}
+.tagctl input{background:var(--ground);border:1px solid var(--line);border-radius:10px;
+  color:var(--paper);font:inherit;font-size:11.5px;padding:2px 9px;width:104px}
+.tagctl input:focus{border-color:var(--safelight);outline:none}
+.tagctl .full{font-size:11px;color:var(--muted)}
+.tagctl.busy{opacity:.5;pointer-events:none}
+/* The suggestions hang over whatever is below — in an expanded row that is the
+   next photo, and a list that pushed the rows apart would move the control out
+   from under the cursor mid-word. */
+.tagsug{position:absolute;top:100%;left:0;z-index:70;margin-top:3px;min-width:160px;
+  max-height:196px;overflow:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:3px;padding:3px;display:none;box-shadow:0 6px 18px rgba(8,7,11,.6)}
+.tagsug.on{display:block}
+.tagsug button{display:flex;width:100%;gap:10px;justify-content:space-between;
+  align-items:baseline;padding:4px 7px;border-radius:2px;font-size:12px;
+  text-align:left;color:var(--paper)}
+.tagsug button.sel,.tagsug button:hover{background:var(--frame)}
+.tagsug .n{font-family:var(--data);font-size:11px;color:var(--muted)}
+.tagsug .hint{padding:4px 7px;font-size:11px;color:var(--muted);line-height:1.4}
 
 /* ---------- preview strip ---------- */
 .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
@@ -321,7 +350,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .cellwrap:hover .rate button,.cellwrap .rate:focus-within button{opacity:1}
 
 /* ---------- text list ---------- */
-.lhead,.lrow{display:grid;grid-template-columns:112px minmax(70px,1.1fr) 1fr 1fr 46px;
+.lhead,.lrow{display:grid;
+  grid-template-columns:112px minmax(70px,1.1fr) minmax(0,.9fr) 1fr 1fr 46px;
   gap:10px;align-items:baseline;padding:4px 6px;text-align:left;width:100%}
 .lhead{font-family:var(--display);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:7px;
@@ -333,6 +363,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .lrow .c-fl{font-family:var(--data);font-size:11.5px;color:var(--muted);text-align:right}
 .lrow .c-cam,.lrow .c-lens{color:var(--muted)}
 .lrow:hover .c-cam,.lrow:hover .c-lens{color:var(--paper)}
+/* Tags in the list are read-only, and in the same yellow the rating uses: both
+   are things you put there yourself, and that is worth seeing at a glance while
+   working down a list the rest of which came out of the files. */
+.lrow .c-tags{font-size:11.5px;color:var(--safelight)}
 .lrow.open{background:#2C2A34}
 /* Files sharing a name but differing in size are different groups. Without the
    rule they sit flush together and look like a duplicate found in error. */
@@ -364,8 +398,22 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .veil.on{display:flex}
 .detail{background:var(--panel);border:1px solid var(--line);border-radius:4px;max-width:1000px;
   width:100%;max-height:92vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.5fr) 300px}
+/* The picture sits in a frame of its own so the arrows have something to be
+   positioned against: over the photograph itself, not over the card. */
+.detail .frame{position:relative;min-width:0;background:#0E0D11}
 .detail img{width:100%;height:100%;max-height:92vh;object-fit:contain;background:#0E0D11;display:block;
   cursor:zoom-in}
+.nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:42px;height:66px;
+  display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;
+  color:var(--paper);background:rgba(10,9,13,.55);border:1px solid transparent;
+  border-radius:3px;opacity:0;transition:opacity .15s}
+.nav.prev{left:10px}
+.nav.next{right:10px}
+/* Hidden rather than dimmed at the ends of the selection: a button that cannot
+   do anything is one more thing over the photograph. */
+.nav[disabled]{display:none}
+.detail:hover .nav{opacity:.7}
+.nav:hover{opacity:1;border-color:var(--safelight);color:var(--safelight)}
 /* Double-click and the picture takes the whole window: the card, its margins and
    the metadata all get out of the way, which is the only way to actually look at
    a photograph. Double-click again, or Escape, and the card comes back. */
@@ -374,6 +422,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   grid-template-columns:1fr;border:0;border-radius:0;overflow:hidden}
 .veil.full .meta{display:none}
 .veil.full .detail img{max-height:100vh;height:100vh;cursor:zoom-out;background:#0A090D}
+.veil.full .detail .frame{background:#0A090D}
+/* Nothing to hover over in the whole-window view — the card is gone and the
+   cursor is somewhere in the middle of a photograph, so the arrows show. */
+.veil.full .nav{opacity:.55}
+.veil.full .nav.prev{left:18px}
+.veil.full .nav.next{right:18px}
 .meta{padding:18px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
 .meta h3{font-family:var(--display);font-size:14px;letter-spacing:.1em;text-transform:uppercase;
   margin:0;word-break:break-all}
@@ -387,9 +441,17 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    to the bottom — rating is something you do to the picture, not an action on
    the file like opening it. */
 .ratebox{display:flex;align-items:center;gap:12px;padding:12px 0;
-  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.ratebox .rlab{font-family:var(--display);font-size:11px;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--muted)}
+  border-top:1px solid var(--line)}
+/* Rating and tags share one block of two lines: both are yours rather than the
+   file's, and a border between them would read as two unrelated things. */
+.tagbox{display:flex;align-items:flex-start;gap:12px;padding:0 0 12px;
+  border-bottom:1px solid var(--line)}
+.tagbox .rlab{padding-top:3px}
+/* One width for both labels, so the rating and the tags under it start at the
+   same place instead of stepping in and out by the length of the word. */
+.ratebox .rlab,.tagbox .rlab{font-family:var(--display);font-size:11px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  flex:none;width:58px}
 .ratebox .rate button{font-size:17px;padding:0 3px}
 .ratebox .rate .star{font-size:19px}
 .ratebox .rate .bad{font-size:16px}
@@ -412,7 +474,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 }
 @media (max-width:760px){
   .lhead,.lrow{grid-template-columns:100px 1fr 46px}
-  .lhead .c-cam,.lhead .c-lens,.lrow .c-cam,.lrow .c-lens{display:none}
+  .lhead .c-cam,.lhead .c-lens,.lhead .c-tags,
+  .lrow .c-cam,.lrow .c-lens,.lrow .c-tags{display:none}
   .strip{grid-template-columns:repeat(4,1fr)}
 }
 @media (max-width:1000px){
@@ -488,7 +551,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="group" id="g-rating">
     <button class="group-head" aria-expanded="true">
       <span class="num">02</span>
-      <span class="ttl">Rating</span>
+      <span class="ttl">Rating and tags</span>
       <span class="rule"></span>
       <span class="cnt"></span>
       <span class="caret">−</span>
@@ -505,6 +568,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
         EXIF — what the camera wrote when you pressed its star button. Rate a photo
         here and your rating takes over; clear it and the camera's stars come back.
         Your ratings live in this database only, never in the files.</div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Tags</div>
+        <div class="grow"></div>
+        <div class="card-note" id="tagNote"></div>
+      </div>
+      <div class="rows" id="tags"></div>
+      <div class="card-note" style="margin-top:9px">Up to three tags a photo,
+        letters and digits, added in an expanded row or in the photo card. Pick
+        several here to see the photos carrying any of them. Tags live in this
+        database only, never in the files.</div>
     </section>
     </div>
   </div>
@@ -692,7 +767,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="strip" id="strip"></div>
 
     <div class="lhead">
-      <span>Taken</span><span>File</span><span class="c-cam">Camera</span>
+      <span>Taken</span><span>File</span><span class="c-tags">Tags</span>
+      <span class="c-cam">Camera</span>
       <span class="c-lens">Lens</span><span style="text-align:right">mm</span>
     </div>
     <div id="list"></div>
@@ -711,7 +787,7 @@ const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
   camera:"Camera", lens:"Lens", focal:"Focal", year:"Year", folder:"Folder",
   q:"Search", ext:"Format", geo:"Place", aperture:"Aperture", exposure:"Shutter",
   iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
-  rating:"Rating",
+  rating:"Rating", tag:"Tag",
   tone:"Tone", brightness:"Brightness", contrast:"Contrast", clipping:"Clipping",
   baddate:"Date"};
 /* Range labels come from the server — kept here for the filter chips. */
@@ -756,7 +832,10 @@ function params(extra){
   return p;
 }
 
-const MULTI = ["year", "ym", "month", "hour"];      // where a set of values accumulates
+// where a set of values accumulates: an ordinary click adds rather than replaces.
+// Tags belong here — picking two means "either of them", and asking for a
+// modifier key to say so would hide the one thing the panel is for.
+const MULTI = ["year", "ym", "month", "hour", "tag"];
 const picked = p => state.filters[p] || [];
 const isOn = (p, k) => picked(p).includes(String(k));
 let lastPick = {};                                  // the anchor for picking a range
@@ -1317,7 +1396,6 @@ function effRating(it){
    rows line up under one another instead of ragging left. */
 function ratingGlyph(k){
   const s = document.createElement("span");
-  if (k === NONE){ s.className = "rt none"; s.textContent = "not rated"; return s; }
   if (k === "great"){ s.className = "rt great"; s.textContent = "5+"; return s; }
   if (k === "bad"){ s.className = "rt bad"; s.textContent = "✗ bad"; return s; }
   s.className = "rt";
@@ -1349,7 +1427,8 @@ function renderRating(items){
     b.onclick = e => toggleFilter("rating", it.k, e);
     box.appendChild(b);
   });
-  const rated = items.filter(i => i.k !== NONE).reduce((s, i) => s + i.v, 0);
+  // every row is a rating now that the unrated are not one of them
+  const rated = items.reduce((s, i) => s + i.v, 0);
   $("rateNote").textContent = rated ? nf(rated) + " rated" : "none rated yet";
 }
 
@@ -1360,7 +1439,9 @@ function renderRating(items){
 function bumpRating(from, to){
   const items = state.ratingItems;
   if (!items) return;
-  const find = k => items.find(i => i.k === (k || NONE));
+  // The unrated have no row, so a photo handed back to EXIF leaves its old row
+  // and joins nothing: there is no total here for the missing to add up to.
+  const find = k => k ? items.find(i => i.k === k) : null;
   const a = find(from), b = find(to);
   if (a) a.v = Math.max(0, a.v - 1);
   if (b) b.v += 1;
@@ -1451,6 +1532,219 @@ function refreshRating(it){
     .forEach(old => old.replaceWith(ratingControl(it)));
 }
 
+/* ---------- tags ----------
+   Up to three words a photo, letters and digits, lower case. The server decides
+   all three: what is checked here only catches a slip before it becomes a
+   request, and says so in the same words the server would. */
+const TAG_MAX = 3;
+const TAG_LEN = 24;
+const TAG_OK = /^[\p{L}\p{N}]+$/u;
+const TAG_RULE = "A tag is letters and digits only, no more than " + TAG_LEN +
+                 " characters";
+
+function tagsOf(it){ return it.tags ? String(it.tags).split(",") : []; }
+
+/* Near enough to the folding the server does to judge what was typed. NFC
+   because "й" comes in two shapes that look identical and are not the same
+   string; lower case because a tag has one. JavaScript has no casefold, so a
+   rare letter may still come back from the server folded differently — it is
+   the one that decides, and what it returns is what gets drawn. */
+function tagClean(raw){
+  return (raw || "").trim().normalize("NFC").toLowerCase();
+}
+
+function renderTags(items){
+  state.tagItems = items;
+  renderRows("tags", items, "tag", 12);
+  const n = items.length;
+  $("tagNote").textContent = n ? n + plural(n, " tag", " tags") + " in use"
+                               : "none yet";
+}
+
+/* Counts are patched rather than refetched, for the reason bumpRating gives:
+   while tagging a batch, a reload would pull a fresh set of random photos and
+   collapse every open row. A tag used for the first time is a row that did not
+   exist, and the last photo losing a tag is a row that has to go. */
+function bumpTags(before, after){
+  const items = state.tagItems;
+  if (!items) return;
+  const move = (key, by) => {
+    let row = items.find(i => i.k === key);
+    if (!row){
+      if (by < 0) return;
+      row = {k: key, l: key, v: 0};
+      items.push(row);
+    }
+    row.v = Math.max(0, row.v + by);
+  };
+  before.filter(t => !after.includes(t)).forEach(t => move(t, -1));
+  after.filter(t => !before.includes(t)).forEach(t => move(t, +1));
+  const left = items.filter(i => i.v > 0);
+  left.sort((a, b) => b.v - a.v || (a.k < b.k ? -1 : 1));
+  renderTags(left);
+}
+
+/* One control, used in an expanded row and in the photo card. Every copy on
+   screen showing the same photo is rebuilt after a save, so tagging in one
+   place does not leave stale chips in another. */
+function tagControl(it){
+  const box = document.createElement("div");
+  box.className = "tagctl";
+  box.dataset.pid = it.id;
+  const list = tagsOf(it);
+
+  list.forEach(t => {
+    const chip = document.createElement("span");
+    chip.className = "tg";
+    chip.appendChild(document.createTextNode(t));
+    const x = document.createElement("button");
+    x.textContent = "×";
+    x.title = "Remove this tag";
+    x.onclick = ev => { ev.stopPropagation();
+                        saveTags(it, list.filter(v => v !== t)); };
+    chip.appendChild(x);
+    box.appendChild(chip);
+  });
+
+  if (list.length >= TAG_MAX){
+    const f = document.createElement("span");
+    f.className = "full";
+    f.textContent = TAG_MAX + " is the limit — remove one to add another";
+    box.appendChild(f);
+    return box;
+  }
+
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.maxLength = TAG_LEN;
+  inp.placeholder = list.length ? "one more" : "add a tag";
+  inp.title = TAG_RULE;
+  const sug = document.createElement("div");
+  sug.className = "tagsug";
+  box.append(inp, sug);
+  wireSuggest(it, list, inp, sug);
+  return box;
+}
+
+/* The suggestions. They come from the whole archive rather than the selection:
+   a tag used only outside the current filter has to be offered, or the same
+   word gets typed in a second time and becomes a tag of its own. */
+function wireSuggest(it, list, inp, sug){
+  let items = [], sel = -1, timer;
+
+  const close = () => {
+    sug.classList.remove("on"); sug.innerHTML = ""; items = []; sel = -1;
+  };
+
+  const add = raw => {
+    const t = tagClean(raw);
+    if (!t) return;
+    if (!TAG_OK.test(t) || t.length > TAG_LEN){ toast(TAG_RULE + "."); return; }
+    if (list.includes(t)){ inp.value = ""; close(); return; }
+    saveTags(it, list.concat(t));
+  };
+
+  const draw = () => {
+    sug.innerHTML = "";
+    items.forEach((t, i) => {
+      const b = document.createElement("button");
+      b.className = i === sel ? "sel" : "";
+      b.innerHTML = '<span></span><span class="n"></span>';
+      b.firstChild.textContent = t.tag;
+      b.querySelector(".n").textContent = nf(t.n);
+      // mousedown rather than click: the input loses focus first, and the blur
+      // that closes the list would take the button out from under the cursor
+      b.onmousedown = ev => { ev.preventDefault(); add(t.tag); };
+      sug.appendChild(b);
+    });
+    const typed = tagClean(inp.value);
+    if (typed && !items.some(t => t.tag === typed)){
+      const h = document.createElement("div");
+      h.className = "hint";
+      h.textContent = TAG_OK.test(typed) && typed.length <= TAG_LEN
+        ? "Enter adds “" + typed + "” — a new tag"
+        : TAG_RULE;
+      sug.appendChild(h);
+    }
+    sug.classList.toggle("on", !!sug.childNodes.length);
+  };
+
+  const suggest = () => {
+    ask("tagsug", "/api/tags?limit=8&q=" + encodeURIComponent(inp.value.trim()))
+      .then(d => {
+        items = (d.items || []).filter(t => !list.includes(t.tag));
+        sel = -1;
+        draw();
+      })
+      .catch(quiet);
+  };
+
+  inp.oninput = () => { clearTimeout(timer); timer = setTimeout(suggest, 160); };
+  inp.onfocus = suggest;
+  // a blur closes the list, but not before a click on it has been delivered
+  inp.onblur = () => setTimeout(close, 120);
+  inp.onkeydown = ev => {
+    if (ev.key === "Enter"){
+      ev.preventDefault();
+      add(sel >= 0 ? items[sel].tag : inp.value);
+      return;
+    }
+    if (ev.key === "Escape"){
+      // Escape backs out of the list first. Without stopping it here the photo
+      // card would close underneath, losing the photo along with the word.
+      if (sug.classList.contains("on")){ ev.stopPropagation(); close(); }
+      return;
+    }
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+    ev.preventDefault();
+    if (!items.length) return;
+    sel = ev.key === "ArrowDown" ? Math.min(sel + 1, items.length - 1)
+                                 : Math.max(sel - 1, -1);
+    draw();
+  };
+}
+
+function saveTags(it, next){
+  const before = tagsOf(it);
+  const p = new URLSearchParams();
+  next.forEach(t => p.append("tag", t));
+  const busy = on => document.querySelectorAll('.tagctl[data-pid="' + it.id + '"]')
+    .forEach(el => el.classList.toggle("busy", on));
+  busy(true);
+  fetch("/api/tags/" + it.id + "?" + p.toString(), {method: "POST"})
+    .then(r => r.json())
+    .then(r => {
+      if (!r.ok){ toast(r.error || "Could not save the tags"); return; }
+      it.tags = r.tags.join(",");
+      // The same photo can be two objects at once — one from the list, one from
+      // the random strip — and the card may have been opened from either. The
+      // row would keep its old tags until the next reload otherwise.
+      listItems.forEach(p => { if (p.id === it.id) p.tags = it.tags; });
+      bumpTags(before, r.tags);
+      refreshTags(it);
+    })
+    .catch(() => toast("Could not save the tags"))
+    .finally(() => busy(false));
+}
+
+function refreshTags(it){
+  const text = tagsOf(it).join(" ");
+  document.querySelectorAll('.c-tags[data-pid="' + it.id + '"]').forEach(el => {
+    el.textContent = text;
+    el.title = text;
+  });
+  document.querySelectorAll('.tagctl[data-pid="' + it.id + '"]').forEach(old => {
+    // A control is replaced whole, so the one being typed in has to be handed
+    // its focus back — otherwise adding a tag drops you out of the field and
+    // the second tag is typed into the page.
+    const typing = old.contains(document.activeElement);
+    const neu = tagControl(it);
+    old.replaceWith(neu);
+    const inp = typing ? neu.querySelector("input") : null;
+    if (inp) inp.focus();
+  });
+}
+
 /* ---------- preview strip ----------
    Thumbnails are loaded strictly one at a time: a browser holds no more than six
    connections to a server, and a parallel batch of pictures would block clicks on
@@ -1504,7 +1798,7 @@ function renderStrip(items){
     b.querySelector(".noimg").textContent = it.ext.toUpperCase();
     b.querySelector(".cap").textContent = (it.taken || "").slice(0, 10);
     b.title = it.filename + "\n" + (it.taken || "");
-    b.onclick = () => openDetail(it);
+    b.onclick = () => openDetail(it, items);
     wrap.appendChild(b);
     wrap.appendChild(ratingControl(it));
     box.appendChild(wrap);
@@ -1537,7 +1831,7 @@ function expandRow(row, it){
   box.innerHTML =
     '<button class="pic" title="Open large"><span class="noimg"></span></button>' +
     '<div class="info"><div class="facts"></div><div class="path"></div>' +
-    '<div class="acts2"></div></div>';
+    '<div class="tagline"></div><div class="acts2"></div></div>';
 
   const pic = box.querySelector(".pic");
   pic.querySelector(".noimg").textContent = it.ext.toUpperCase();
@@ -1588,6 +1882,8 @@ function expandRow(row, it){
        (it.size / 1048576).toFixed(1) + " MB  ·  " + nf(it.size) + " bytes");
   if (it.dup_n > 1)
     line(it.dup_n + " files look identical — pick \u201chas duplicates\u201d to see them together");
+
+  box.querySelector(".tagline").appendChild(tagControl(it));
 
   const acts = box.querySelector(".acts2");
   acts.appendChild(ratingControl(it));
@@ -1652,11 +1948,16 @@ function renderList(data, append){
     const b = document.createElement("button");
     b.className = "lrow";
     b.innerHTML = '<span class="c-time"></span><span class="c-name"></span>' +
+      '<span class="c-tags"></span>' +
       '<span class="c-cam"></span><span class="c-lens"></span><span class="c-fl"></span>';
     const put = (cls, v) => { const e = b.querySelector(cls); e.textContent = v; e.title = v; };
     const fl = state.eq ? it.focal35 : it.focal;
     put(".c-time", (it.taken || "").slice(0, 16));
     put(".c-name", it.filename + (it.dup_n > 1 ? "  ×" + it.dup_n : ""));
+    // read-only here: the row is a button, and the editor belongs where there is
+    // room for it — open the row or the card to change them
+    b.querySelector(".c-tags").dataset.pid = it.id;
+    put(".c-tags", tagsOf(it).join(" "));
     if (state.filters.dup){
       const group = it.filename.toLowerCase() + "|" + it.size + "|" + it.taken;
       if (lastGroup !== null && group !== lastGroup) b.classList.add("gsep");
@@ -1668,6 +1969,9 @@ function renderList(data, append){
     b.onclick = () => expandRow(b, it);
     box.appendChild(b);
   });
+  // how many the selection holds in all, not how many are listed: the arrows in
+  // the photo card ask for the next page when they run past what is loaded
+  state.listTotal = data.total;
   $("sheetNote").textContent = nf(data.total) + " photos" +
     (data.total > listItems.length ? " · listed " + nf(listItems.length) : "");
   const foot = $("sheetFoot"); foot.innerHTML = "";
@@ -1680,8 +1984,14 @@ function renderList(data, append){
   }
 }
 
-/* ---------- photo card ---------- */
-function openDetail(it){
+/* ---------- photo card ----------
+   The card remembers the set it was opened from, so the arrows flip through
+   what you were looking at: the sorted list if it was opened from a row, the
+   ten random frames if from the preview strip. Flipping through the list from
+   a thumbnail in the strip would jump somewhere else in the archive. */
+function openDetail(it, deck){
+  state.deck = deck || listItems;
+  state.shown = it;
   const d = $("detail");
   const rows = [
     ["Taken", it.taken + (it.date_src === "file" ? " (from file date)" : "")],
@@ -1716,9 +2026,13 @@ function openDetail(it){
       ? "mixed  ·  most often " + it.color_center + ", " + cshare
       : it.color_center + (cshare ? "  ·  " + cshare : "")]);
   }
-  d.innerHTML = '<img alt=""><div class="meta"><h3></h3><dl></dl>' +
+  d.innerHTML = '<div class="frame"><img alt="">' +
+    '<button class="nav prev" title="Previous photo (←)">‹</button>' +
+    '<button class="nav next" title="Next photo (→)">›</button></div>' +
+    '<div class="meta"><h3></h3><dl></dl>' +
     '<div class="path"></div>' +
     '<div class="ratebox"><span class="rlab">Rating</span></div>' +
+    '<div class="tagbox"><span class="rlab">Tags</span></div>' +
     '<div class="acts">' +
     '<button class="act primary" data-a="reveal">Show in explorer</button>' +
     '<button class="act" data-a="open">Open file</button>' +
@@ -1742,10 +2056,17 @@ function openDetail(it){
     dl.append(dt, dd);
   });
   d.querySelector(".ratebox").appendChild(ratingControl(it));
+  d.querySelector(".tagbox").appendChild(tagControl(it));
   d.querySelector("img").title = "Double-click for the whole window";
+  d.querySelector(".nav.prev").onclick = () => step(-1);
+  d.querySelector(".nav.next").onclick = () => step(1);
+  d.querySelector(".nav.prev").disabled = !canStep(-1);
+  d.querySelector(".nav.next").disabled = !canStep(1);
   d.ondblclick = e => {
     // In the card only the picture reacts, or double-clicking a button would
-    // throw you into the whole-window view. Once there, anywhere does.
+    // throw you into the whole-window view. Once there, anywhere does — except
+    // on an arrow, where two quick clicks are two photos, not a change of view.
+    if (e.target.closest(".nav")) return;
     if (full() || e.target.tagName === "IMG") toggleFull(it);
   };
   d.querySelectorAll(".act").forEach(b => b.onclick = () => {
@@ -1758,8 +2079,44 @@ function openDetail(it){
       .catch(() => toast("Could not open the file"));
   });
   $("veil").classList.add("on");
+  // Stepping while the picture fills the window keeps it filling the window,
+  // and the 1400-pixel copy this card just asked for is not enough for that.
+  if (full()) sharpen(it);
 }
 const full = () => $("veil").classList.contains("full");
+
+/* ---------- flipping through the selection ----------
+   The list holds only the photos paged in so far. Stopping dead at the three
+   hundredth of six thousand would make the arrows useless on an unfiltered
+   archive, so the next page is fetched and the step finished when it lands. */
+function deckIndex(){
+  const deck = state.deck || [];
+  return deck.findIndex(p => p.id === (state.shown || {}).id);
+}
+
+function moreToCome(){
+  return state.deck === listItems && listItems.length < (state.listTotal || 0);
+}
+
+function canStep(by){
+  const i = deckIndex();
+  if (i < 0) return false;
+  if (by < 0) return i > 0;
+  return i < state.deck.length - 1 || moreToCome();
+}
+
+function step(by){
+  const i = deckIndex();
+  if (i < 0) return;
+  const deck = state.deck;
+  const next = deck[i + by];
+  if (next) return openDetail(next, deck);
+  if (by > 0 && moreToCome())
+    loadPhotos(listItems.length).then(() => {
+      const more = listItems[i + 1];
+      if (more) openDetail(more, listItems);
+    });
+}
 
 /* The card shows a 1400-pixel copy, which is right for a 640-pixel-wide slot and
    soft once it fills the window. The bigger one is fetched on the way in and
@@ -1769,12 +2126,20 @@ function toggleFull(it){
   const img = $("detail").querySelector("img");
   if (!img) return;
   img.title = on ? "Double-click to come back" : "Double-click for the whole window";
-  if (!on) return;
+  if (on) sharpen(it);
+}
+
+function sharpen(it){
+  const img = $("detail").querySelector("img");
+  if (!img) return;
   const want = Math.max(1400, Math.min(2800,
     Math.round(window.innerWidth * (window.devicePixelRatio || 1))));
   if (want <= 1400) return;
   const big = new Image();
-  big.onload = () => { if (full()) img.src = big.src; };
+  // The arrows can move on while this is still loading, and a sharp copy of the
+  // photo before last dropped into the frame would be a photograph nobody asked
+  // for — so what is on screen is checked again on the way in.
+  big.onload = () => { if (full() && state.shown === it) img.src = big.src; };
   big.src = "/api/thumb/" + it.id + "?s=" + want;
 }
 
@@ -1789,6 +2154,16 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (full()) $("veil").classList.remove("full"); else closeDetail();
 });
+/* Arrows flip through the selection while a photo is open — the whole-window
+   view included, where the buttons are the only thing on screen that is not the
+   photograph. Not while a tag is being typed: there the arrows belong to the
+   text and to the list of suggestions under it. */
+document.addEventListener("keydown", e => {
+  if (!$("veil").classList.contains("on")) return;
+  if (e.target && e.target.closest && e.target.closest("input, textarea")) return;
+  if (e.key === "ArrowLeft") step(-1);
+  else if (e.key === "ArrowRight") step(1);
+});
 
 let toastTimer;
 function toast(msg){
@@ -1802,8 +2177,10 @@ function loadFolders(){
     .then(renderFolders).catch(quiet);
 }
 
+/* Returns the request: the arrows in the photo card wait on it before stepping
+   into a page that was not loaded yet. */
 function loadPhotos(offset){
-  ask("photos", "/api/photos?" + params({offset: offset || 0, limit: state.limit}))
+  return ask("photos", "/api/photos?" + params({offset: offset || 0, limit: state.limit}))
     .then(d => renderList(d, offset > 0))
     .catch(e => {
       // a silent failure here looks like an empty selection, and the cause has
@@ -1893,6 +2270,7 @@ function load(){
     renderRows("size", d.charts.size, "size", 12);
     renderRows("dup", d.charts.dup || [], "dup", 4);
     renderRating(d.charts.rating || []);
+    renderTags(d.charts.tags || []);
     $("dupNote").textContent = d.dupGroups
       ? nf(d.dupGroups) + plural(d.dupGroups, " file", " files") + " duplicated"
       : "none found";

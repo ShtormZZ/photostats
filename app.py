@@ -30,6 +30,7 @@ from flask import (Flask, Response, abort, g, jsonify, request, send_file,
                    send_from_directory)
 
 import dupkey
+import tags
 
 try:
     from version import VERSION
@@ -201,6 +202,26 @@ def rating_label(v):
     return RATING_LABELS.get(v) or "★" * int(v)
 
 
+# Tags sit in photo_tags, one row per tag per photo — the rule and the schema are
+# in tags.py. The filters below are plain SQL over unqualified column names, so
+# they drop into a WHERE built for `photos` without a join or an alias.
+
+
+def has_tag(n):
+    return (f"photos.id IN (SELECT photo_id FROM photo_tags "
+            f"WHERE tag IN ({','.join('?' * n)}))")
+
+
+UNTAGGED = "photos.id NOT IN (SELECT photo_id FROM photo_tags)"
+
+# The tags of one photo, for the list and the card. group_concat has no defined
+# order of its own, so the sort happens in a subquery — otherwise the chips
+# reshuffle between two requests for no reason the reader can see. A comma is
+# safe as the separator: a tag is letters and digits, and can hold neither one.
+TAG_COL = ("(SELECT group_concat(tag) FROM (SELECT tag FROM photo_tags"
+           " WHERE photo_id = photos.id ORDER BY tag)) AS tags")
+
+
 # Derived dimensions: the value is worked out from the numbers in the query
 # itself, so the thresholds can be changed here without re-analysing the archive.
 DERIVED_DIMS = {
@@ -334,6 +355,22 @@ def build_where(skip=None):
                 params.append(v)
         clauses.append("(" + " OR ".join(parts) + ")")
 
+    vals = request.args.getlist("tag")
+    if vals and "tag" not in skips:
+        # Several tags mean "any of these", the way every other panel here reads.
+        # Values are normalised on the way in, so a tag typed with a capital or
+        # in a decomposed form still matches what is stored; NONE_KEY holds an
+        # underscore and cannot survive normalisation, so it never reaches the IN.
+        wanted = [t for t in (tags.normalize(v) for v in vals) if t]
+        parts = []
+        if NONE_KEY in vals:
+            parts.append(UNTAGGED)
+        if wanted:
+            parts.append(has_tag(len(wanted)))
+            params += wanted
+        if parts:
+            clauses.append("(" + " OR ".join(parts) + ")")
+
     if request.args.get("baddate") and "baddate" not in skips:
         lo, hi = year_range()
         clauses.append("(year < ? OR year > ?)")
@@ -384,16 +421,43 @@ def counts(col, skip, labeller=None, order="cnt", limit=None):
 
 
 def rating_counts():
-    """Best first, unrated last — counts would put the empty majority on top."""
-    items = counts(rating_key(), skip="rating", labeller=rating_label)
+    """Best first, and only what carries a rating.
+
+    The unrated are left out of the panel. In any archive they are most of it,
+    and a bar for them set the scale for the rest: five stars against forty
+    thousand unrated is a line a pixel wide, which is the one thing the panel is
+    there to show. The selection is still there for anyone who wants it —
+    `rating=__none__` asks for it.
+    """
+    items = [it for it in counts(rating_key(), skip="rating",
+                                 labeller=rating_label)
+             if it["k"] != NONE_KEY]
     rank = {k: i for i, k in enumerate(RATING_ORDER)}
     items.sort(key=lambda it: rank.get(it["k"], len(rank)))
-    for it in items:
-        if it["k"] == NONE_KEY:
-            # "not specified" is right for a missing lens and wrong here: nobody
-            # specifies a rating, they give one or they do not
-            it["l"] = "not rated"
     return items
+
+
+def tag_counts():
+    """The tags panel: how many photos of the selection carry each tag.
+
+    The only count in the program that is not a GROUP BY over `photos`: one photo
+    holds up to three tags, so the rows being counted are the tags. Photos with
+    no tag are not one of them, for the reason rating_counts() gives — they are
+    the bulk of an archive being tagged, and a bar for them leaves every real tag
+    too short to compare. `tag=__none__` still selects them.
+    """
+    where, params = build_where(skip="tag")
+    # With nothing filtered the join is not needed, and it is what costs: over an
+    # archive of 105 000 photos with a third of them tagged, counting through the
+    # join took 317 ms against 9 for the same count straight off the index. That
+    # is the first screen every time the page is opened.
+    counted = (f"SELECT t.tag AS k, COUNT(*) AS cnt FROM photo_tags t"
+               f" JOIN photos ON photos.id = t.photo_id {where}" if where else
+               "SELECT tag AS k, COUNT(*) AS cnt FROM photo_tags")
+    with db() as con:
+        rows = con.execute(f"{counted} GROUP BY k ORDER BY cnt DESC, k",
+                           params).fetchall()
+    return [{"k": r["k"], "l": r["k"], "v": r["cnt"]} for r in rows]
 
 
 def bucket_counts(key):
@@ -564,6 +628,7 @@ def api_stats():
             "clipping": derived_counts("clipping"),
             "dup": derived_counts("dup"),
         "rating": rating_counts(),
+        "tags": tag_counts(),
         },
     })
 
@@ -752,7 +817,7 @@ def api_photos():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera, lens,"
             f" focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
-            f" lat, lon, rating, mark,"
+            f" lat, lon, rating, mark, {TAG_COL},"
             f" (SELECT COUNT(*) FROM photos d"
             f"  WHERE {dup_key('d')} = {dup_key('photos')}) AS dup_n,"
             f" color, color_hex, color_share, color_center, color_center_hex,"
@@ -775,7 +840,7 @@ def api_random():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera,"
             f" lens, focal, focal35, iso, fnumber, shutter, exposure, width, height,"
-            f" size, ext, lat, lon, rating, mark,"
+            f" size, ext, lat, lon, rating, mark, {TAG_COL},"
             f" color, color_hex, color_share, color_center,"
             f" color_center_hex, color_center_share, brightness, contrast,"
             f" chroma, clip_hi, clip_lo"
@@ -877,6 +942,56 @@ def api_mark(pid):
     return jsonify({"ok": True, "rating": row["rating"], "mark": row["mark"]})
 
 
+@app.post("/api/tags/<int:pid>")
+def api_set_tags(pid):
+    """Replace the whole set of tags on one photo: tag=sea&tag=kids.
+
+    The whole set rather than one added or removed at a time. Two windows open on
+    the same photo cannot then race each other into a half-applied state, and
+    sending no tag at all clears them, which needs no verb of its own.
+    """
+    wanted = []
+    for raw in request.args.getlist("tag"):
+        tag = tags.normalize(raw)
+        if tag is None:
+            return jsonify({"ok": False,
+                            "error": f"“{raw}” is not a tag. "
+                                     f"{tags.rule_text()}."}), 400
+        if tag not in wanted:            # the same tag twice is one tag, not an error
+            wanted.append(tag)
+    if len(wanted) > tags.MAX_TAGS:
+        return jsonify({"ok": False,
+                        "error": f"Up to {tags.MAX_TAGS} tags per photo."}), 400
+    with db() as con:
+        if not con.execute("SELECT 1 FROM photos WHERE id = ?", (pid,)).fetchone():
+            return jsonify({"ok": False, "error": "No such photo"}), 404
+        con.execute("DELETE FROM photo_tags WHERE photo_id = ?", (pid,))
+        con.executemany("INSERT INTO photo_tags (photo_id, tag) VALUES (?, ?)",
+                        [(pid, t) for t in wanted])
+        con.commit()
+    return jsonify({"ok": True, "tags": wanted})
+
+
+@app.get("/api/tags")
+def api_tags():
+    """The tags already in use, for the suggestions under the input.
+
+    Over the whole archive, not the current selection. A tag that exists only
+    outside the filter would otherwise not be offered, and the same word would be
+    typed in a second time as a tag of its own — the one thing a vocabulary is
+    there to prevent.
+    """
+    q = tags.prefix(request.args.get("q"))
+    limit = max(1, min(int(request.args.get("limit", 20)), 100))
+    with db() as con:
+        rows = con.execute(
+            "SELECT tag, COUNT(*) AS n FROM photo_tags WHERE tag LIKE ?"
+            " GROUP BY tag ORDER BY (tag LIKE ?) DESC, n DESC, tag LIMIT ?",
+            (f"%{q}%", f"{q}%", limit)).fetchall()
+    return jsonify({"items": [{"tag": r["tag"], "n": r["n"]} for r in rows],
+                    "max": tags.MAX_TAGS})
+
+
 @app.post("/api/reveal/<int:pid>")
 def api_reveal(pid):
     """Show the file in the Windows file manager."""
@@ -924,14 +1039,14 @@ def api_export():
     with db() as con:
         rows = con.execute(
             f"SELECT taken, brand, camera, lens, focal, focal35, iso, fnumber,"
-            f" shutter, color, color_hex, color_center, color_center_hex,"
+            f" shutter, {TAG_COL}, color, color_hex, color_center, color_center_hex,"
             f" brightness, contrast, chroma, lat, lon,"
             f" width, height, size, path FROM photos {where}"
             f" ORDER BY taken", params).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
     w.writerow(["Taken", "Brand", "Camera", "Lens", "Focal, mm", "Equiv, mm",
-                "ISO", "Aperture", "Shutter", "Colour", "Hex",
+                "ISO", "Aperture", "Shutter", "Tags", "Colour", "Hex",
                 "Centre colour", "Centre hex", "Brightness",
                 "Contrast", "Chroma", "Latitude", "Longitude",
                 "Width", "Height", "Size", "Path"])
@@ -1010,6 +1125,10 @@ def main():
             if name not in cols:
                 con.execute(f"ALTER TABLE photos ADD COLUMN {name} {decl}")
                 con.commit()
+        # The table of tags, with the trigger that clears them when a photo goes.
+        # Here as well as in scan.py: either program may meet a database that
+        # predates tags, and whichever runs first has to build it.
+        tags.ensure_schema(con)
         con.execute("DROP INDEX IF EXISTS ix_dup")      # the key changed
         con.execute(f"CREATE INDEX IF NOT EXISTS ix_dupkey ON photos({name_key()})")
         con.execute("CREATE INDEX IF NOT EXISTS ix_sig ON photos(sig)")

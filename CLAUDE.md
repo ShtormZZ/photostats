@@ -20,7 +20,7 @@ For development, use the venv directly — `.venv/Scripts/python.exe` on Windows
 ```bash
 python tools/smoke_test.py          # the whole test suite
 python tools/check_license.py       # LICENSE must be the canonical AGPL text
-python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tools
+python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py tools
 python tools/make_icon.py           # redraw the icon files (they are committed)
 ```
 
@@ -44,7 +44,8 @@ nothing outside its temp folder and is what CI runs (Windows and Linux, 3.10 and
 ## Architecture
 
 **One flat table, no ORM.** `photos` holds a row per file, with EXIF columns, image
-metrics and `path`. Panels in the interface are `GROUP BY` over that table, and
+metrics and `path`. Tags are the one exception, in a table of their own — see the
+invariants below. Panels in the interface are `GROUP BY` over that table, and
 filters are a `WHERE` assembled in `app.py:build_where()` from repeated query
 parameters (`month=9&month=10`, not comma-separated — camera names contain commas).
 Each chart skips its own dimension when building the clause so it does not truncate
@@ -94,6 +95,24 @@ pass, so a rating a user set by hand would be destroyed the next time
 interface) is deliberately not, and `app.py:rating_key()` folds the two into the
 one rating shown, filtered and sorted. A smoke-test check re-scans with `--full`
 and fails if marks do not survive.
+
+**Tags are the one thing not in `photos`, and `tags.py` holds the rule.** A photo
+takes up to three, which is not the shape of a column, so they live in
+`photo_tags` (photo_id, tag) — the only table the panels join to. Three things
+to know:
+
+- `tags.ensure_schema()` is called from both `scan.py:open_db()` and
+  `app.py:main()`, for the reason the migration list below is duplicated. It is
+  not part of `scan.py:SCHEMA`: that text is split on semicolons, and a trigger
+  body contains one.
+- The trigger is what keeps the table honest — the scanner deletes rows for files
+  that are gone, and without it their tags stay behind and are counted. A foreign
+  key would not do: `PRAGMA foreign_keys` is off by default and per connection.
+- Fold case in Python (`casefold`, and NFC before it), never in SQL — the same
+  trap as `dupkey`, from the other side. Because the stored form is already
+  folded, every comparison is a plain `=`. `app.py:tag_counts()` skips the join
+  entirely when nothing is filtered: measured on 105k photos, the join cost
+  317 ms against 9 for the same count straight off `ix_tag`.
 
 **The migration column list is duplicated.** `scan.py:migrate()` and the startup
 block in `app.py:main()` both `ALTER TABLE ... ADD COLUMN` the same list, because

@@ -167,6 +167,12 @@ def rating_checks(db, photos):
     chart = {i["k"]: i["v"] for i in api("/api/stats")["charts"]["rating"]}
     check("rating chart counts EXIF stars",
           chart.get("4") == 2 and chart.get("2") == 1, str(chart))
+    # The unrated are most of any archive and would set the scale for the rest,
+    # so the panel leaves them out — but they are still selectable.
+    check("the panel lists ratings only", "__none__" not in chart, str(chart))
+    check("selecting the unrated still works",
+          api("/api/photos", rating="__none__")["total"]
+          == api("/api/stats")["total"] - 3)
 
     ids = {}
     for p in api("/api/photos", limit=50)["items"]:
@@ -208,6 +214,106 @@ def rating_checks(db, photos):
     kept = api("/api/photos", rating="5")["items"]
     check("a full re-scan leaves your marks alone",
           [p["filename"] for p in kept] == ["light_subject.jpg"], str(len(kept)))
+
+
+def tag_checks(db, photos):
+    """Tags: the rule on the way in, the panel, the filter, and the two things
+    that would destroy them without anybody noticing — a metadata re-read, and a
+    photo dropped from the database leaving its tags behind.
+    """
+    print("\ntags")
+    import sqlite3
+    import unicodedata
+
+    def put(pid, *values):
+        return post(f"/api/tags/{pid}?" +
+                    urllib.parse.urlencode([("tag", v) for v in values]))
+
+    def by_tag(*values):
+        q = urllib.parse.urlencode([("tag", v) for v in values])
+        return sorted(p["filename"] for p in api(f"/api/photos?{q}")["items"])
+
+    total = api("/api/stats")["total"]
+    items = api("/api/photos", limit=50)["items"]
+    first = items[0]["id"]
+    second = items[1]["id"]
+
+    code, body = put(first, "Море", "kids")
+    check("tags can be set", code == 200 and set(body.get("tags", [])) ==
+          {"море", "kids"}, str(body))
+    check("tags come back with the photo",
+          set(api("/api/photos", limit=50)["items"][0]["tags"].split(",")) ==
+          {"kids", "море"})
+
+    # Case is folded in Python, which folds Cyrillic — SQLite's own lower() does
+    # not. If the folding ever moves into the query, this is what fails.
+    check("a tag matches whatever case it is asked for",
+          by_tag("МОРЕ") == [items[0]["filename"]], str(by_tag("МОРЕ")))
+    # "й" and "е"+combining are separate strings until they are composed
+    check("a decomposed spelling finds the same tag",
+          by_tag(unicodedata.normalize("NFD", "море")) == [items[0]["filename"]])
+
+    put(second, "kids")
+    check("two photos share one tag", len(by_tag("kids")) == 2)
+    check("several tags mean any of them", len(by_tag("kids", "море")) == 2)
+
+    chart = {i["k"]: i["v"] for i in api("/api/stats")["charts"]["tags"]}
+    check("the panel counts photos per tag",
+          chart.get("kids") == 2 and chart.get("море") == 1, str(chart))
+    # The untagged are the bulk of an archive and would set the scale for every
+    # real tag, so the panel leaves them out — but they are still selectable.
+    check("the panel lists tags only", "__none__" not in chart, str(chart))
+    check("the panel does not truncate itself",
+          len(api("/api/stats", tag="море")["charts"]["tags"]) == len(chart))
+    check("selecting the untagged still works",
+          api("/api/photos", tag="__none__")["total"] == total - 2)
+
+    sug = {i["tag"]: i["n"] for i in api("/api/tags", q="ki")["items"]}
+    check("suggestions find a tag by its start", sug.get("kids") == 2, str(sug))
+    check("suggestions cover the whole archive, not the selection",
+          {i["tag"] for i in api("/api/tags", tag="море", q="ki")["items"]}
+          == {"kids"})
+
+    code, body = put(first, "a", "b", "c", "d")
+    check("a fourth tag is refused", code == 400, str(body))
+    code, body = put(first, "sea side")
+    check("a tag with a space is refused", code == 400, str(body))
+    code, body = put(first, "sea_side")
+    check("an underscore is refused", code == 400, str(body))
+    code, body = put(first, "x" * 25)
+    check("an over-long tag is refused", code == 400, str(body))
+    code, body = put(second, "kids", "Kids")
+    check("the same tag twice is one tag",
+          code == 200 and body.get("tags") == ["kids"], str(body))
+    check("a refused set changes nothing",
+          set(api("/api/photos", limit=1)["items"][0]["tags"].split(",")) ==
+          {"kids", "море"})
+
+    # A row dropped from photos must take its tags with it, or the panel counts
+    # photos that can no longer be shown. The scanner deletes such rows itself;
+    # here one is made and removed outright, which is the same delete.
+    con = sqlite3.connect(db, timeout=15)
+    con.execute("INSERT INTO photos (path, filename) VALUES (?, ?)",
+                (os.path.join(photos, "gone.jpg"), "gone.jpg"))
+    ghost = con.execute("SELECT id FROM photos WHERE filename = 'gone.jpg'"
+                        ).fetchone()[0]
+    con.commit()
+    con.close()
+    put(ghost, "ghost")
+    con = sqlite3.connect(db, timeout=15)
+    con.execute("DELETE FROM photos WHERE id = ?", (ghost,))
+    con.commit()
+    left, = con.execute("SELECT COUNT(*) FROM photo_tags WHERE photo_id = ?",
+                        (ghost,)).fetchone()
+    con.close()
+    check("a deleted photo takes its tags with it", left == 0, f"{left} left")
+
+    # The scanner owns no part of this table. A metadata re-read rewrites every
+    # column of every row; if tags ever moved into a column, this is what notices.
+    subprocess.run([sys.executable, os.path.join(ROOT, "scan.py"), photos,
+                    "--db", db, "--full"],
+                   capture_output=True, text=True, cwd=ROOT, timeout=300)
+    check("a full re-scan leaves your tags alone", len(by_tag("kids")) == 2)
 
 
 def check_dups_pass(tmp, photos, db):
@@ -382,7 +488,8 @@ def main():
 
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/export", timeout=20) as r:
             csv = r.read().decode("utf-8-sig")
-        check("CSV export", csv.count("\n") >= made and csv.startswith("Taken;"))
+        check("CSV export", csv.count("\n") >= made and csv.startswith("Taken;")
+              and "Tags" in csv.splitlines()[0])
 
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/thumb/1?s=120",
                                     timeout=20) as r:
@@ -390,6 +497,7 @@ def main():
         check("thumbnails", r.status == 200 and thumb[:2] == b"\xff\xd8", f"{len(thumb)} bytes")
 
         rating_checks(db, photos)
+        tag_checks(db, photos)
     finally:
         srv.terminate()
         srv.wait(timeout=10)

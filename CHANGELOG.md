@@ -6,6 +6,58 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Warm colours are named more like the eye names them. Three rules changed, and
+  `ALGO_VERSION` goes to 13 with them, so the next scan re-analyses the archive.
+  Brown was the commonest colour in an archive of 105 000 photos and is now
+  fourth: on 700 random frames it falls from 153 to 93, orange rises from 72 to
+  109 and yellow from 54 to 70.
+  - **A merged family is named by its own average colour** rather than by the
+    group in it with the most pixels. A golden maple was 43% brown against 28%
+    orange and 21% yellow — its shaded half outnumbered each of the lit halves
+    separately — so a plurality of 43% named the whole 92%. The average is the
+    swatch shown beside the name, so a frame can no longer be called brown while
+    displaying an ochre chip. Where the average falls outside the family,
+    counting decides as before: the name must be a colour the frame really has.
+  - **Brown ends at half brightness, not at 0.62.** The old line meant a
+    brightest channel of 158, and rgb(158, 102, 43) is ochre, not chocolate. It
+    made brown 30% of the archive; at 0.55 it was still 22%, at 0.50 it is 13%.
+    What brown gives up divides between the two colours the eye would have used
+    anyway: muted light tones read as gold, vivid ones as orange. It does not go
+    lower — at 0.45 brown is 5% and orange inherits everything, tans included,
+    which only moves the crowding from one name to another.
+  - **Orange gives way to yellow at 40°, not 45°.** A sunlit autumn crown
+    measures 35 to 50° at nearly full purity and reads as yellow all through;
+    below 40° are the hues nobody calls yellow — skin, terracotta, a ripe orange.
+  The purity ceiling that separates gold from a ripe orange is untouched, and so
+  is the brightness below which a warm tone is not a colour at all.
+
+- The photo card flips through the selection: arrows over the edges of the
+  picture, or the ← and → keys, with no going back to the list in between. The
+  set flipped through is the one the card was opened from — the sorted list from
+  a row, the ten random frames from the preview strip — so a thumbnail never
+  drops you somewhere else in the archive. Walking past the end of what the list
+  has loaded fetches the next page instead of stopping at the three hundredth
+  photo of six thousand, and at the ends of the selection the arrow with nowhere
+  to go is hidden rather than dimmed. Both work in the whole-window view, which
+  keeps the sharper copy as you go; the arrow keys stay out of it while a tag is
+  being typed, where they belong to the text.
+
+- Photos take tags: up to three a photo, one word each, letters and digits of
+  any alphabet, stored in lower case so `Sea`, `SEA` and `sea` stay one tag. The
+  field sits under the rating in an expanded row and in the photo card, and
+  offers the tags already in the archive as you type, with the number of photos
+  on each — from the whole archive rather than the current selection, or a tag
+  used elsewhere would not be offered and the same word would be typed in twice.
+  A panel of its own counts them; picking several shows the photos carrying any
+  of them. Photos with no tag are not a row there — they are the bulk of an
+  archive being tagged, and a bar for them would leave every real tag too short
+  to compare. The list has a tags column, and so does the CSV export.
+  Tags live in a `photo_tags` table the scanner never writes to, so no pass can
+  wipe them, and a trigger clears them when a photo is dropped from the database.
+  Case is folded in Python, which folds Cyrillic — SQLite's own `lower()` does
+  not — and spellings are composed to NFC, so the two shapes of "й" cannot
+  become two tags.
+
 - The photo card opens to the whole browser window on a double-click of the
   picture: card, margins and metadata all step aside. Escape backs out of it one
   step at a time rather than closing everything at once. A sharper copy is
@@ -18,9 +70,10 @@ All notable changes to this project are documented here. The format follows
   stars stay invisible), and you can rate photos in the interface on top of that:
   one to five stars, a red ✗ for a bad frame, or 5+ for the best. One of the three
   at a time, and clicking what is set clears it, which hands the photo back to
-  whatever EXIF said. A group of its own lists the scale, the selection can be
-  sorted by it, and the control sits both in an expanded row and over a thumbnail
-  in the preview strip.
+  whatever EXIF said. A group of its own lists the scale — the ratings given,
+  not the unrated majority, which set the scale for every other bar — the
+  selection can be sorted by it, and the control sits both in an expanded row and
+  over a thumbnail in the preview strip.
   Ratings you give live in the database and nowhere else; no file is ever written
   to. They are kept in a `mark` column the scanner does not own, so re-reading
   metadata — which this release does, `EXIF_VERSION` having changed — cannot wipe

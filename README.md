@@ -105,7 +105,8 @@ Panels are grouped, and each group folds away.
 **When** — a film-strip timeline of the whole archive, months of the year,
 time of day with day and night on separate tracks.
 
-**Rating** — stars, and two marks of your own. See below.
+**Rating and tags** — stars and marks of your own, and up to three words a
+photo. See below.
 
 **EXIF metrics** — camera brands, models, lenses, focal lengths, aperture,
 shutter speed, ISO, file size, format and duplicates. Pick a camera or a lens and a second
@@ -136,9 +137,42 @@ they sit in a single row — clicking what is already set clears it.
 written to. Clearing a rating you set hands the photo back to whatever EXIF
 said, so the camera's own stars are never lost.
 
-The panel lists the scale best first, with everything unrated at the bottom, and
-the selection can be sorted by rating from the *sort* box. The same control is in
-the photo card, to the right of the picture.
+The panel lists the scale best first. Only the ratings given are there: the
+unrated are most of any archive, and a bar for them set the scale for the rest,
+leaving five stars a pixel wide. To work through what is not rated yet, sort the
+selection by rating from the *sort* box — the unrated come first. The same
+control is in the photo card, to the right of the picture.
+
+### Tags
+
+A photo takes **up to three tags**: one word each, letters and digits, no
+spaces and no punctuation. Any alphabet will do — `море` is as good a tag as
+`sea` — and everything is stored in lower case, so `Sea`, `SEA` and `sea` are
+one tag rather than three.
+
+Open a row in the list, or the photo card, and there is a field under the
+rating. Type, and the tags already in the archive appear underneath with the
+number of photos on each: pick one and the same word is used again rather than
+a near miss of it. The suggestions come from the whole archive, not from what
+is filtered at the time, so a tag used elsewhere is still offered. Enter takes
+what you typed, arrows walk the list, and the **×** on a chip removes that tag.
+
+The limit of three is the point of the feature. A photo with a dozen tags is a
+photo nobody will find again, and three fit on one line everywhere they are
+shown — in the list, in an expanded row and in the card.
+
+The panel lists tags by how many photos carry each. Photos with no tag are not
+a row there — while an archive is being tagged they are nearly all of it, and a
+bar for them would leave every real tag too short to tell apart. Picking several
+tags shows the photos carrying **any** of them, the way every other panel here
+works. Tags come out in the CSV export as one column.
+
+**Tags go into the database and nowhere else.** No file is ever written to.
+They live in a table of their own that no scanning pass touches, so re-reading
+metadata cannot wipe them; a photo deleted from disk takes its tags with it when
+the scanner drops the row. Moving a file to another folder is a new path and
+therefore a new photo to the database, which loses its tags — as it loses its
+rating, for the same reason.
 
 ### Duplicates
 
@@ -240,10 +274,19 @@ list where any row expands into a thumbnail and a summary with buttons to open
 the file or show it in the file manager. The selection exports to CSV.
 
 Clicking a thumbnail opens the photo card: the picture, everything known about
-it, and the rating. **Double-click the picture and it takes the whole browser
+it, the rating and the tags. **Double-click the picture and it takes the whole browser
 window** — no card, no metadata, just the photograph, with a sharper copy fetched
 to match. Double-click again, or press Escape, and the card comes back; Escape
 again closes it.
+
+Arrows over the left and right edges of the picture — or the **←** and **→**
+keys — flip through the selection without going back to the list. They page
+through the set the card was opened from: the sorted list if you opened it from
+a row, the ten random frames if from the preview strip. The list is loaded a
+page at a time, and walking past the end of what is loaded fetches the next page
+rather than stopping. At the ends of the selection the arrow that has nowhere to
+go is not shown. They work in the whole-window view too, which is where flipping
+through photographs is most of what you are doing.
 
 Sort that list by capture time, file name, file size, camera or folder, either
 way round. Or switch it to **folders** — the folders those photos live in, with
@@ -268,14 +311,20 @@ dark brown becomes black.
 **Warm tones split three ways by purity and brightness.** They all share the
 hue of an orange, so hue alone cannot separate them:
 
-- dark warm is **brown** — wood, bark, chocolate, earth. The arc reaches a
-  little past red, because leaf litter and rotting leaves sit there; a purity
-  ceiling on that stretch keeps wine and dark brick red;
+- dark warm is **brown** — wood, bark, chocolate, earth. Dark means half
+  brightness, a brightest channel below 128: above that the tone is an ochre,
+  and calling ochre brown made brown the commonest colour in an archive, a fifth
+  of every frame in it. The arc reaches a little past
+  red, because leaf litter and rotting leaves sit there; a purity ceiling on
+  that stretch keeps wine and dark brick red;
 - light and muted warm is **yellow** — wheat, straw, sand, sepia, which read as
   golden rather than orange;
-- pure and bright stays **orange** — a ripe orange, a sunset, autumn leaves.
+- pure and bright stays **orange** — a ripe orange, a sunset, terracotta.
 
-Skin sits at a redder hue than straw and stays orange.
+Skin sits at a redder hue than straw and stays orange. The boundary between
+orange and yellow is at 40°, not the 45° of the wheel: a sunlit autumn crown
+measures 35 to 50° and the eye calls all of it yellow, while nothing below 40°
+is ever called yellow.
 
 **Olive counts as green.** Summer foliage in sunlight sits at 60–68° — the hue
 of a lemon — so hue alone cannot tell them apart. Purity times brightness can:
@@ -298,8 +347,16 @@ for — an autumn frame would come out green again.
 **Warm groups compete as one family.** Brown, orange and yellow are split from
 each other by brightness and purity, not by hue, so that split should not decide
 which colour wins. An autumn frame would otherwise lose to a solid green: the
-leaves scatter into 14% orange, 12% yellow and 8% brown against 30% moss. The
-family is named after its largest member.
+leaves scatter into 14% orange, 12% yellow and 8% brown against 30% moss.
+
+**A merged family is named by its own average colour**, not by whichever group
+in it has the most pixels. Counting decided it before, and a plurality named the
+whole: a golden maple came out brown at 43% brown against 28% orange and 21%
+yellow, because its shaded half outnumbered each of the lit halves separately.
+The average is also the swatch shown beside the name, so the two can no longer
+disagree. Where the average falls outside the family, counting decides as
+before — the name has to be a colour that is really in the frame, or picking it
+in the panel would select nothing.
 
 **The centre is half the frame area,** cut from the middle. The dominant colour
 mostly describes the background and the centre one the subject, which is why
@@ -349,6 +406,10 @@ If you want a metric the interface does not have, it is usually one SQL query
 away. Old databases upgrade themselves: new columns are added, colour names
 were translated in place, and metadata is re-read without touching the image
 analysis.
+
+Tags are the one thing not in that table — a photo takes up to three of them,
+which is not the shape of a column. They live in `photo_tags`, a row per tag per
+photo, with a trigger that clears a photo's tags when its row goes.
 
 ## When something looks wrong
 
