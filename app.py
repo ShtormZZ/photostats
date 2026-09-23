@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import unicodedata
 import webbrowser
 from hashlib import md5
 
@@ -817,7 +818,7 @@ def api_photos():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera, lens,"
             f" focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
-            f" lat, lon, rating, mark, {TAG_COL},"
+            f" lat, lon, rating, mark, comment, {TAG_COL},"
             f" (SELECT COUNT(*) FROM photos d"
             f"  WHERE {dup_key('d')} = {dup_key('photos')}) AS dup_n,"
             f" color, color_hex, color_share, color_center, color_center_hex,"
@@ -840,7 +841,7 @@ def api_random():
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera,"
             f" lens, focal, focal35, iso, fnumber, shutter, exposure, width, height,"
-            f" size, ext, lat, lon, rating, mark, {TAG_COL},"
+            f" size, ext, lat, lon, rating, mark, comment, {TAG_COL},"
             f" color, color_hex, color_share, color_center,"
             f" color_center_hex, color_center_share, brightness, contrast,"
             f" chroma, clip_hi, clip_lo"
@@ -942,6 +943,47 @@ def api_mark(pid):
     return jsonify({"ok": True, "rating": row["rating"], "mark": row["mark"]})
 
 
+# Short on purpose: a caption, not a diary. Counted in characters as Python
+# counts them, after NFC, so "й" typed either way is one character, and an
+# emoji is one even though a browser's `maxlength` would count it as two.
+COMMENT_MAX = 256
+
+
+def clean_comment(raw):
+    """The comment as stored, or None if there is nothing left of it.
+
+    One line: the field in the card saves on Enter, and a line break pasted in
+    from somewhere else would otherwise survive only to be flattened by every
+    place that shows the comment in a single row. Other control characters are
+    dropped rather than refused — they are invisible, and a comment refused for
+    something the user cannot see is a comment that cannot be fixed.
+    """
+    s = unicodedata.normalize("NFC", raw or "")
+    s = "".join(" " if c in "\r\n\t" else c for c in s
+                if c in "\r\n\t" or unicodedata.category(c) != "Cc")
+    return " ".join(s.split()) or None
+
+
+@app.post("/api/comment/<int:pid>")
+def api_comment(pid):
+    """Set or clear the comment on one photo. Empty text clears it.
+
+    The text travels in the body, not the query string like the rating does:
+    256 characters of Cyrillic are over four kilobytes once percent-encoded.
+    """
+    text = clean_comment(request.form.get("text"))
+    if text and len(text) > COMMENT_MAX:
+        return jsonify({"ok": False, "error": f"A comment is at most "
+                        f"{COMMENT_MAX} characters; this one is {len(text)}"}), 400
+    with db() as con:
+        changed = con.execute("UPDATE photos SET comment = ? WHERE id = ?",
+                              (text, pid)).rowcount
+        con.commit()
+    if not changed:
+        return jsonify({"ok": False, "error": "No such photo"}), 404
+    return jsonify({"ok": True, "comment": text})
+
+
 @app.post("/api/tags/<int:pid>")
 def api_set_tags(pid):
     """Replace the whole set of tags on one photo: tag=sea&tag=kids.
@@ -1041,7 +1083,7 @@ def api_export():
             f"SELECT taken, brand, camera, lens, focal, focal35, iso, fnumber,"
             f" shutter, {TAG_COL}, color, color_hex, color_center, color_center_hex,"
             f" brightness, contrast, chroma, lat, lon,"
-            f" width, height, size, path FROM photos {where}"
+            f" width, height, size, comment, path FROM photos {where}"
             f" ORDER BY taken", params).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
@@ -1049,10 +1091,45 @@ def api_export():
                 "ISO", "Aperture", "Shutter", "Tags", "Colour", "Hex",
                 "Centre colour", "Centre hex", "Brightness",
                 "Contrast", "Chroma", "Latitude", "Longitude",
-                "Width", "Height", "Size", "Path"])
+                "Width", "Height", "Size", "Comment", "Path"])
     w.writerows([list(r) for r in rows])
     return Response("\ufeff" + buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=photos.csv"})
+
+
+@app.get("/api/export/paths")
+def api_export_paths():
+    """The paths of the selected files, one per line, and nothing else.
+
+    A list to hand to something that does move files about — copy the frames you
+    rated 5+ somewhere, delete the ones marked bad. This program does not do that
+    and will not: the moment it deletes a file on the strength of its own guess
+    about duplicates, one wrong guess costs a photograph. It hands over the list;
+    what happens to those files is the decision of whoever runs the next command.
+
+    The header line is there so that PowerShell's Import-Csv can read it, which
+    is what a list like this is for on Windows. Sorted by path rather than by the
+    order on screen: a list about to be fed to rm is read folder by folder.
+
+    The separator is a comma, not the semicolon the other export uses. That one
+    is a table for a spreadsheet, where a semicolon is what a European Excel
+    expects; this one is a single column read by a script, and a comma is the
+    only separator Import-Csv assumes. It matters for the paths themselves: a
+    folder named "Photos, 2019" is quoted when the comma is the separator and
+    left bare when it is not, and left bare it would arrive as two columns.
+    """
+    import csv
+    where, params = build_where()
+    with db() as con:
+        rows = con.execute(f"SELECT path FROM photos {where} ORDER BY path",
+                           params).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Path"])
+    w.writerows([[r["path"]] for r in rows])
+    return Response("\ufeff" + buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition":
+                             "attachment; filename=photo-paths.csv"})
 
 
 NO_UI = r"""<!DOCTYPE html><html lang="en"><meta charset="utf-8">
@@ -1116,6 +1193,7 @@ def main():
         # yet cannot be created, and the database may be from an earlier version
         for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
                            ("rating", "INTEGER"), ("mark", "TEXT"),
+                           ("comment", "TEXT"),
                            ("color", "TEXT"), ("color_hex", "TEXT"),
                            ("color_share", "REAL"), ("color_center", "TEXT"),
                            ("color_center_hex", "TEXT"),

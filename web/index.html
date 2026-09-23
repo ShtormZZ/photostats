@@ -297,6 +297,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
 .seltools{display:flex;align-items:center;gap:6px;margin:0 0 12px}
 .seltools .sortlab{font-family:var(--data);font-size:11px;color:var(--muted)}
+/* The export is a link, so that the browser saves the file rather than the page
+   having to. It is boxed like the buttons beside it, and the underline a link
+   carries by default would read as a second border inside the first. */
+#pathsCsv{text-decoration:none;white-space:nowrap}
+#pathsCsv:hover{border-color:var(--safelight);color:var(--safelight)}
 .seltools select{background:var(--ground);border:1px solid var(--line);border-radius:3px;
   color:var(--paper);font-size:12px;padding:3px 6px}
 .frow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:baseline;
@@ -329,6 +334,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   font-size:9px;background:linear-gradient(transparent,rgba(10,9,13,.92));color:var(--paper);
   text-align:left;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden}
 .cellwrap .cell:hover .cap{opacity:1}
+/* The comment is only a mark over the picture: the text needs the card, and a
+   caption over a 120-pixel thumbnail would cover the thing being captioned. It
+   stays visible without hovering, like a rating that has been set. */
+.cellwrap .cell .note{position:absolute;right:4px;bottom:3px;z-index:1}
 /* Rating a batch is quicker over the pictures than down the list, so the strip
    carries the control too. A cell is about 120 px wide, which the full control
    does not fit into, so here it loses its dividers and its "from EXIF" note.
@@ -367,6 +376,18 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    are things you put there yourself, and that is worth seeing at a glance while
    working down a list the rest of which came out of the files. */
 .lrow .c-tags{font-size:11.5px;color:var(--safelight)}
+/* The same yellow for the same reason. The icon follows the name, and the name
+   is a box of its own inside the cell so that it is the name the ellipsis
+   clips: with both in one run of text, a long name would push the icon out of
+   sight exactly where the row has the least room. */
+.lrow .c-name{display:flex;align-items:baseline;min-width:0}
+.lrow .c-name .nm{flex:0 1 auto;min-width:0}
+.lrow .c-name .note{flex:none}
+.note{display:inline-block;width:11px;height:11px;color:var(--safelight);
+  vertical-align:-1px;margin-left:5px;filter:drop-shadow(0 1px 1px rgba(10,9,13,.9))}
+.note svg{display:block;width:100%;height:100%}
+.note[hidden]{display:none}
+.cellwrap .cell .note{margin:0;width:13px;height:13px}
 .lrow.open{background:#2C2A34}
 /* Files sharing a name but differing in size are different groups. Without the
    rule they sit flush together and look like a duplicate found in error. */
@@ -442,16 +463,35 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
    the file like opening it. */
 .ratebox{display:flex;align-items:center;gap:12px;padding:12px 0;
   border-top:1px solid var(--line)}
-/* Rating and tags share one block of two lines: both are yours rather than the
-   file's, and a border between them would read as two unrelated things. */
-.tagbox{display:flex;align-items:flex-start;gap:12px;padding:0 0 12px;
-  border-bottom:1px solid var(--line)}
+/* Rating, tags and comment share one block: all three are yours rather than
+   the file's, and a border between them would read as unrelated things. */
+.tagbox{display:flex;align-items:flex-start;gap:12px;padding:0 0 12px}
 .tagbox .rlab{padding-top:3px}
-/* One width for both labels, so the rating and the tags under it start at the
-   same place instead of stepping in and out by the length of the word. */
-.ratebox .rlab,.tagbox .rlab{font-family:var(--display);font-size:11px;
+/* The comment closes the block, so the border that ended it moves down here. The
+   field is the text itself: no box until it is hovered or typed in, because a
+   card that is being read, not edited, should show a sentence and not a form. */
+.notebox{display:flex;align-items:flex-start;gap:12px;padding:0 0 12px;
+  border-bottom:1px solid var(--line)}
+.notebox .rlab{padding-top:4px}
+.notebox .ned{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.notebox textarea{font:inherit;font-size:12.5px;line-height:1.45;color:var(--paper);
+  background:transparent;border:1px solid transparent;border-radius:3px;
+  padding:3px 5px;margin:0 0 0 -6px;resize:none;overflow:hidden;width:calc(100% + 6px);
+  word-break:break-word}
+.notebox textarea::placeholder{color:var(--muted)}
+.notebox textarea:hover{border-color:var(--line)}
+.notebox textarea:focus{border-color:var(--safelight);background:var(--ground);outline:none}
+.notebox .cnt{font-family:var(--data);font-size:10.5px;color:var(--muted);
+  text-align:right;display:none}
+.notebox .ned:focus-within .cnt{display:block}
+.notebox .cnt.over{color:#D9534F}
+.notebox.busy{opacity:.5;pointer-events:none}
+/* One width for all three labels, so the rating, the tags and the comment start
+   at the same place instead of stepping in and out by the length of the word —
+   the width is that of "Comment", the longest of them. */
+.ratebox .rlab,.tagbox .rlab,.notebox .rlab{font-family:var(--display);font-size:11px;
   letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
-  flex:none;width:58px}
+  flex:none;width:72px}
 .ratebox .rate button{font-size:17px;padding:0 3px}
 .ratebox .rate .star{font-size:19px}
 .ratebox .rate .bad{font-size:16px}
@@ -757,6 +797,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
         <option value="rating">rating</option>
       </select>
       <button class="toggle" id="sortDir" title="Reverse order">↑</button>
+    </div>
+    <div class="seltools">
+      <!-- A list to hand to something else. Nothing here touches a file: the
+           paths go out as CSV and what happens next is the next program's. -->
+      <a class="toggle" id="pathsCsv" href="#" download
+         title="The full path of every photo in this selection, one per line">export paths as CSV</a>
+      <div class="card-note">one path per line — for the program that copies or
+        deletes them. This one never does.</div>
     </div>
 
     <div class="strip-head">
@@ -1745,6 +1793,114 @@ function refreshTags(it){
   });
 }
 
+/* ---------- comments ----------
+   One line of your own text on a photo, up to 256 characters. In the selection
+   it is only an icon — the list row and the thumbnail have no room for a
+   sentence — and the text is read and edited in the card. There is no panel for
+   comments: they are notes, not a dimension to count photos by. */
+const COMMENT_MAX = 256;
+const NOTE_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" ' +
+  'd="M2 2h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H7l-3.5 3v-3H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/></svg>';
+
+/* Characters as the server counts them: code points after NFC. `length` counts
+   UTF-16 units and would call an emoji two. The server also squeezes runs of
+   spaces, so this can only over-count, never let through what it would refuse. */
+function commentLen(text){ return [...text.normalize("NFC")].length; }
+
+/* Every row and thumbnail gets the slot, filled or not, so a comment added in
+   the card lights up the icon without the selection being rebuilt. */
+function noteIcon(it){
+  const i = document.createElement("i");
+  i.className = "note";
+  i.dataset.pid = it.id;
+  i.innerHTML = NOTE_SVG;
+  i.hidden = !it.comment;
+  i.title = it.comment || "";
+  return i;
+}
+
+function commentEditor(it){
+  const box = document.createElement("div");
+  box.className = "ned";
+  const ta = document.createElement("textarea");
+  ta.rows = 1;
+  ta.placeholder = "add a comment";
+  ta.value = it.comment || "";
+  const cnt = document.createElement("div");
+  cnt.className = "cnt";
+  box.append(ta, cnt);
+
+  // The field grows with the text: a scrollbar in a box a few lines high hides
+  // exactly the part of the comment that was just typed.
+  const fit = () => {
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + 2 + "px";
+    const n = commentLen(ta.value);
+    cnt.textContent = n + " / " + COMMENT_MAX;
+    cnt.classList.toggle("over", n > COMMENT_MAX);
+  };
+  ta.oninput = fit;
+  requestAnimationFrame(fit);           // scrollHeight is 0 until it is on the page
+
+  // Saved when the field is left, however it is left — Enter, a click on the
+  // arrows, closing the card. There is no button to forget to press.
+  ta.onblur = () => {
+    const text = ta.value.trim();
+    if (text === (it.comment || "")) return;
+    if (commentLen(text) > COMMENT_MAX){
+      toast("A comment is at most " + COMMENT_MAX + " characters");
+      return;
+    }
+    saveComment(it, text);
+  };
+  ta.onkeydown = e => {
+    // Enter saves rather than breaking the line: a comment is one line, and
+    // the server would fold the break into a space anyway.
+    if (e.key === "Enter"){ e.preventDefault(); ta.blur(); }
+    // Escape undoes the typing, and stops there — without stopping it, the
+    // same key would also close the card.
+    else if (e.key === "Escape"){
+      e.stopPropagation();
+      ta.value = it.comment || "";
+      fit();
+      ta.blur();
+    }
+  };
+  return box;
+}
+
+function saveComment(it, text){
+  const boxes = () => document.querySelectorAll(".notebox");
+  boxes().forEach(b => b.classList.add("busy"));
+  fetch("/api/comment/" + it.id, {method: "POST", body: new URLSearchParams({text})})
+    .then(r => r.json())
+    .then(r => {
+      if (!r.ok){ toast(r.error || "Could not save the comment"); return; }
+      // As with tags, the same photo can be several objects at once — in the
+      // list, in the strip, in the deck the card flips through.
+      [listItems, stripItems, state.deck || []].forEach(set =>
+        set.forEach(p => { if (p.id === it.id) p.comment = r.comment; }));
+      it.comment = r.comment;
+      refreshComment(it);
+    })
+    .catch(() => toast("Could not save the comment"))
+    .finally(() => boxes().forEach(b => b.classList.remove("busy")));
+}
+
+function refreshComment(it){
+  document.querySelectorAll('.note[data-pid="' + it.id + '"]').forEach(el => {
+    el.hidden = !it.comment;
+    el.title = it.comment || "";
+  });
+  // The server may have tidied the text — squeezed spaces, dropped a control
+  // character — and the card should show what was stored, not what was typed.
+  const ta = document.querySelector(".notebox textarea");
+  if (ta && state.shown && state.shown.id === it.id && document.activeElement !== ta){
+    ta.value = it.comment || "";
+    ta.dispatchEvent(new Event("input"));
+  }
+}
+
 /* ---------- preview strip ----------
    Thumbnails are loaded strictly one at a time: a browser holds no more than six
    connections to a server, and a parallel batch of pictures would block clicks on
@@ -1785,7 +1941,10 @@ async function pumpThumbs(){
   thumbBusy = false;
 }
 
+let stripItems = [];
+
 function renderStrip(items){
+  stripItems = items;
   const box = $("strip");
   thumbGen++;                      // whatever was loading before is no longer wanted
   box.innerHTML = "";
@@ -1799,6 +1958,7 @@ function renderStrip(items){
     b.querySelector(".cap").textContent = (it.taken || "").slice(0, 10);
     b.title = it.filename + "\n" + (it.taken || "");
     b.onclick = () => openDetail(it, items);
+    b.appendChild(noteIcon(it));
     wrap.appendChild(b);
     wrap.appendChild(ratingControl(it));
     box.appendChild(wrap);
@@ -1953,7 +2113,12 @@ function renderList(data, append){
     const put = (cls, v) => { const e = b.querySelector(cls); e.textContent = v; e.title = v; };
     const fl = state.eq ? it.focal35 : it.focal;
     put(".c-time", (it.taken || "").slice(0, 16));
-    put(".c-name", it.filename + (it.dup_n > 1 ? "  ×" + it.dup_n : ""));
+    const name = it.filename + (it.dup_n > 1 ? "  ×" + it.dup_n : "");
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = name;
+    b.querySelector(".c-name").title = name;
+    b.querySelector(".c-name").append(nm, noteIcon(it));
     // read-only here: the row is a button, and the editor belongs where there is
     // room for it — open the row or the card to change them
     b.querySelector(".c-tags").dataset.pid = it.id;
@@ -2033,6 +2198,7 @@ function openDetail(it, deck){
     '<div class="path"></div>' +
     '<div class="ratebox"><span class="rlab">Rating</span></div>' +
     '<div class="tagbox"><span class="rlab">Tags</span></div>' +
+    '<div class="notebox"><span class="rlab">Comment</span></div>' +
     '<div class="acts">' +
     '<button class="act primary" data-a="reveal">Show in explorer</button>' +
     '<button class="act" data-a="open">Open file</button>' +
@@ -2057,6 +2223,7 @@ function openDetail(it, deck){
   });
   d.querySelector(".ratebox").appendChild(ratingControl(it));
   d.querySelector(".tagbox").appendChild(tagControl(it));
+  d.querySelector(".notebox").appendChild(commentEditor(it));
   d.querySelector("img").title = "Double-click for the whole window";
   d.querySelector(".nav.prev").onclick = () => step(-1);
   d.querySelector(".nav.next").onclick = () => step(1);
@@ -2202,6 +2369,7 @@ function loadStrip(){
 function load(){
   renderChips();
   $("csv").href = "/api/export?" + params();
+  $("pathsCsv").href = "/api/export/paths?" + params();
   ask("stats", "/api/stats?" + params()).then(d => {
     if (d.empty){
       $("tally").textContent = "Database is empty";

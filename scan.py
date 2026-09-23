@@ -203,6 +203,9 @@ CREATE TABLE IF NOT EXISTS photos (
     -- not in COLUMNS, so that re-reading EXIF cannot overwrite it — the scanner
     -- owns every other column here, and this is the one column it must not touch.
     mark        TEXT,
+    -- Your own note on the photo, up to 256 characters, set in the interface.
+    -- Kept out of COLUMNS for the reason `mark` is.
+    comment     TEXT,
     sig         TEXT,      -- content signature; NULL = the pass was never run
     color       TEXT,      -- dominant colour group; NULL = not analysed yet
     color_hex   TEXT,      -- the average shade of that group, for the swatch
@@ -288,6 +291,7 @@ def migrate(con):
     cols = {r[1] for r in con.execute("PRAGMA table_info(photos)")}
     for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
                        ("rating", "INTEGER"), ("mark", "TEXT"),
+                       ("comment", "TEXT"),
                        ("color", "TEXT"), ("color_hex", "TEXT"),
                        ("color_share", "REAL"), ("color_center", "TEXT"),
                        ("color_center_hex", "TEXT"),
@@ -772,7 +776,18 @@ NEIGHBOURS = [({"warm"}, {"red"}, 15), ({"cyan"}, {"blue"}, 215),
 TOUCH_BAND = 18      # how close to the boundary a pixel counts as being on it
 TOUCH_MIN = 0.03     # what share of the pair the pixels on each side must make up
 
-GRAY_SAT = 0.10     # below this saturation a pixel counts as achromatic
+# Below this saturation a pixel counts as achromatic. 0.10 was under the level at
+# which daylight itself tints a surface: grey paving in October sun measures a
+# median of 0.12, rgb(150, 144, 132) for a typical stone, so half of it was
+# declared coloured and a grey cat on grey stone came out yellow. The eye
+# discounts the light it is looking through; this metric cannot, so the line has
+# to sit above where the illuminant alone puts a neutral surface.
+#
+# Not far above, though — the pull is all one way. At 0.14 the archive measured
+# here is 20% grey, black or white, against 14% before; by 0.18 it is 26%, and
+# frames that are merely muted start being counted as black and white by the
+# tone panel, which is a worse answer than a warm name for a grey pavement.
+GRAY_SAT = 0.14
 BLACK_VAL = 0.16    # below this brightness it is black, whatever the hue
 DARK_VAL = 0.28     # up to this brightness a colour only counts when its purity is high
 DARK_SAT = 0.80     # the purity a dark pixel needs if it is not to become black
@@ -818,7 +833,16 @@ OLIVE_HUE = (55, 70)       # where yellow can turn out to be olive at all
 OLIVE_MAX = 0.30           # below this product yellow reads as green
 WHITE_VAL = 0.82
 CHROMA_MIN = 0.25   # share of coloured pixels from which a frame counts as colour
-CENTER_AREA = 0.50  # what share of the area the centre region of the frame holds
+# What share of the area the centre region holds: a quarter, which is the middle
+# half of the frame in each direction. It used to be half the area, and half the
+# area is still mostly the picture — on a wide shot the background came into it
+# and won by counting. A baby in a white hat in a dark room scored 37% black
+# against 32% white in the centre, and the centre is the one measure that is
+# supposed to describe the subject rather than the room.
+# The trade is against composition by thirds: a subject placed off centre falls
+# outside a tighter square, and then this measures the background on purpose
+# rather than by accident.
+CENTER_AREA = 0.25
 CLIP_HI = 0.98      # brighter than this and the highlights are blown out to white
 CLIP_LO = 0.016     # darker than this and the shadows are crushed to black
 UNKNOWN = "unknown"
@@ -826,7 +850,7 @@ UNKNOWN = "unknown"
 # The version of the analysis rules. When it changes the program re-analyses the
 # archive itself: otherwise photos analysed under the earlier rules would silently
 # stay in their old groups and the statistics would stop being consistent.
-ALGO_VERSION = 13
+ALGO_VERSION = 14
 
 # The version of the EXIF field set. When it changes the scanner re-reads the
 # metadata of every file: otherwise a new field would stay empty for everything
@@ -941,11 +965,11 @@ def image_stats(im):
     not an option: for a varied photo the average always comes out muddy — a
     colour that is nowhere in the frame at all.
 
-    The centre region is counted separately — half the frame area, cut from the
-    middle. The dominant colour describes the background first of all, the centre
-    one describes what was photographed. Apart they say little; together they let
-    you search by subject: a black cat on a white sheet is white dominant and
-    black centre.
+    The centre region is counted separately — a quarter of the frame area, cut
+    from the middle. The dominant colour describes the background first of all,
+    the centre one describes what was photographed. Apart they say little;
+    together they let you search by subject: a black cat on a white sheet is
+    white dominant and black centre.
 
     Brightness, contrast, the share of coloured pixels and the losses in the
     highlights and shadows are counted along the way: the pixels have been walked
@@ -958,9 +982,8 @@ def image_stats(im):
     if not total:
         return None
 
-    # the side of the centre square: half the area means a side smaller by a
-    # factor of √2, that is about 0.707 of the frame. The region does not touch
-    # the edges.
+    # the side of the centre square: a quarter of the area is a side of half the
+    # frame. The region does not touch the edges.
     side = max(1, round(min(w, hgt) * CENTER_AREA ** 0.5))
     cx0 = (w - side) // 2
     cy0 = (hgt - side) // 2

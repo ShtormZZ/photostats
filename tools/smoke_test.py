@@ -216,6 +216,74 @@ def rating_checks(db, photos):
           [p["filename"] for p in kept] == ["light_subject.jpg"], str(len(kept)))
 
 
+def comment_checks(db, photos):
+    """A comment is one line of your own text: the limit counted in characters
+    rather than bytes or UTF-16 units, the text coming back as it was stored, and
+    — as with marks — a metadata re-read that must not wipe it.
+    """
+    print("\ncomments")
+
+    def say(pid, text):
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{PORT}/api/comment/{pid}", method="POST",
+            data=urllib.parse.urlencode({"text": text}).encode())
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    def comment_of(pid):
+        for p in api("/api/photos", limit=50)["items"]:
+            if p["id"] == pid:
+                return p["comment"]
+
+    items = api("/api/photos", limit=50)["items"]
+    pid, other = items[0]["id"], items[1]["id"]
+    check("no comment until one is written", comment_of(pid) is None)
+
+    text = "Бабушка на даче, лето 🌻"
+    code, body = say(pid, "  " + text + "  ")
+    check("a comment can be set", code == 200 and body.get("comment") == text,
+          ascii(body))
+    check("the comment comes back with the photo", comment_of(pid) == text)
+    check("the random strip carries it too",
+          all("comment" in p for p in api("/api/random", n=3)["items"]))
+
+    code, body = say(other, "first line\r\nsecond\tline")
+    check("a comment is folded onto one line",
+          body.get("comment") == "first line second line", ascii(body))
+
+    # 256 emoji are 512 UTF-16 units and over a kilobyte of UTF-8; the limit is
+    # about what a person reads, so they are 256 characters and fit.
+    code, body = say(other, "🌻" * 256)
+    check("the limit counts characters, not bytes", code == 200,
+          ascii(body.get("error", "")))
+    code, body = say(other, "а" * 257)
+    check("a comment over 256 characters is refused", code == 400, ascii(body))
+    check("a refused comment leaves the old one in place",
+          comment_of(other) == "🌻" * 256)
+    code, body = say(other, "   ")
+    check("blank text clears the comment",
+          code == 200 and body.get("comment") is None and comment_of(other) is None,
+          ascii(body))
+    code, body = say(999999, "nobody")
+    check("a comment on a missing photo is a 404", code == 404, ascii(body))
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/export",
+                                timeout=20) as r:
+        csv = r.read().decode("utf-8-sig")
+    check("CSV export carries the comment",
+          "Comment" in csv.splitlines()[0] and text in csv)
+
+    # The same guard as for marks: `comment` must stay out of scan.py:COLUMNS.
+    subprocess.run([sys.executable, os.path.join(ROOT, "scan.py"), photos,
+                    "--db", db, "--full"],
+                   capture_output=True, text=True, cwd=ROOT, timeout=300)
+    check("a full re-scan leaves comments alone", comment_of(pid) == text)
+    say(pid, "")
+
+
 def tag_checks(db, photos):
     """Tags: the rule on the way in, the panel, the filter, and the two things
     that would destroy them without anybody noticing — a metadata re-read, and a
@@ -491,6 +559,27 @@ def main():
         check("CSV export", csv.count("\n") >= made and csv.startswith("Taken;")
               and "Tags" in csv.splitlines()[0])
 
+        # The list of paths is what someone else's script gets fed, so the shape
+        # of it matters: a header PowerShell's Import-Csv can read, then one
+        # path per line and nothing else on the line.
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{PORT}/api/export/paths", timeout=20) as r:
+            plist = r.read().decode("utf-8-sig").splitlines()
+        check("path export has a header row", plist[0] == "Path", plist[0])
+        check("path export lists every file in the selection",
+              len(plist) - 1 == made, f"{len(plist) - 1} of {made}")
+        check("path export gives whole paths and nothing else",
+              all(os.path.isabs(p) and os.path.exists(p) for p in plist[1:]),
+              plist[1] if len(plist) > 1 else "")
+        check("path export is sorted by path", plist[1:] == sorted(plist[1:]))
+        first = api("/api/stats")["charts"]["camera"][0]["k"]
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{PORT}/api/export/paths?"
+                + urllib.parse.urlencode({"camera": first}), timeout=20) as r:
+            narrowed = r.read().decode("utf-8-sig").splitlines()
+        check("path export follows the filters",
+              0 < len(narrowed) - 1 < made, f"{len(narrowed) - 1} of {made}")
+
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/thumb/1?s=120",
                                     timeout=20) as r:
             thumb = r.read()
@@ -498,6 +587,7 @@ def main():
 
         rating_checks(db, photos)
         tag_checks(db, photos)
+        comment_checks(db, photos)
     finally:
         srv.terminate()
         srv.wait(timeout=10)

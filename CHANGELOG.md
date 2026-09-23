@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Comments on photos. Any photo takes one line of your own text, up to 256
+  characters counted as characters — Cyrillic and emoji fit as well as Latin.
+  It is written and read in full in the photo card, under the tags; in the list
+  and on the thumbnails a comment shows only as an icon, with the text on hover.
+  There is no panel or filter for comments, by design. They are stored in a new
+  `comment` column of `photos` that, like `mark`, no scan ever writes, and they
+  come out in the CSV export as a column of their own.
+
+- Grey survives daylight, and the centre of the frame is the subject rather than
+  the room. `ALGO_VERSION` goes to 14, so the next scan re-analyses the archive;
+  on 400 random frames the dominant colour changes for 10% and the centre colour
+  for 20%.
+  - **A pixel is achromatic below 0.14 saturation, not 0.10.** The old line sat
+    under the tint daylight itself leaves on a neutral surface — grey paving in
+    October sun measures a median of 0.12 — so half of it counted as coloured
+    and a grey cat on grey stone came out yellow. Grey, black and white together
+    go from 14% of the archive to 20%. Not higher than 0.14: by 0.18 it is 26%,
+    and frames that are merely muted start being counted as black and white.
+  - **The centre region is a quarter of the frame area, not half** — the middle
+    half in each direction. Half the area is still mostly the room: a baby in a
+    white hat in a dark restaurant scored 37% black against 32% white there, and
+    the background won the one measure meant for the subject. A subject placed
+    off centre now falls outside the square, which is the price of the change.
+
+- The selection exports as a bare list of paths — *export paths as CSV* in the
+  selection panel. One full path per line under a `Path` header, sorted by path,
+  following whatever is filtered, so `Import-Csv` reads it without arguments and
+  a script can copy what you rated 5+ or delete what you marked bad. The
+  separator is a comma rather than the semicolon of the other export: this file
+  is one column read by a program, not a table read by Excel, and a folder named
+  "Photos, 2019" only comes through as one field when the comma is the separator
+  that quotes it.
+  The program still never moves, renames or deletes a photo of its own accord.
+  It hands over the list; what runs next is the decision of whoever runs it.
+
 - Warm colours are named more like the eye names them. Three rules changed, and
   `ALGO_VERSION` goes to 13 with them, so the next scan re-analyses the archive.
   Brown was the commonest colour in an archive of 105 000 photos and is now

@@ -88,13 +88,15 @@ one, otherwise name + exact size + capture time. Two traps:
   `scan.py:candidate_keys()` evaluates the key through the same connection for this
   reason.
 
-**`mark` is the one column the scanner must not own.** Every column in
+**`mark` and `comment` are the columns the scanner must not own.** Every column in
 `scan.py:COLUMNS` is rewritten from the file by the upsert at the end of the EXIF
 pass, so a rating a user set by hand would be destroyed the next time
 `EXIF_VERSION` changed. `rating` (from EXIF) is in COLUMNS; `mark` (set in the
 interface) is deliberately not, and `app.py:rating_key()` folds the two into the
-one rating shown, filtered and sorted. A smoke-test check re-scans with `--full`
-and fails if marks do not survive.
+one rating shown, filtered and sorted. `comment` (the user's note, at most 256
+characters, rule in `app.py:clean_comment()`) stays out of COLUMNS for the same
+reason. Smoke-test checks re-scan with `--full` and fail if either does not
+survive.
 
 **Tags are the one thing not in `photos`, and `tags.py` holds the rule.** A photo
 takes up to three, which is not the shape of a column, so they live in

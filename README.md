@@ -174,6 +174,24 @@ the scanner drops the row. Moving a file to another folder is a new path and
 therefore a new photo to the database, which loses its tags — as it loses its
 rating, for the same reason.
 
+### Comments
+
+Any photo can carry **one comment of up to 256 characters** — a line of your
+own about it, in any language, emoji included. It is written in the photo card,
+in the field under the tags: click, type, and Enter or clicking anywhere else
+saves it; Escape puts back what was there. Emptying the field removes it.
+
+In the selection a comment is only a small speech-bubble icon, after the file
+name in the list and in the corner of a thumbnail — hover it for the text. The
+whole text is read in the card. There is no panel for comments and no filter:
+they are notes on a photo, not a dimension to count photos by. They come out in
+the CSV export as one column.
+
+The limit is in characters as you read them, so 256 letters of Cyrillic or 256
+emoji fit as well as 256 of Latin. A comment is one line — a line break pasted
+in becomes a space. Like the rating and the tags it lives in the database only,
+no scan can overwrite it, and moving a file loses it.
+
 ### Duplicates
 
 Duplicates are found by name, exact byte size **and capture time**. Name and
@@ -273,6 +291,22 @@ On the right is the current selection: ten random photos from it, then a text
 list where any row expands into a thumbnail and a summary with buttons to open
 the file or show it in the file manager. The selection exports to CSV.
 
+**The selection also exports as a bare list of paths** — *export paths as CSV*,
+one full path per line under a `Path` header, sorted by path and following
+whatever is filtered. It is a list to hand to the program that actually moves
+files: copy everything rated 5+ somewhere, delete what you marked bad, feed a
+folder to a backup tool. On Windows that is one line of PowerShell:
+
+```powershell
+Import-Csv photo-paths.csv | ForEach-Object { Copy-Item $_.Path D:\Keep }
+```
+
+**This program never moves, renames or deletes a photo.** It reads files and
+writes its own database, and that is the whole of it — the duplicate rule is a
+good guess, not a certainty, and a program that acts on a guess like that costs
+you a photograph the first time it is wrong. Deciding is yours; the list is so
+that deciding does not mean copying paths by hand.
+
 Clicking a thumbnail opens the photo card: the picture, everything known about
 it, the rating and the tags. **Double-click the picture and it takes the whole browser
 window** — no card, no metadata, just the photograph, with a sharper copy fetched
@@ -302,6 +336,14 @@ always gives mud — a colour that is nowhere in the frame. Achromatic groups
 compete separately: if at least a quarter of the pixels have colour, grey sky
 and black background stay out of the contest, otherwise most of an archive
 comes out grey.
+
+**Grey has to allow for the light it was shot in.** A pixel counts as
+achromatic below 0.14 saturation, which is above the tint daylight itself puts
+on a neutral surface: grey paving in October sun measures 0.12, so at a lower
+line half of it was called coloured and a grey cat on grey stone came out
+yellow. The eye discounts the light it looks through and this cannot, so the
+threshold has to. It does not go higher than that, or frames that are merely
+muted start being counted as black and white.
 
 **Dark pixels are judged more strictly.** Dark brown formally has a reddish
 hue, but the eye reads it as shadow. Below 0.28 brightness a pixel only counts
@@ -358,10 +400,14 @@ disagree. Where the average falls outside the family, counting decides as
 before — the name has to be a colour that is really in the frame, or picking it
 in the panel would select nothing.
 
-**The centre is half the frame area,** cut from the middle. The dominant colour
-mostly describes the background and the centre one the subject, which is why
-they are more useful together: a black cat on a white sheet is white dominant,
-black centre. Both panels are always on, so you can start from either end:
+**The centre is a quarter of the frame area,** the middle half in each
+direction. The dominant colour mostly describes the background and the centre
+one the subject, which is why they are more useful together: a black cat on a
+white sheet is white dominant, black centre. It used to be half the area, and
+half the area is still mostly the room: a baby in a white hat photographed in a
+dark restaurant came out 37% black against 32% white in the centre, and the
+background won a measure meant for the subject. The narrower square pays for
+that on composition by thirds — a subject placed off centre falls outside it. Both panels are always on, so you can start from either end:
 pick the centre colour alone to pull out every frame with, say, something dark
 in the middle.
 
@@ -406,6 +452,9 @@ If you want a metric the interface does not have, it is usually one SQL query
 away. Old databases upgrade themselves: new columns are added, colour names
 were translated in place, and metadata is re-read without touching the image
 analysis.
+
+Two columns there are yours rather than the scanner's: `mark`, the rating you
+set, and `comment`. No pass writes either, so re-reading metadata keeps them.
 
 Tags are the one thing not in that table — a photo takes up to three of them,
 which is not the shape of a column. They live in `photo_tags`, a row per tag per
