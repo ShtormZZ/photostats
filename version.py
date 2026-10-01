@@ -9,4 +9,4 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Single place where the version lives; scan.py and app.py both read it."""
 
-VERSION = "1.13.0"
+VERSION = "1.14.0"

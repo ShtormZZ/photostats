@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-10-01
+
 - Comments on photos. Any photo takes one line of your own text, up to 256
   characters counted as characters — Cyrillic and emoji fit as well as Latin.
   It is written and read in full in the photo card, under the tags; in the list
