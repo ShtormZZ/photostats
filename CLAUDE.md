@@ -20,7 +20,7 @@ For development, use the venv directly — `.venv/Scripts/python.exe` on Windows
 ```bash
 python tools/smoke_test.py          # the whole test suite
 python tools/check_license.py       # LICENSE must be the canonical AGPL text
-python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py tools
+python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py tools
 python tools/make_icon.py           # redraw the icon files (they are committed)
 ```
 
@@ -69,6 +69,16 @@ as subprocesses and does no work in-process, which is why new passes belong in
   `SIGBREAK` handler — see `scan.py:stop_on_break()`. Do not install one globally:
   passes using `with ThreadPoolExecutor` would then block on shutdown waiting for
   every queued job.
+
+**Pass status goes through the database, `jobs.py` holds it.** Each writing pass in
+`scan.py` runs inside `with jobs.Job(db, kind) as job:` and only sets
+`job.total`/`job.done`/`job.phase`; a heartbeat thread with its own connection
+writes them, so the work loop never waits on its own status. A pass killed by
+CTRL_BREAK cannot write an end state, which is why `jobs.latest()` reads a
+`running` row whose heartbeat is older than `STALE` as stopped — do not
+"fix" that by adding a SIGBREAK handler (see above). A new pass needs a
+`KINDS` entry and a `Job`; `--check-dups` deliberately has none, as it never
+writes. `jobs.ensure_schema()` is called from both programs, like tags'.
 
 **The interface is a single file.** `web/index.html` is markup, CSS and JS in one
 file with no build step and no package manager. Leaflet and map tiles are the only
@@ -120,11 +130,21 @@ to know:
 block in `app.py:main()` both `ALTER TABLE ... ADD COLUMN` the same list, because
 either program may meet an old database first. Adding a column means editing both.
 
-**Two version counters, different meanings.** `ALGO_VERSION` (`scan.py`) bumps when
-the image-analysis maths changes and triggers a re-analysis of the archive.
+**Three version counters, different meanings.** `ALGO_VERSION` (`scan.py`) bumps when
+the colour/light maths changes and triggers a re-analysis of the archive.
 `EXIF_VERSION` bumps when the EXIF field set changes and triggers a metadata re-read
-that keeps the image analysis. Thresholds in `app.py` apply in the query and need
-neither — that is deliberate, so they can be tuned without touching the archive.
+that keeps the image analysis. `SHARP_VERSION` bumps when the sharpness maths
+changes; it is stored per row (`sharp_v`), so only sharpness is re-measured, and a
+photo that could not be measured is still marked as tried. Thresholds in `app.py`
+(including the sharpness bands and `FOCUS_RATIO`) apply in the query and need
+none of them — that is deliberate, so they can be tuned without touching the archive.
+
+**Sharpness decodes separately from colour.** `load_gray()` decodes at 1500 px for
+`sharpness()`; `load_small()` keeps its 1/8 draft for colour. Sharing one decode
+would move the 48×48 colour grid onto different pixels and shift colours without
+an `ALGO_VERSION` bump. `stats_of()` computes only what a row is missing. The
+arithmetic needs `ImageMath.lambda_eval` (Pillow ≥ 10.3); Pillow's 8-bit filters
+clip the negative half of the Laplacian, so do not swap it for `ImageFilter.Kernel`.
 
 **Colour is a vote over 48×48 pixels, not an average**, with warm tones split by
 purity and brightness rather than hue. The thresholds at the top of `scan.py` are
@@ -152,7 +172,12 @@ These are requirements, not defaults:
 
 - `photos.db` and `cache/` hold file paths, coordinates and pieces of the photos.
   `.gitignore` keeps them out of git.
-- The server binds `127.0.0.1`.
+- The server binds `127.0.0.1`. The one way off it is the launcher's network
+  box (or an explicit `--host`): off at every start, never saved, red warning,
+  a private LAN address only (`launcher.py:lan_address()`), never `0.0.0.0`.
+- `/api/reveal` and `/api/open` start programs on the server's machine, so
+  `app.py:files_here()` allows them only to a loopback client of a
+  loopback-bound server. Any new endpoint that acts on the machine goes behind it.
 - The map is the **only** outbound request the program ever makes, it is behind a
   button, and the place list works offline. Do not add a fetch that runs without
   the user asking.

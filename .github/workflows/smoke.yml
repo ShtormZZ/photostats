@@ -29,7 +29,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Compile
-        run: python -m compileall -q scan.py app.py launcher.py version.py tools
+        run: python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py tools
 
       - name: License file
         run: python tools/check_license.py

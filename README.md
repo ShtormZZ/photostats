@@ -63,6 +63,54 @@ fill in while the analysis is still going. Stopping a pass keeps what it has
 already done and it carries on from there next time, so a long analysis can be
 done in several sittings.
 
+### What the scanner is doing
+
+While a pass runs, the top of the page says so — *Analysing images · 13,413 of
+92,362 · 14%*, with a small bar — and when it ends, how it ended: done and when,
+stopped and at what point, or failed and why. It does not matter where the pass
+was started: from the window, from a terminal or from a scheduled task, the
+line is the same, because the pass writes its progress into the database the
+page already reads.
+
+The numbers on the page are not reloaded by themselves, because that would
+reshuffle the random photos and fold every row you have open. The line offers
+**refresh** instead, while a pass runs and once it has finished. A finished
+pass stays in the line for twelve hours or until its **×**.
+
+A page opened while a pass runs leaves the **Selection** panel empty: its
+thumbnails are decoded from the originals, on the same disk the scanner is
+reading, and loading them then slowed both to a crawl. The panel says so, and
+fills in by itself once the pass is over, or straight away with **show them
+now**. Only at opening: photos already on screen stay when a pass starts later.
+
+A pass stopped with the window's Stop button, or one that crashed, cannot say
+so itself. It writes a heartbeat every few seconds instead, and when that has
+been silent for twenty the line reads *stopped*. Checking a folder is not shown:
+it is the one pass that never writes to the database.
+
+### Looking from another device
+
+Tick **allow access from the local network** before pressing *Open interface*,
+and the window shows an address such as `http://192.168.1.20:5577` — open it on
+a tablet or a phone on the same Wi-Fi. The box is off every time the launcher
+starts, and it cannot be changed while the server is running: stop the server,
+change it, open the interface again.
+
+**There is no password.** While it is on, anyone on that network can see every
+photo, its folder and where it was taken, and change ratings, tags and
+comments — which is why the warning under the box is red. Use it at home, not on
+a shared or public network. The server listens on the home-network address only,
+not on every adapter, so a VPN or a virtual network does not get the archive too,
+and it refuses to start that way at all on a computer whose address is public.
+The first time, Windows asks whether Python may use the network: allow it for
+private networks only.
+
+**Show in explorer** and **Open file** disappear while network access is on, and
+from any device but the computer running photostats. Both act on that computer,
+so pressed from the sofa they would open a window on a desk nobody is sitting at.
+
+From the command line the same thing is `python app.py --host 192.168.1.20`.
+
 ### From the command line
 
 The window is a convenience, not a replacement. Everything is still available
@@ -114,8 +162,9 @@ panel appears: when it arrived, when the last frame was taken, how many days it
 was in service, and a monthly strip of how much of each month it carried.
 
 **Image metrics** — dominant colour in eleven groups plus `mixed`, the colour
-in the centre of the frame, brightness, contrast, colour or black & white, and
-clipping in highlights and shadows. These need the image analysis pass.
+in the centre of the frame, brightness, contrast, colour or black & white,
+clipping in highlights and shadows, sharpness in the centre and at the edges,
+and focus — the two compared. These need the image analysis pass.
 
 **Where** — clusters of coordinates from EXIF, as a list and, if you ask for
 it, on a map.
@@ -414,13 +463,44 @@ in the middle.
 **A frame with no dominant colour is `mixed`** — when the largest group holds
 less than a quarter of the frame.
 
+**Sharpness is measured at screen size, by the sharpest part of the frame.**
+The image pass decodes each photo a second time, grey, with its long side at
+1500 pixels — what a photo looks like on a screen, not at 100%. A fixed size is
+what makes cameras comparable: at full size a 50 MP frame looks softer than a
+12 MP one of the same scene. The frame is cut into 64-pixel squares and each is
+measured by the variance of the Laplacian, the usual focus measure that needs no
+reference picture: how much the picture changes from one pixel to the next.
+Squares with nothing in them — sky, a wall — are left out, and each region
+scores its sharpest tenth. Not the average: a portrait with the background
+thrown out of focus is a sharp photograph.
+
+The centre is the same square as for the centre colour; the edges are the rest
+of the frame, without the centre. The bands, from *very soft* to *very sharp*,
+started out as fifths of a real archive and are meant to be tuned by eye; they
+live in `app.py` and change without a re-scan. **Focus** compares the two
+regions: *soft throughout* (both very soft), *centre sharper* (the edges less
+than half as sharp — a subject against a background out of focus), *edges
+sharper* (usually a missed focus, sometimes plain sky in the middle) and *evenly
+sharp*. The list sorts by sharpness — by the sharper of the two regions, or
+by the centre or the edges alone — and while it does, its last column shows
+the number it is sorted by instead of the focal length.
+
+What it cannot tell: fog, night and plain sky read softer than they are, since
+there is little in them to be sharp, and the grain of a film scan reads as
+detail. Motion blur is caught along with missed focus — the measure cannot tell
+the two apart, and for deciding what to keep it does not need to.
+
+The second decode makes the image pass about twice as long. An archive whose
+colours are done only has sharpness measured; colour is not counted again.
+
 **Timeline bars are shares, not counts.** Otherwise a quiet year would look
 like the camera was in a drawer.
 
 Thresholds live at the top of `scan.py` and `app.py` and are commented. Those
 in `app.py` apply in the query, so changing them needs no re-analysis. Those in
 `scan.py` do — bump `ALGO_VERSION` after editing and the archive re-analyses
-itself on the next pass.
+itself on the next pass. Sharpness has a counter of its own, `SHARP_VERSION`,
+which re-measures sharpness alone.
 
 ## Privacy
 
@@ -430,7 +510,10 @@ This matters more than usual for a photo archive, so it is worth being precise.
   derived from your photos. `.gitignore` keeps it out of git — do not defeat
   that.
 - The cache folder holds thumbnails, which are pieces of your photos.
-- The server binds to `127.0.0.1`.
+- The server binds to `127.0.0.1`. Only the launcher's *allow access from the
+  local network* box, or an explicit `--host`, changes that — see *Looking from
+  another device*. File-opening buttons work only from `127.0.0.1` to a server
+  bound to it.
 - **The map is the only outbound request the program ever makes.** It is behind
   a button, and pressing it fetches Leaflet from unpkg.com and tiles from
   openstreetmap.org. From those tile requests their servers can tell which
@@ -445,7 +528,8 @@ One SQLite file, one flat table, no ORM:
 taken, year, month, ym, hour, weekday, brand, camera, lens, focal, focal35,
 iso, fnumber, shutter, exposure, width, height, size, lat, lon,
 color, color_hex, color_share, color_center, color_center_hex,
-color_center_share, brightness, contrast, chroma, clip_hi, clip_lo, path
+color_center_share, brightness, contrast, chroma, clip_hi, clip_lo,
+sharp_center, sharp_edge, sharp_v, mark, comment, path
 ```
 
 If you want a metric the interface does not have, it is usually one SQL query
@@ -458,7 +542,9 @@ set, and `comment`. No pass writes either, so re-reading metadata keeps them.
 
 Tags are the one thing not in that table — a photo takes up to three of them,
 which is not the shape of a column. They live in `photo_tags`, a row per tag per
-photo, with a trigger that clears a photo's tags when its row goes.
+photo, with a trigger that clears a photo's tags when its row goes. The status
+line at the top of the page reads `jobs`, where each pass records its progress;
+only the last fifty passes are kept.
 
 ## When something looks wrong
 

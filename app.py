@@ -18,6 +18,7 @@ Running it:
 import argparse
 import datetime
 import io
+import ipaddress
 import os
 import sqlite3
 import subprocess
@@ -31,6 +32,7 @@ from flask import (Flask, Response, abort, g, jsonify, request, send_file,
                    send_from_directory)
 
 import dupkey
+import jobs
 import tags
 
 try:
@@ -62,6 +64,36 @@ DB_PATH = os.path.join(APP_DIR, "photos.db")
 # this range stay out of the strip — but the photos themselves are not lost and
 # are reachable from a link of their own in the card.
 MIN_YEAR = 1990
+
+# Whether the server was started on the loopback address. Set in main(). When it
+# was not, the interface is open to the local network, and the file actions
+# below are switched off for everyone — see files_here().
+LOOPBACK_ONLY = True
+
+
+def is_loopback(addr):
+    try:
+        return ipaddress.ip_address(addr).is_loopback
+    except ValueError:
+        return addr == "localhost"
+
+
+def files_here():
+    """May this request open files on the computer the server runs on?
+
+    "Show in explorer" and "Open file" act on this machine, not on the one
+    holding the browser: pressed from a tablet on the sofa, they would throw a
+    window open on a desk nobody is sitting at — or in front of whoever is. So
+    they need both: a server that listens on loopback only, and a request that
+    came from loopback. The second alone would do today; the first is there so
+    that a server opened to the network never starts a program on request,
+    whatever address a request appears to come from.
+    """
+    return LOOPBACK_ONLY and is_loopback(request.remote_addr or "")
+
+
+FILES_REFUSED = ("Opening files works only on the computer running photostats, "
+                 "and only while network access is off")
 
 
 def year_range():
@@ -144,6 +176,23 @@ CONTRAST_BUCKETS = [
     (0, 0.08, "flat"), (0.08, 0.14, "low"), (0.14, 0.20, "moderate"),
     (0.20, 0.27, "pronounced"), (0.27, 1.01, "high"),
 ]
+
+# Sharpness is the RMS of the Laplacian at 1500 px (scan.py:sharpness()), a
+# number with no natural scale. These bounds are the quintiles of the centre
+# measure over 400 random frames of a real 130 000-photo archive — 12.5, 22.9,
+# 37.2 and 55.5, rounded — so each band started out as a fifth of that archive.
+# A starting point to be tuned by eye, and tuning needs no re-scan: the bands
+# are applied in the query. The same bounds serve the edges, so that "soft"
+# means the same thing on both panels and the two can be compared.
+SHARP_BUCKETS = [
+    (0, 12, "very soft"), (12, 23, "soft"), (23, 37, "medium"),
+    (37, 55, "sharp"), (55, BIG, "very sharp"),
+]
+SHARP_SOFT = 12       # below this, in both regions, a photo is soft throughout
+# One region counts as softer than the other when its measure is under this
+# share of the other's. Edges under half the centre was a tenth of the sample
+# — a subject in focus against a background that is not.
+FOCUS_RATIO = 0.5
 
 # The rule itself is in dupkey.py: the folder check in scan.py uses the same one,
 # and those two answers must not drift apart. Only the per-request cache is here.
@@ -236,6 +285,25 @@ DERIVED_DIMS = {
         ("crushed shadows", "clip_hi < 0.005 AND clip_lo >= 0.02"),
         ("both ends", "clip_hi >= 0.005 AND clip_lo >= 0.02"),
     ]),
+    # The centre against the rest of the frame. Every condition stands on its
+    # own — a filter uses one at a time, not in order — so they are written to
+    # exclude one another rather than relying on the CASE that counts them.
+    # "Edges sharper" is usually a missed focus, but not always: a
+    # landscape with plain sky in the middle reads the same way.
+    "focus": ("sharp_center", [
+        ("soft throughout",
+         f"MAX(sharp_center, sharp_edge) < {SHARP_SOFT}"),
+        ("centre sharper",
+         f"MAX(sharp_center, sharp_edge) >= {SHARP_SOFT}"
+         f" AND sharp_edge < sharp_center * {FOCUS_RATIO}"),
+        ("edges sharper",
+         f"MAX(sharp_center, sharp_edge) >= {SHARP_SOFT}"
+         f" AND sharp_center < sharp_edge * {FOCUS_RATIO}"),
+        ("evenly sharp",
+         f"MAX(sharp_center, sharp_edge) >= {SHARP_SOFT}"
+         f" AND sharp_edge >= sharp_center * {FOCUS_RATIO}"
+         f" AND sharp_center >= sharp_edge * {FOCUS_RATIO}"),
+    ]),
 }
 
 # dimension -> (column, ranges). The focal column depends on the 35mm-equivalent toggle.
@@ -247,7 +315,29 @@ RANGE_DIMS = {
     "size": ("size", SIZE_BUCKETS),
     "brightness": ("brightness", BRIGHTNESS_BUCKETS),
     "contrast": ("contrast", CONTRAST_BUCKETS),
+    "sharp_center": ("sharp_center", SHARP_BUCKETS),
+    "sharp_edge": ("sharp_edge", SHARP_BUCKETS),
 }
+
+
+def band_label(col, buckets):
+    """The name of the band a value falls in, worked out in the query, so that
+    the photo card says what the panels say without knowing the bounds."""
+    case = " ".join(f"WHEN {col} < {hi} THEN '{lab}'" for _, hi, lab in buckets)
+    return f"CASE WHEN {col} IS NULL THEN NULL {case} END"
+
+
+def focus_label():
+    case = " ".join(f"WHEN {cond} THEN '{name}'"
+                    for name, cond in DERIVED_DIMS["focus"][1])
+    return f"CASE WHEN sharp_center IS NULL OR sharp_edge IS NULL THEN NULL {case} END"
+
+
+# What a photo row carries about sharpness, for the list, the strip and the card.
+SHARP_COLS = (f"sharp_center, sharp_edge,"
+              f" {band_label('sharp_center', SHARP_BUCKETS)} AS sharp_center_l,"
+              f" {band_label('sharp_edge', SHARP_BUCKETS)} AS sharp_edge_l,"
+              f" {focus_label()} AS focus")
 
 
 def range_col(key):
@@ -604,6 +694,8 @@ def api_stats():
         "first": span[0], "last": span[1],
         "outliers": outliers,
         "version": VERSION,
+        # the page hides the file buttons by this; the server refuses them anyway
+        "files": files_here(),
         "mixedMax": MIXED_MAX,
         "dupGroups": dup_groups,
         "dupRule": dupkey.rule_name(sig_ready()),
@@ -627,6 +719,9 @@ def api_stats():
             "brightness": bucket_counts("brightness"),
             "contrast": bucket_counts("contrast"),
             "clipping": derived_counts("clipping"),
+            "sharpCenter": bucket_counts("sharp_center"),
+            "sharpEdge": bucket_counts("sharp_edge"),
+            "focus": derived_counts("focus"),
             "dup": derived_counts("dup"),
         "rating": rating_counts(),
         "tags": tag_counts(),
@@ -778,6 +873,14 @@ SORTS = {
     "camera": ["camera", "taken"],
     "folder": ["folder COLLATE NOCASE", "filename COLLATE NOCASE"],
     "rating": [rating_rank(), "taken"],
+    # By the sharper of the two regions: a portrait with its background out of
+    # focus is not a soft photo, and sorting by the edges would put it among
+    # them. Unmeasured photos count as -1, so they gather at one end.
+    "sharpness": ["COALESCE(MAX(sharp_center, sharp_edge), -1)", "taken"],
+    # each region on its own, for when it is the subject or the background
+    # that matters — the softest centres are where missed focus is found
+    "sharp_center": ["COALESCE(sharp_center, -1)", "taken"],
+    "sharp_edge": ["COALESCE(sharp_edge, -1)", "taken"],
 }
 
 
@@ -823,7 +926,7 @@ def api_photos():
             f"  WHERE {dup_key('d')} = {dup_key('photos')}) AS dup_n,"
             f" color, color_hex, color_share, color_center, color_center_hex,"
             f" color_center_share, brightness, contrast, chroma,"
-            f" clip_hi, clip_lo"
+            f" clip_hi, clip_lo, {SHARP_COLS}"
             f" FROM photos {where} "
             f"ORDER BY {', '.join(c + ' ' + order for c in SORTS[field])},"
             f" id LIMIT ? OFFSET ?",
@@ -844,7 +947,7 @@ def api_random():
             f" size, ext, lat, lon, rating, mark, comment, {TAG_COL},"
             f" color, color_hex, color_share, color_center,"
             f" color_center_hex, color_center_share, brightness, contrast,"
-            f" chroma, clip_hi, clip_lo"
+            f" chroma, clip_hi, clip_lo, {SHARP_COLS}"
             f" FROM photos {where} ORDER BY RANDOM() LIMIT ?", params + [n]).fetchall()
     return jsonify({"items": [dict(r) for r in rows]})
 
@@ -1014,6 +1117,23 @@ def api_set_tags(pid):
     return jsonify({"ok": True, "tags": wanted})
 
 
+@app.get("/api/job")
+def api_job():
+    """The last pass started, for the status line at the top of the page.
+
+    Polled every few seconds, so it is one row by primary key and nothing else.
+    The scanner writes it (jobs.py); whether a silent "running" means stopped is
+    decided there too, so the page never has to guess from a clock of its own —
+    a tablet's clock need not agree with this computer's.
+    """
+    with db() as con:
+        try:
+            job = jobs.latest(con)
+        except sqlite3.OperationalError:     # the table is not there yet
+            job = None
+    return jsonify({"job": job})
+
+
 @app.get("/api/tags")
 def api_tags():
     """The tags already in use, for the suggestions under the input.
@@ -1037,6 +1157,8 @@ def api_tags():
 @app.post("/api/reveal/<int:pid>")
 def api_reveal(pid):
     """Show the file in the Windows file manager."""
+    if not files_here():
+        return jsonify({"ok": False, "error": FILES_REFUSED}), 403
     with db() as con:
         row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
     if not row or not os.path.exists(row["path"]):
@@ -1057,6 +1179,8 @@ def api_reveal(pid):
 @app.post("/api/open/<int:pid>")
 def api_open(pid):
     """Open the file with the default program."""
+    if not files_here():
+        return jsonify({"ok": False, "error": FILES_REFUSED}), 403
     with db() as con:
         row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
     if not row or not os.path.exists(row["path"]):
@@ -1082,7 +1206,7 @@ def api_export():
         rows = con.execute(
             f"SELECT taken, brand, camera, lens, focal, focal35, iso, fnumber,"
             f" shutter, {TAG_COL}, color, color_hex, color_center, color_center_hex,"
-            f" brightness, contrast, chroma, lat, lon,"
+            f" brightness, contrast, chroma, sharp_center, sharp_edge, lat, lon,"
             f" width, height, size, comment, path FROM photos {where}"
             f" ORDER BY taken", params).fetchall()
     buf = io.StringIO()
@@ -1090,7 +1214,8 @@ def api_export():
     w.writerow(["Taken", "Brand", "Camera", "Lens", "Focal, mm", "Equiv, mm",
                 "ISO", "Aperture", "Shutter", "Tags", "Colour", "Hex",
                 "Centre colour", "Centre hex", "Brightness",
-                "Contrast", "Chroma", "Latitude", "Longitude",
+                "Contrast", "Chroma", "Sharpness centre", "Sharpness edges",
+                "Latitude", "Longitude",
                 "Width", "Height", "Size", "Comment", "Path"])
     w.writerows([list(r) for r in rows])
     return Response("\ufeff" + buf.getvalue(), mimetype="text/csv",
@@ -1169,7 +1294,7 @@ def static_files(fn):
 
 
 def main():
-    global DB_PATH, MIN_YEAR
+    global DB_PATH, MIN_YEAR, LOOPBACK_ONLY
     ap = argparse.ArgumentParser(description="Photo archive statistics")
     ap.add_argument("--db", default=DB_PATH)
     ap.add_argument("--port", type=int, default=5577)
@@ -1181,6 +1306,7 @@ def main():
     args = ap.parse_args()
 
     DB_PATH = os.path.abspath(args.db)
+    LOOPBACK_ONLY = is_loopback(args.host)
     MIN_YEAR = args.min_year
     if not os.path.exists(DB_PATH):
         print(f"No database at {DB_PATH}. Run this first:\n"
@@ -1199,7 +1325,9 @@ def main():
                            ("color_center_hex", "TEXT"),
                            ("color_center_share", "REAL"), ("brightness", "REAL"),
                            ("contrast", "REAL"), ("chroma", "REAL"),
-                           ("clip_hi", "REAL"), ("clip_lo", "REAL")):
+                           ("clip_hi", "REAL"), ("clip_lo", "REAL"),
+                           ("sharp_center", "REAL"), ("sharp_edge", "REAL"),
+                           ("sharp_v", "INTEGER")):
             if name not in cols:
                 con.execute(f"ALTER TABLE photos ADD COLUMN {name} {decl}")
                 con.commit()
@@ -1207,6 +1335,9 @@ def main():
         # Here as well as in scan.py: either program may meet a database that
         # predates tags, and whichever runs first has to build it.
         tags.ensure_schema(con)
+        # The scanner's status rows. Built here too so that the status line can
+        # be asked about before any pass of this version has run.
+        jobs.ensure_schema(con)
         con.execute("DROP INDEX IF EXISTS ix_dup")      # the key changed
         con.execute(f"CREATE INDEX IF NOT EXISTS ix_dupkey ON photos({name_key()})")
         con.execute("CREATE INDEX IF NOT EXISTS ix_sig ON photos(sig)")
@@ -1237,6 +1368,10 @@ def main():
 
     url = f"http://{args.host}:{args.port}/"
     print(f"Database: {DB_PATH}\nOpening {url}\nPress Ctrl+C here to stop.")
+    if not LOOPBACK_ONLY:
+        print("WARNING: open to the local network, with no password. Anyone on it\n"
+              "         can see every photo, its path and where it was taken, and\n"
+              "         change ratings, tags and comments. Opening files is off.")
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     app.run(host=args.host, port=args.port, threaded=True)

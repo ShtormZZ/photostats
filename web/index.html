@@ -38,6 +38,24 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .topbar{position:sticky;top:0;z-index:30}
 .top{display:flex;align-items:center;gap:18px;padding:14px 20px;
   border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+/* What the scanner is doing, between the count of photos and the search. A pill
+   rather than a banner: a pass runs for hours, and the page is for looking at
+   photographs meanwhile, not at the pass. */
+.job{display:flex;align-items:center;gap:8px;min-width:0;max-width:460px;
+  font-family:var(--data);font-size:11.5px;color:var(--muted);
+  border:1px solid var(--line);border-radius:3px;padding:4px 8px}
+.job .dot{width:7px;height:7px;border-radius:50%;background:var(--safelight);flex:none}
+.job.running .dot{animation:jobpulse 1.4s ease-in-out infinite}
+@keyframes jobpulse{50%{opacity:.25}}
+.job.done .dot{background:#4A9E4E}
+.job.stopped .dot{background:var(--muted)}
+.job.failed{border-color:#D9534F}
+.job.failed .dot{background:#D9534F}
+.job .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--paper);min-width:0}
+.job .bar{width:70px;height:3px;background:var(--line);border-radius:2px;overflow:hidden;flex:none}
+.job .bar i{display:block;height:100%;background:var(--safelight)}
+.job button{color:var(--muted);font-size:11px;padding:0 2px;flex:none}
+.job button:hover{color:var(--safelight)}
 .brand{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;
   font-weight:600;display:flex;align-items:center}
 .brand span{color:var(--safelight)}
@@ -295,6 +313,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* ---------- preview strip ---------- */
 .sheet-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+/* A selection held back while a pass runs (holdSelection) keeps only its head
+   and the note in place of the rest. */
+#held{display:none}
+.right.held > :not(.sheet-head){display:none}
+.right.held > #held{display:block}
 .seltools{display:flex;align-items:center;gap:6px;margin:0 0 12px}
 .seltools .sortlab{font-family:var(--data);font-size:11px;color:var(--muted)}
 /* The export is a link, so that the browser saves the file rather than the page
@@ -524,7 +547,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   .detail{grid-template-columns:1fr}
   .meta{border-left:0;border-top:1px solid var(--line)}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}
+  .job.running .dot{animation:none}}
 </style>
 </head>
 <body>
@@ -534,6 +558,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="brand"><img class="mark" src="mark.svg" alt="" width="30" height="30">Photo<span>archive</span></div>
   <div class="ver" id="ver"></div>
   <div class="tally" id="tally">loading…</div>
+  <div class="job" id="job" hidden></div>
   <div class="grow"></div>
   <input class="search" id="q" type="search" placeholder="search path and name">
   <a class="tool" id="csv" href="#">export CSV</a>
@@ -729,8 +754,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
       <div id="ccWrap" hidden>
         <div class="subhead">Colour in the centre<i></i></div>
         <div class="rows" id="colorCenter"></div>
-        <div class="subnote">The centre is half the frame area, taken from the
-          middle. The dominant colour usually describes the background, the
+        <div class="subnote">The centre is a square cut from the middle of the
+          frame. The dominant colour usually describes the background, the
           centre one describes the subject.</div>
       </div>
     </section>
@@ -753,6 +778,29 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
         <div class="card-note">blown to white and crushed to black</div>
       </div>
       <div class="rows" id="clipping"></div>
+    </section>
+    <section class="card" id="sharpCard" hidden>
+      <div class="card-head">
+        <div class="card-title">Sharpness in the centre</div>
+        <div class="grow"></div>
+        <div class="card-note" id="sharpNote"></div>
+      </div>
+      <div class="rows" id="sharpCenter"></div>
+      <div class="subhead">Sharpness at the edges<i></i></div>
+      <div class="rows" id="sharpEdge"></div>
+      <div class="subnote">Judged at screen size, by the sharpest part of each
+        region, so a background thrown out of focus does not make a portrait
+        soft. The centre is the same square as for colour; the edges are the
+        rest of the frame. Fog, night and plain sky read as softer than they
+        are — there is little in them to be sharp.</div>
+    </section>
+    <section class="card" id="focusCard" hidden>
+      <div class="card-head">
+        <div class="card-title">Focus</div>
+        <div class="grow"></div>
+        <div class="card-note">the centre against the edges</div>
+      </div>
+      <div class="rows" id="focus"></div>
     </section>
     </div>
   </div>
@@ -783,6 +831,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
       <div class="grow"></div>
       <div class="card-note" id="sheetNote"></div>
     </div>
+    <div id="held"></div>
     <div class="seltools">
       <button class="toggle on" id="viewFiles">files</button>
       <button class="toggle" id="viewFolders">folders</button>
@@ -795,6 +844,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
         <option value="camera">camera</option>
         <option value="folder">folder</option>
         <option value="rating">rating</option>
+        <option value="sharpness">sharpness</option>
+        <option value="sharp_center">sharpness, centre</option>
+        <option value="sharp_edge">sharpness, edges</option>
       </select>
       <button class="toggle" id="sortDir" title="Reverse order">↑</button>
     </div>
@@ -817,7 +869,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     <div class="lhead">
       <span>Taken</span><span>File</span><span class="c-tags">Tags</span>
       <span class="c-cam">Camera</span>
-      <span class="c-lens">Lens</span><span style="text-align:right">mm</span>
+      <span class="c-lens">Lens</span><span id="flHead" style="text-align:right">mm</span>
     </div>
     <div id="list"></div>
     <div id="sheetFoot"></div>
@@ -837,6 +889,7 @@ const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
   iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
   rating:"Rating", tag:"Tag",
   tone:"Tone", brightness:"Brightness", contrast:"Contrast", clipping:"Clipping",
+  sharp_center:"Sharpness, centre", sharp_edge:"Sharpness, edges", focus:"Focus",
   baddate:"Date"};
 /* Range labels come from the server — kept here for the filter chips. */
 const seen = {};
@@ -849,7 +902,11 @@ function remember(param, items){
 }
 
 const state = {filters:{}, eq:false, sort:"taken", dir:"asc", view:"files",
-               limit:300, expanded:{}, mixedMax:0.20};
+               limit:300, expanded:{}, mixedMax:0.20,
+               // Can this browser open files on the machine running the server?
+               // Told by the server; until it says, assume not — a button that
+               // appears and then vanishes is better than one that fails.
+               files:false};
 const ctl = {};
 
 /* The previous request of the same kind is cancelled: while the old selection
@@ -1976,6 +2033,15 @@ function act(action, id){
     .catch(() => toast("Could not open the file"));
 }
 
+/* The band names come from the server with the photo, so the card and the
+   panels cannot disagree about where "soft" begins. The numbers are there for
+   whoever is tuning those bounds by eye. */
+function sharpText(it){
+  return "centre " + it.sharp_center_l + " (" + Math.round(it.sharp_center) + ")" +
+    "  ·  edges " + it.sharp_edge_l + " (" + Math.round(it.sharp_edge) + ")" +
+    (it.focus ? "  ·  " + it.focus : "");
+}
+
 /* The summary under a row. Expanded rows do not close one another: that way
    several frames can be laid out side by side and compared without losing your
    place in the list. */
@@ -2038,6 +2104,8 @@ function expandRow(row, it){
   if (it.brightness !== null && it.brightness !== undefined)
     line("brightness " + Math.round(it.brightness * 100) + "%  ·  contrast " +
          it.contrast.toFixed(2));
+  if (it.sharp_center !== null && it.sharp_center !== undefined)
+    line("sharpness: " + sharpText(it));
   line((it.width && it.height ? it.width + "×" + it.height + "  ·  " : "") +
        (it.size / 1048576).toFixed(1) + " MB  ·  " + nf(it.size) + " bytes");
   if (it.dup_n > 1)
@@ -2047,11 +2115,11 @@ function expandRow(row, it){
 
   const acts = box.querySelector(".acts2");
   acts.appendChild(ratingControl(it));
-  [["show in explorer", () => act("reveal", it.id)],
-   ["open file", () => act("open", it.id)],
+  [state.files && ["show in explorer", () => act("reveal", it.id)],
+   state.files && ["open file", () => act("open", it.id)],
    ["whole folder", () => { state.filters.folder = it.folder; load(); }],
    ["large", () => openDetail(it)]
-  ].forEach(([label, fn]) => {
+  ].filter(Boolean).forEach(([label, fn]) => {
     const b = document.createElement("button");
     b.className = "act2";
     b.textContent = label;
@@ -2096,7 +2164,24 @@ function renderFolders(data){
     plural(data.total, " folder", " folders");
 }
 
+/* While the list is sorted by sharpness, the last column shows the number it is
+   sorted by instead of the focal length — a sort you cannot see is a sort you
+   cannot check, and these numbers are what the bands are tuned against. */
+const SHARP_SORTS = {
+  sharpness: it => it.sharp_center === null || it.sharp_edge === null ? null
+    : Math.max(it.sharp_center, it.sharp_edge),
+  sharp_center: it => it.sharp_center,
+  sharp_edge: it => it.sharp_edge,
+};
+function sharpSort(){ return SHARP_SORTS[state.sort]; }
+function sharpValue(it){
+  const v = SHARP_SORTS[state.sort](it);
+  return v === undefined ? null : v;
+}
+
 function renderList(data, append){
+  $("flHead").textContent = sharpSort() ? "sharp" : "mm";
+  $("flHead").title = sharpSort() ? "The sharpness the list is sorted by" : "";
   const box = $("list");
   if (!append){ box.innerHTML = ""; listItems = []; lastGroup = null; }
   if (!data.items.length && !append){
@@ -2130,7 +2215,12 @@ function renderList(data, append){
     }
     put(".c-cam", it.camera || "—");
     put(".c-lens", it.lens || "—");
-    put(".c-fl", fl ? Math.round(fl) : "—");
+    if (sharpSort()){
+      const v = sharpValue(it);
+      put(".c-fl", v === null ? "—" : Math.round(v));
+    } else {
+      put(".c-fl", fl ? Math.round(fl) : "—");
+    }
     b.onclick = () => expandRow(b, it);
     box.appendChild(b);
   });
@@ -2172,6 +2262,8 @@ function openDetail(it, deck){
     rows.push(["Light", "brightness " + Math.round(it.brightness*100) + "%" +
       "  ·  contrast " + it.contrast.toFixed(2) +
       (it.chroma < 0.02 ? "  ·  black & white" : "")]);
+  if (it.sharp_center !== null && it.sharp_center !== undefined)
+    rows.push(["Sharpness", sharpText(it)]);
   if (it.clip_hi >= 0.005 || it.clip_lo >= 0.02)
     rows.push(["Clipping", [it.clip_hi >= 0.005 ? "highlights " + (it.clip_hi*100).toFixed(1) + "%" : null,
                             it.clip_lo >= 0.02 ? "shadows " + (it.clip_lo*100).toFixed(1) + "%" : null]
@@ -2200,9 +2292,13 @@ function openDetail(it, deck){
     '<div class="tagbox"><span class="rlab">Tags</span></div>' +
     '<div class="notebox"><span class="rlab">Comment</span></div>' +
     '<div class="acts">' +
-    '<button class="act primary" data-a="reveal">Show in explorer</button>' +
-    '<button class="act" data-a="open">Open file</button>' +
-    '<button class="act" data-a="folder">All photos in this folder</button>' +
+    (state.files
+      ? '<button class="act primary" data-a="reveal">Show in explorer</button>' +
+        '<button class="act" data-a="open">Open file</button>' +
+        '<button class="act" data-a="folder">All photos in this folder</button>'
+      : '<button class="act primary" data-a="folder">All photos in this folder</button>' +
+        '<div class="card-note">Opening files works only on the computer running ' +
+        'photostats, and only while network access is off.</div>') +
     '<button class="act" data-a="close">Close</button></div></div>';
   d.querySelector("img").src = "/api/thumb/" + it.id + "?s=1400";
   d.querySelector("h3").textContent = it.filename;
@@ -2366,7 +2462,136 @@ function loadStrip(){
     .then(d => renderStrip(d.items)).catch(quiet);
 }
 
+/* ---------- what the scanner is doing ----------
+   The scanner writes its progress into the database (jobs.py) and the page asks
+   for it every few seconds — often while a pass runs, rarely otherwise. Nothing
+   leaves this computer: it is the same server the rest of the page talks to.
+   A finished pass stays in the line for half a day, or until its × is pressed,
+   so a scan left running overnight still says in the morning how it ended. */
+const JOB_KEEP = 12 * 3600;                 // seconds a finished pass is shown for
+
+function jobDismissed(){
+  try { return localStorage.getItem("jobDismissed"); } catch (e){ return null; }
+}
+
+function jobWhen(t){
+  const d = new Date(t * 1000);
+  const hm = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  return d.toDateString() === new Date().toDateString()
+    ? hm : d.toLocaleDateString([], {day: "numeric", month: "short"}) + " " + hm;
+}
+
+function renderJob(j){
+  const box = $("job");
+  if (j){
+    state.jobNow = j.now;
+    // the first answer stands in for the moment the numbers were loaded
+    if (state.loadedAt === undefined) state.loadedAt = j.now;
+  }
+  const running = j && j.state === "running";
+  if (!running) releaseSelection();
+  if (!j || (!running && (String(j.id) === jobDismissed() ||
+                          j.now - (j.finished || j.beat) > JOB_KEEP))){
+    box.hidden = true;
+    return;
+  }
+  const pct = j.total ? Math.min(100, Math.floor(100 * j.done / j.total)) : null;
+  let text;
+  if (running){
+    text = j.label + " · " + (j.total !== null
+      ? nf(j.done) + " of " + nf(j.total) + " · " + pct + "%"
+      : (j.phase ? j.phase + " · " : "") + nf(j.done) + " found");
+  } else if (j.state === "done"){
+    text = j.label + " — done " + jobWhen(j.finished) + " · " +
+      (j.note || nf(j.done) + plural(j.done, " file", " files"));
+  } else if (j.state === "stopped"){
+    text = j.label + " — stopped " + jobWhen(j.finished) +
+      (pct !== null ? " at " + pct + "%" : "");
+  } else {
+    text = j.label + " — failed " + jobWhen(j.finished) +
+      (j.note ? " · " + j.note : "");
+  }
+
+  box.className = "job " + j.state;
+  box.innerHTML = '<i class="dot"></i><span class="txt"></span>';
+  box.querySelector(".txt").textContent = text;
+  box.title = text + (j.state === "stopped"
+    ? "\nNothing done is lost: the next run carries on from there." : "");
+  if (running && pct !== null){
+    const bar = document.createElement("span");
+    bar.className = "bar";
+    bar.innerHTML = "<i></i>";
+    bar.firstChild.style.width = pct + "%";
+    box.appendChild(bar);
+  }
+  // The numbers on the page are as of the last load. While a pass runs, or
+  // once it has finished since then, the line offers to bring them up to date
+  // rather than doing it by itself — that would reshuffle the random photos
+  // and fold every open row while you are looking at them.
+  if (running || (j.finished || 0) > state.loadedAt){
+    const b = document.createElement("button");
+    b.textContent = "refresh";
+    b.title = "Reload the numbers with what the pass has done so far";
+    b.onclick = () => { load(); renderJob(j); };
+    box.appendChild(b);
+  }
+  if (!running){
+    const x = document.createElement("button");
+    x.textContent = "×";
+    x.title = "Hide until the next pass";
+    x.onclick = () => {
+      try { localStorage.setItem("jobDismissed", String(j.id)); } catch (e){}
+      box.hidden = true;
+    };
+    box.appendChild(x);
+  }
+  box.hidden = false;
+}
+
+function pollJob(){
+  const again = ms => setTimeout(pollJob, ms);
+  if (document.hidden) return again(5000);      // a background tab asks nothing
+  fetch("/api/job")
+    .then(r => r.json())
+    .then(d => {
+      renderJob(d.job);
+      again(d.job && d.job.state === "running" ? 3000 : 15000);
+    })
+    .catch(() => again(15000));
+}
+
+/* ---------- a selection that waits for the scanner ----------
+   The selection is where the photographs come from: ten thumbnails, each
+   decoded from the original on the same disk the scanner is reading as fast as
+   it can. Opening the page during a pass made both crawl, so the panel waits
+   until the pass is over, or until it is asked for. Only at opening: photos
+   already on screen are not taken away by a pass that starts later. */
+function holdSelection(j){
+  state.held = true;
+  document.querySelector(".right").classList.add("held");
+  const box = $("held");
+  box.innerHTML = '<div class="empty"></div>';
+  box.firstChild.textContent = "The scanner is busy — " +
+    j.label.charAt(0).toLowerCase() + j.label.slice(1) + ". The photos are not " +
+    "loaded meanwhile: reading them off the disk the scanner is reading would " +
+    "slow down both. They appear here by themselves once the pass is over.";
+  const b = document.createElement("button");
+  b.className = "more";
+  b.textContent = "show them now";
+  b.onclick = releaseSelection;
+  box.appendChild(b);
+}
+
+function releaseSelection(){
+  if (!state.held) return;
+  state.held = false;
+  document.querySelector(".right").classList.remove("held");
+  if (state.view === "folders") loadFolders(); else loadPhotos(0);
+  loadStrip();
+}
+
 function load(){
+  state.loadedAt = state.jobNow;
   renderChips();
   $("csv").href = "/api/export?" + params();
   $("pathsCsv").href = "/api/export/paths?" + params();
@@ -2380,8 +2605,11 @@ function load(){
     }
     $("tally").innerHTML = "<b>" + nf(d.total) + "</b> of " + nf(d.totalAll) + " photos · " +
       (d.bytes/1073741824).toFixed(1) + " GB";
+    // the list would say how many it holds; held back, the count comes from here
+    if (state.held) $("sheetNote").textContent = nf(d.total) + " photos";
     if (d.mixedMax) state.mixedMax = d.mixedMax;
     if (d.version) $("ver").textContent = "v" + d.version;
+    state.files = !!d.files;
     $("span").textContent = d.first && d.last
       ? d.first.slice(0,10) + " — " + d.last.slice(0,10) : "";
     renderFilm(d.charts.timeline);
@@ -2421,11 +2649,24 @@ function load(){
         'then reload this page.</div>';
       $("colorNote").textContent = "not collected";
     }
-    [["tone", 4], ["brightness", 8], ["contrast", 8], ["clipping", 6]].forEach(([id, cap]) => {
-      const items = d.charts[id] || [];
-      $(id + "Card").hidden = !items.length;
-      if (items.length) renderRows(id, items, id, cap);
-    });
+    [["tone", 4], ["brightness", 8], ["contrast", 8], ["clipping", 6], ["focus", 4]]
+      .forEach(([id, cap]) => {
+        const items = d.charts[id] || [];
+        $(id + "Card").hidden = !items.length;
+        if (items.length) renderRows(id, items, id, cap);
+      });
+    /* Sharpness came after colour, so an archive can have one and not yet the
+       other. Until something has been measured the card would be a single bar
+       of "not specified", which says nothing the note below cannot. */
+    const sc = d.charts.sharpCenter || [], se = d.charts.sharpEdge || [];
+    const unmeasured = (sc.find(i => i.k === NONE) || {}).v || 0;
+    $("sharpCard").hidden = !sc.some(i => i.k !== NONE);
+    if (!$("sharpCard").hidden){
+      renderRows("sharpCenter", sc, "sharp_center", 6);
+      renderRows("sharpEdge", se, "sharp_edge", 6);
+      $("sharpNote").textContent = unmeasured
+        ? nf(unmeasured) + " not measured yet — run Analyse images" : "";
+    }
     /* Always shown once the image analysis is done. Hiding it until a dominant
        colour was picked turned out to be needless: the centre colour filters by
        subject on its own — every frame with something black in the middle, say. */
@@ -2450,8 +2691,10 @@ function load(){
         "answer run scan.py --hash-only and this switches to a content signature.";
     countGroups();
   }).catch(quiet);
-  if (state.view === "folders") loadFolders(); else loadPhotos(0);
-  loadStrip();
+  if (!state.held){
+    if (state.view === "folders") loadFolders(); else loadPhotos(0);
+    loadStrip();
+  }
   loadGeo();
   loadTimeline("camera", {box: "tlCamera", note: "tlCameraNote", foot: "tlCameraFoot"});
   loadTimeline("lens", {box: "tlLens", note: "tlLensNote", foot: "tlLensFoot"});
@@ -2522,7 +2765,15 @@ $("eq").onclick = () => {
   load();
 };
 
-load();
+/* What the scanner is doing is asked first, so that a pass already running can
+   hold the selection back before it starts loading. A server too old to answer
+   loads everything, as it always did. */
+fetch("/api/job").then(r => r.json()).catch(() => ({}))
+  .then(d => {
+    if (d.job && d.job.state === "running") holdSelection(d.job);
+    load();
+    pollJob();
+  });
 </script>
 </body>
 </html>

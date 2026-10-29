@@ -37,6 +37,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 
 import dupkey
+import jobs
 import tags
 
 try:
@@ -217,7 +218,12 @@ CREATE TABLE IF NOT EXISTS photos (
     contrast    REAL,      -- the spread of brightness
     chroma      REAL,      -- share of coloured pixels; near zero means a black and white frame
     clip_hi     REAL,      -- share of pixels blown out to white
-    clip_lo     REAL       -- share of pixels crushed to black
+    clip_lo     REAL,      -- share of pixels crushed to black
+    -- Sharpness of the centre square and of the rest of the frame: the RMS of the
+    -- Laplacian at 1500 px, in the sharpest tenth of the tiles (see sharpness()).
+    sharp_center REAL,
+    sharp_edge   REAL,
+    sharp_v      INTEGER   -- the SHARP_VERSION it was measured under; NULL = never
 );
 CREATE INDEX IF NOT EXISTS ix_year   ON photos(year);
 CREATE INDEX IF NOT EXISTS ix_ym     ON photos(ym);
@@ -297,7 +303,9 @@ def migrate(con):
                        ("color_center_hex", "TEXT"),
                        ("color_center_share", "REAL"), ("brightness", "REAL"),
                        ("contrast", "REAL"), ("chroma", "REAL"),
-                       ("clip_hi", "REAL"), ("clip_lo", "REAL")):
+                       ("clip_hi", "REAL"), ("clip_lo", "REAL"),
+                       ("sharp_center", "REAL"), ("sharp_edge", "REAL"),
+                       ("sharp_v", "INTEGER")):
         if name not in cols:
             con.execute(f"ALTER TABLE photos ADD COLUMN {name} {decl}")
             con.commit()
@@ -686,8 +694,10 @@ def file_sig(job):
         return pid, None
 
 
-def sign_files(con, workers, full=False):
-    """Computes signatures where there are none yet. Stops and resumes."""
+def sign_files(con, workers, full=False, job=None):
+    """Computes signatures where there are none yet. Stops and resumes.
+    `job`, when given, is told the progress for the status line in the page."""
+    job = job or NO_JOB
     mode = "full" if full else "partial"
     row = con.execute("SELECT v FROM meta WHERE k = 'sig_mode'").fetchone()
     if row and row[0] != mode:
@@ -699,8 +709,10 @@ def sign_files(con, workers, full=False):
     rows = con.execute("SELECT id, path FROM photos WHERE sig IS NULL").fetchall()
     if not rows:
         print("Signatures already computed for every photo.")
+        job.note = "nothing to do"
         return
     jobs = [(pid, path, full) for pid, path in rows]
+    job.total = len(jobs)
     print(f"Signing files: {len(jobs)}, {'whole file' if full else 'head and tail'}.")
     print("Ctrl+C stops it; whatever is done is kept.", flush=True)
 
@@ -710,6 +722,7 @@ def sign_files(con, workers, full=False):
         for pid, sig in pool.map(file_sig, jobs):
             buf.append((sig, pid))
             done += 1
+            job.done = done
             if len(buf) >= 400:
                 con.executemany("UPDATE photos SET sig = ? WHERE id = ?", buf)
                 con.commit()
@@ -723,6 +736,7 @@ def sign_files(con, workers, full=False):
                       end="", flush=True)
     except KeyboardInterrupt:
         print("\nStopped.")
+        job.stop()
     finally:
         pool.shutdown(wait=False)
         if buf:
@@ -857,6 +871,30 @@ ALGO_VERSION = 14
 # already in the database. The image analysis is not lost in the process — it sits
 # in columns of its own.
 EXIF_VERSION = 3
+
+# Sharpness is the third measure with a version of its own. It is kept per row
+# (`sharp_v`) rather than in `meta`, which does two things: a change here
+# re-measures sharpness alone and leaves colour as it is, and a photo that could
+# not be measured is still marked as tried, so it is not tried again on every run.
+SHARP_VERSION = 1
+
+# Measured on a grey copy whose long side is this many pixels — what a photo
+# looks like on a screen, not at 100%. A fixed size is what makes two cameras
+# comparable: at full size a 50 MP frame looks softer than a 12 MP one of the
+# same scene, which says something about pixels, not about focus. Shrinking also
+# averages out sensor noise and JPEG blocks, both of which pass for detail.
+SHARP_SIDE = 1500
+SHARP_MIN_SIDE = 600     # smaller than this and there is nothing to measure
+SHARP_TILE = 64          # the frame is judged in squares of this many pixels
+# A tile whose grey varies less than this has nothing in it to be sharp — sky,
+# a wall, a dark corner — and would drag the measure down for a reason that has
+# nothing to do with focus.
+SHARP_FLAT = 6.0
+SHARP_MIN_TILES = 3      # fewer textured tiles than this and every tile counts
+# A region scores what its sharpest tenth of tiles scores. Not the average: a
+# portrait with its background thrown out of focus is a sharp photograph, and an
+# average over the whole region would call it soft.
+SHARP_PCT = 0.90
 
 
 def pixel_group(r, g, b):
@@ -1089,6 +1127,155 @@ def load_small(path, exe=None, grid=48):
     return None
 
 
+def load_gray(path, exe=None):
+    """A grey copy for the sharpness measure, long side SHARP_SIDE, or None.
+
+    Separate from load_small rather than sharing a decode with it. Colour is
+    counted on a copy decoded at an eighth of the size, and decoding larger for
+    both would move the 48×48 grid onto different pixels — every colour in the
+    archive would shift a little without the rules having changed. A second
+    decode keeps colour exactly as it was; it costs about as much as the first.
+
+    A JPEG still shrinks while it is decoded, to the nearest scale not below the
+    target; the rest is done with a box filter, an average, so that every
+    picture is measured at the same size whatever scale the decoder could do.
+    """
+    from PIL import Image
+
+    def fit(im):
+        w, h = im.size
+        if max(w, h) < SHARP_MIN_SIDE:
+            return None
+        im = im.convert("L")
+        if max(w, h) > SHARP_SIDE:
+            k = SHARP_SIDE / max(w, h)
+            im = im.resize((max(1, round(w * k)), max(1, round(h * k))), Image.BOX)
+        return im
+
+    try:
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        except Exception:
+            pass
+        with Image.open(path) as im:
+            w, h = im.size
+            k = SHARP_SIDE / max(w, h)
+            try:
+                im.draft("L", (int(w * k) + 1, int(h * k) + 1))
+            except Exception:
+                pass
+            got = fit(im)
+            if got is not None:
+                return got
+    except Exception:
+        pass
+    # RAW, or a RAW that Pillow opened as its tiny embedded TIFF thumbnail. The
+    # thumbnail ExifTool would give first is 160 pixels wide — too small to say
+    # anything about focus — so only the larger previews are asked for.
+    if exe:
+        import io
+        for tag in ("-PreviewImage", "-JpgFromRaw"):
+            try:
+                out = subprocess.run(
+                    [exe, "-b", tag, path], capture_output=True, timeout=60,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                if out.stdout and len(out.stdout) > 1000:
+                    with Image.open(io.BytesIO(out.stdout)) as im:
+                        got = fit(im)
+                        if got is not None:
+                            return got
+            except Exception:
+                continue
+    return None
+
+
+def sharp_ready():
+    """Can this Pillow do the sharpness arithmetic? It needs ImageMath's
+    lambda_eval, which arrived in Pillow 10.3."""
+    try:
+        from PIL import ImageMath
+        return hasattr(ImageMath, "lambda_eval")
+    except ImportError:
+        return False
+
+
+def sharpness(g):
+    """(centre, edges) for a grey copy from load_gray.
+
+    The measure is the variance of the Laplacian — how much the picture changes
+    from one pixel to the next — the usual focus measure that needs no reference
+    picture. It is worked out per tile, and each region scores its sharpest
+    tenth of textured tiles (see SHARP_PCT, SHARP_FLAT). The number stored is
+    the square root, which grows roughly in step with how sharp a picture looks.
+
+    The centre is the same square as for the centre colour; the edges are the
+    rest of the frame, without the centre. A tile belongs where its middle lies.
+    Measured on a fixed grid rather than on random patches: the decoding costs
+    far more than the arithmetic, a grid gives the same answer on every run, and
+    a patch small enough to be cheap holds too few pixels for a variance.
+
+    The arithmetic is done on whole pictures in floating point and the tiles are
+    averaged by shrinking with a box filter, one pixel per tile. Pillow's own
+    filters work in 8 bits and clip, which would drop the negative half of the
+    Laplacian, and walking the tiles one crop at a time took three times as long.
+    """
+    from PIL import Image, ImageMath
+    t = SHARP_TILE
+    w, h = g.size
+    # one pixel of margin all round: the Laplacian of a pixel needs its neighbours
+    nx, ny = (w - 2) // t, (h - 2) // t
+    if not nx or not ny:
+        return None, None
+    ox, oy = (w - nx * t) // 2, (h - ny * t) // 2
+    f = g.convert("F")
+
+    def shifted(dx, dy):
+        return f.crop((ox + dx, oy + dy, ox + dx + nx * t, oy + dy + ny * t))
+
+    c = shifted(0, 0)
+    lap = ImageMath.lambda_eval(
+        lambda a: a["c"] * 4 - a["u"] - a["d"] - a["l"] - a["r"],
+        c=c, u=shifted(0, -1), d=shifted(0, 1), l=shifted(-1, 0), r=shifted(1, 0))
+
+    def tile_means(img):
+        small = img.resize((nx, ny), Image.BOX)
+        flat = getattr(small, "get_flattened_data", None) or small.getdata
+        return list(flat())
+
+    square = lambda a: a["x"] * a["x"]
+    lap_m = tile_means(lap)
+    lap_sq = tile_means(ImageMath.lambda_eval(square, x=lap))
+    grey_m = tile_means(c)
+    grey_sq = tile_means(ImageMath.lambda_eval(square, x=c))
+
+    side = max(1, round(min(w, h) * CENTER_AREA ** 0.5))
+    cx0, cy0 = (w - side) / 2, (h - side) / 2
+    centre, edges = [], []
+    for i in range(nx * ny):
+        tx, ty = i % nx, i // nx
+        var = lap_sq[i] - lap_m[i] ** 2
+        flat = grey_sq[i] - grey_m[i] ** 2 < SHARP_FLAT ** 2
+        mx, my = ox + tx * t + t / 2, oy + ty * t + t / 2
+        inside = cx0 <= mx < cx0 + side and cy0 <= my < cy0 + side
+        (centre if inside else edges).append((flat, var))
+    return region_score(centre), region_score(edges)
+
+
+def region_score(tiles):
+    if not tiles:
+        return None
+    vals = [v for flat, v in tiles if not flat]
+    # A frame blurred all over loses the texture that marks a tile as worth
+    # judging. Falling back to every tile is what keeps it reading as very soft
+    # rather than as "nothing to measure".
+    if len(vals) < SHARP_MIN_TILES:
+        vals = [v for _, v in tiles]
+    vals.sort()
+    v = vals[min(len(vals) - 1, int(SHARP_PCT * len(vals)))]
+    return round(max(v, 0.0) ** 0.5, 2)
+
+
 STAT_KEYS = ["color", "color_hex", "color_share",
              "color_center", "color_center_hex", "color_center_share",
              "brightness", "contrast",
@@ -1098,24 +1285,52 @@ FAILED = (UNKNOWN,) + (None,) * (len(STAT_KEYS) - 1)
 
 
 def stats_of(job):
-    """A job for a worker process: (id, path, path to exiftool)."""
-    pid, path, exe = job
-    im = load_small(path, exe)
-    if im is None:
-        return (pid, *FAILED)
-    try:
-        got = image_stats(im)
-    except Exception:
+    """A job for a worker process: (id, path, path to exiftool, needs colour,
+    needs sharpness). Returns (id, colour values or None, sharpness or None).
+
+    Only what is missing is worked out. Sharpness came later than colour, and
+    measuring it across an archive whose colours are done must not re-count
+    every colour on the way — nor must re-measuring after SHARP_VERSION moves.
+    """
+    pid, path, exe, need_colour, need_sharp = job
+    colour = sharp = None
+    if need_colour:
+        im = load_small(path, exe)
         got = None
-    if not got:
-        return (pid, *FAILED)
-    return (pid, *(got[k] for k in STAT_KEYS))
+        if im is not None:
+            try:
+                got = image_stats(im)
+            except Exception:
+                got = None
+        colour = tuple(got[k] for k in STAT_KEYS) if got else FAILED
+    if need_sharp:
+        try:
+            g = load_gray(path, exe)
+            sharp = sharpness(g) if g is not None else (None, None)
+        except Exception:
+            sharp = (None, None)
+    return pid, colour, sharp
 
 
-def analyze_colors(con, exe, workers, reset=False):
-    """Analyses only the photos that have not been analysed yet: the pass can be
-    interrupted and carried on by another run. The condition includes brightness so
-    that databases built before the light metrics existed fill themselves in."""
+class _NoJob:
+    """Takes the attributes a jobs.Job would and writes them nowhere."""
+    def stop(self, note=None):
+        pass
+
+
+NO_JOB = _NoJob()
+
+
+# What still needs doing, per photo. Brightness is in the colour condition so
+# that databases built before the light metrics existed fill themselves in.
+NEEDS_COLOUR = "(color IS NULL OR brightness IS NULL)"
+NEEDS_SHARP = f"(sharp_v IS NULL OR sharp_v != {SHARP_VERSION})"
+
+
+def analyze_colors(con, exe, workers, reset=False, job=None):
+    """Colour, light and sharpness, for the photos that do not have them yet:
+    the pass can be interrupted and carried on by another run."""
+    job = job or NO_JOB
     row = con.execute("SELECT v FROM meta WHERE k = 'color_algo'").fetchone()
     stored = int(row[0]) if row else 0
     if reset or stored != ALGO_VERSION:
@@ -1130,30 +1345,64 @@ def analyze_colors(con, exe, workers, reset=False):
         con.execute("INSERT OR REPLACE INTO meta VALUES ('color_algo', ?)",
                     (str(ALGO_VERSION),))
         con.commit()
+    if reset:
+        con.execute("UPDATE photos SET sharp_center=NULL, sharp_edge=NULL, sharp_v=NULL")
+        con.commit()
 
-    rows = con.execute("SELECT id, path FROM photos "
-                       "WHERE color IS NULL OR brightness IS NULL").fetchall()
+    # An environment set up before sharpness existed may have a Pillow too old
+    # for it. Colour still runs; sharpness waits rather than being marked as
+    # measured-and-failed, which would keep it from ever being tried again.
+    sharp_on = sharp_ready()
+    if not sharp_on:
+        print("Sharpness needs Pillow 10.3 or newer and is skipped this time.\n"
+              "  pip install -r requirements.txt   (the window does it by itself)")
+    want = NEEDS_COLOUR + (f" OR {NEEDS_SHARP}" if sharp_on else "")
+    rows = con.execute(f"SELECT id, path, {NEEDS_COLOUR},"
+                       f" {NEEDS_SHARP if sharp_on else '0'} FROM photos"
+                       f" WHERE {want}").fetchall()
     if not rows:
-        print("Images already analysed — colour and light are done for every photo.")
+        print("Images already analysed — colour, light and sharpness are done "
+              "for every photo.")
+        job.note = "nothing to do"
         return
-    jobs = [(pid, path, exe) for pid, path in rows]
+    jobs = [(pid, path, exe, bool(c), bool(sh)) for pid, path, c, sh in rows]
+    job.total = len(jobs)
+    only_sharp = sum(1 for *_, c, sh in jobs if sh and not c)
     print(f"Analysing images: {len(jobs)} files, {workers} processes.")
+    if only_sharp:
+        print(f"  {only_sharp} of them already have their colour and only "
+              f"need sharpness.")
     print("This is much slower than EXIF — the pixels are read.")
     print("Ctrl+C stops it; whatever is done is kept.", flush=True)
 
     sql = ("UPDATE photos SET " + ", ".join(f"{k}=?" for k in STAT_KEYS) +
            " WHERE id=?")
-    started, done, buf = time.time(), 0, []
+    # A photo that could not be measured gets its version all the same, with
+    # empty values: it was tried, and trying it on every run would not help.
+    sql_sharp = ("UPDATE photos SET sharp_center=?, sharp_edge=?, sharp_v=?"
+                 " WHERE id=?")
+    started, done, buf, buf_sharp = time.time(), 0, [], []
+
+    def flush():
+        if buf:
+            con.executemany(sql, buf)
+        if buf_sharp:
+            con.executemany(sql_sharp, buf_sharp)
+        con.commit()
+        buf.clear()
+        buf_sharp.clear()
+
     pool = ProcessPoolExecutor(max_workers=workers)
     try:
-        for row in pool.map(stats_of, jobs, chunksize=16):
-            pid, values = row[0], row[1:]
-            buf.append((*values, pid))
+        for pid, colour, sharp in pool.map(stats_of, jobs, chunksize=16):
+            if colour is not None:
+                buf.append((*colour, pid))
+            if sharp is not None:
+                buf_sharp.append((*sharp, SHARP_VERSION, pid))
             done += 1
-            if len(buf) >= 200:
-                con.executemany(sql, buf)
-                con.commit()
-                buf = []
+            job.done = done
+            if len(buf) + len(buf_sharp) >= 200:
+                flush()
             if done % 100 == 0 or done == len(jobs):
                 el = time.time() - started
                 speed = done / max(el, 0.001)
@@ -1163,11 +1412,10 @@ def analyze_colors(con, exe, workers, reset=False):
                       end="", flush=True)
     except KeyboardInterrupt:
         print("\nStopped.")
+        job.stop()
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
-        if buf:
-            con.executemany(sql, buf)
-            con.commit()
+        flush()
     print()
 
     bad, = con.execute("SELECT COUNT(*) FROM photos WHERE color = ?",
@@ -1175,8 +1423,12 @@ def analyze_colors(con, exe, workers, reset=False):
     if bad:
         print(f"Could not read the image of {bad} files"
               f"{' (RAW needs ExifTool)' if not exe else ''}.")
-    left, = con.execute("SELECT COUNT(*) FROM photos "
-                        "WHERE color IS NULL OR brightness IS NULL").fetchone()
+    unsharp, = con.execute("SELECT COUNT(*) FROM photos WHERE sharp_v IS NOT NULL"
+                           " AND sharp_center IS NULL").fetchone()
+    if unsharp:
+        print(f"Sharpness could not be measured for {unsharp} files — smaller than "
+              f"{SHARP_MIN_SIDE} pixels, or RAW without a large preview.")
+    left, = con.execute(f"SELECT COUNT(*) FROM photos WHERE {want}").fetchone()
     if left:
         print(f"Still to analyse: {left}. Run again to continue.")
 
@@ -1503,7 +1755,9 @@ def main():
             print(f"No database at {args.db}. Scan your folders first.")
             return
         con = open_db(args.db)
-        sign_files(con, min((os.cpu_count() or 4) * 2, 12), full=args.hash_full)
+        with jobs.Job(args.db, "sign") as job:
+            sign_files(con, min((os.cpu_count() or 4) * 2, 12),
+                       full=args.hash_full, job=job)
         con.close()
         print("\nDone. Now run:  python app.py")
         return
@@ -1513,12 +1767,22 @@ def main():
             print(f"No database at {args.db}. Scan your folders first.")
             return
         con = open_db(args.db)
-        analyze_colors(con, find_exiftool()[0], min(os.cpu_count() or 4, 8),
-                       reset=args.recolor)
+        with jobs.Job(args.db, "images") as job:
+            analyze_colors(con, find_exiftool()[0], min(os.cpu_count() or 4, 8),
+                           reset=args.recolor, job=job)
         con.close()
         print("\nDone. Now run:  python app.py")
         return
 
+    # The status line in the page follows this pass. The job is opened before the
+    # database work starts and closed after the summary, so a pass that dies
+    # anywhere in between reads as stopped rather than as still running.
+    with jobs.Job(args.db, "exif", "looking for files") as job:
+        exif_pass(args, job)
+
+
+def exif_pass(args, job):
+    """The EXIF pass proper: walk the folders, read what is new or changed."""
     con = open_db(args.db)
 
     row = con.execute("SELECT v FROM meta WHERE k = 'exif_version'").fetchone()
@@ -1545,6 +1809,7 @@ def main():
     tiny, tiny_known = 0, []
     for path in walk_photos(args.roots, exts, passed_by):
         gone.discard(path)
+        job.done += 1
         try:
             st = os.stat(path)
         except OSError:
@@ -1583,7 +1848,9 @@ def main():
     if not todo:
         con.close()
         print("Nothing to update.")
+        job.note = "nothing new"
         return
+    job.phase, job.done, job.total = "reading EXIF", 0, len(todo)
 
     exe, ver = find_exiftool()
     if exe:
@@ -1612,6 +1879,7 @@ def main():
         con.executemany(sql, rows)
         con.commit()
         done += len(rows)
+        job.done = done
         speed = done / max(time.time() - started, 0.001)
         pct = 100 * done / len(todo)
         print(f"\r  processed {done}/{len(todo)}  ({pct:5.1f}%)  "
@@ -1640,13 +1908,20 @@ def main():
                 flush(buf)
 
     print()
+    job.phase = "summing up"
+    # each pass run on the back of this one is a job of its own in the status
+    # line, as it would be started on its own
     if args.hash:
         print()
-        sign_files(con, min((os.cpu_count() or 4) * 2, 12), full=args.hash_full)
+        with jobs.Job(args.db, "sign") as sub:
+            sign_files(con, min((os.cpu_count() or 4) * 2, 12),
+                       full=args.hash_full, job=sub)
 
     if args.colors:
         print()
-        analyze_colors(con, exe, min(os.cpu_count() or 4, 8), reset=args.recolor)
+        with jobs.Job(args.db, "images") as sub:
+            analyze_colors(con, exe, min(os.cpu_count() or 4, 8),
+                           reset=args.recolor, job=sub)
 
     con.execute("INSERT OR REPLACE INTO meta VALUES ('scanned_at', ?)",
                 (datetime.now().isoformat(timespec="seconds"),))

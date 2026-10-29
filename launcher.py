@@ -22,7 +22,9 @@ would fail while a scan is running.
 """
 
 import json
+import ipaddress
 import os
+import socket
 import sqlite3
 import queue
 import re
@@ -55,6 +57,30 @@ def nf(n):
 def venv_python():
     return os.path.join(VENV, "Scripts", "python.exe") if WINDOWS \
         else os.path.join(VENV, "bin", "python")
+
+
+def lan_address():
+    """This computer's address on the home network, or None.
+
+    Connecting a UDP socket sends nothing — it only asks the system which of
+    its addresses it would route that destination through, which is the one a
+    tablet on the same Wi-Fi can reach. Asking by host name instead tends to
+    come back with a Hyper-V or VPN adapter that nothing else can see.
+
+    Only a private address is accepted. A machine wired straight to the
+    internet has a public one, and listening on it would publish the archive
+    to the world rather than to the sofa.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("10.255.255.255", 1))
+        addr = sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+    ip = ipaddress.ip_address(addr)
+    return addr if ip.is_private and not ip.is_loopback else None
 
 
 def spawn(args, cwd=ROOT):
@@ -272,11 +298,30 @@ class App:
         self.stop_btn = ttk.Button(srv, text="Stop server", command=self.stop_server,
                                    state="disabled")
         self.stop_btn.pack(side="right")
+        # Off at every start and never saved: opening the archive to the network
+        # should be something done on purpose that evening, not a setting that
+        # quietly outlives the reason it was switched on.
+        self.lan = tk.BooleanVar(value=False)
+        self.lan_box = ttk.Checkbutton(srv, text="allow access from the local network",
+                                       variable=self.lan, command=self.lan_changed)
+        self.lan_box.pack(side="right", padx=10)
         ttk.Label(root, foreground="#8B8598", wraplength=680, justify="left",
                   text="(3 step) Opens the statistics in your browser.  "
                        "It can stay open while a pass is running — the "
                        "numbers fill in as the scan goes.").pack(
-            fill="x", padx=14, pady=(3, 10))
+            fill="x", padx=14, pady=(3, 4))
+        # Red, and only while the box is ticked: it is a warning about the
+        # state the program is in, not a paragraph to learn to skip.
+        self.lan_warn = ttk.Label(
+            root, foreground="#D9342B", wraplength=680, justify="left",
+            text="Network access is on. There is no password: anyone on this "
+                 "Wi-Fi or network can see every photo, its folder and where "
+                 "it was taken, and change ratings, tags and comments. Opening "
+                 "files is switched off. Windows may ask whether Python may "
+                 "use the network — allow it for private networks only. Do not "
+                 "use this on a public or shared network.")
+        self.lan_spacer = ttk.Frame(root, height=6)
+        self.lan_spacer.pack(fill="x")
 
         self.text = tk.Text(root, height=10, wrap="none", state="disabled",
                             font=("Consolas", 9))
@@ -404,7 +449,11 @@ class App:
 
     def deps_ok(self, py):
         try:
-            return subprocess.run([py, "-c", "import flask, PIL"],
+            # ImageMath.lambda_eval is what sharpness needs (Pillow 10.3): an
+            # environment from before it gets the install run again, which
+            # upgrades Pillow, rather than an analysis that skips sharpness
+            return subprocess.run([py, "-c", "import flask; "
+                                   "from PIL.ImageMath import lambda_eval"],
                                   capture_output=True).returncode == 0
         except OSError:
             return False
@@ -470,24 +519,50 @@ class App:
 
     # ---------- server ----------
 
+    def lan_changed(self):
+        if self.lan.get():
+            self.lan_warn.pack(fill="x", padx=14, pady=(0, 6), before=self.lan_spacer)
+        else:
+            self.lan_warn.pack_forget()
+
     def open_ui(self):
         if not (self.server and self.server.poll() is None):
+            # The address is the one the server listens on, and only that one:
+            # the LAN address rather than every interface, so a VPN or a
+            # virtual adapter does not get the archive along with the Wi-Fi.
+            host = "127.0.0.1"
+            if self.lan.get():
+                host = lan_address()
+                if not host:
+                    messagebox.showwarning(
+                        "No local network",
+                        "This computer does not seem to be on a home or office "
+                        "network, so there is nothing to open the archive to. "
+                        "The interface will start for this computer only.")
+                    self.lan.set(False)
+                    self.lan_changed()
+                    host = "127.0.0.1"
+            self.url = f"http://{host}:{PORT}/"
             self.log("\n$ app.py\n")
             self.server = spawn([venv_python(), "app.py", "--no-browser",
-                                 "--port", str(PORT)])
+                                 "--host", host, "--port", str(PORT)])
             threading.Thread(target=self.pump_server, daemon=True).start()
             self.srv_state.config(text="server starting…")
             self.stop_btn.config(state="normal")
+            # where the server listens is fixed when it starts; changing the box
+            # under a running server would only make it lie
+            self.lan_box.config(state="disabled")
             threading.Thread(target=self.wait_and_open, daemon=True).start()
         else:
-            webbrowser.open(f"http://127.0.0.1:{PORT}/")
+            webbrowser.open(self.url)
 
     def wait_and_open(self):
         for _ in range(60):
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=2)
-                self.out.put(("server", f"server running · 127.0.0.1:{PORT}"))
-                webbrowser.open(f"http://127.0.0.1:{PORT}/")
+                urllib.request.urlopen(self.url, timeout=2)
+                self.out.put(("server", "server running · " + self.url.rstrip("/") +
+                              ("  — open this on the tablet" if self.lan.get() else "")))
+                webbrowser.open(self.url)
                 return
             except (urllib.error.URLError, OSError):
                 time.sleep(0.5)
@@ -541,6 +616,7 @@ class App:
                     self.srv_state.config(text=payload)
                     if "stopped" in payload or "did not" in payload:
                         self.stop_btn.config(state="disabled")
+                        self.lan_box.config(state="normal")
         except queue.Empty:
             pass
         self.root.after(60, self.drain)

@@ -6,6 +6,51 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Sharpness, in the centre and at the edges, and a **Focus** panel that
+  compares the two: soft throughout, centre sharper, edges sharper, evenly
+  sharp. The image pass decodes each photo a second time, grey, at 1500 pixels
+  on the long side, and measures the variance of the Laplacian in 64-pixel
+  squares; empty squares are left out and each region scores its sharpest
+  tenth, so a portrait against a background out of focus still reads sharp.
+  The bands started out as fifths of a real 130 000-photo archive and live in
+  `app.py`, so they can be tuned without a re-scan. The photo card and the
+  expanded row show the bands with their numbers, and the CSV export has two
+  more columns. The list sorts by sharpness — the sharper region, the centre or
+  the edges — and while it does, its last column shows that number instead of
+  the focal length.
+  Colour is decoded exactly as before, so no colour changes. An archive whose
+  colours are done only has sharpness measured; it carries its own version
+  counter, `SHARP_VERSION`, kept per photo, so re-measuring sharpness never
+  re-counts colour. The pass takes about twice as long.
+  Pillow 10.3 or newer is now required; the launcher upgrades an older one by
+  itself.
+
+- The page shows what the scanner is doing. A small line at the top says which
+  pass is running and how far it has got, with a bar, and after it ends whether
+  it finished, was stopped or failed, and when. It works however the pass was
+  started — window, terminal or schedule — because the passes write their
+  progress into a new `jobs` table that the page polls; nothing leaves the
+  computer. A pass killed by the Stop button cannot report that itself, so each
+  writes a heartbeat from a thread of its own and a silent one reads as stopped
+  after twenty seconds. The numbers are not reloaded behind your back: the line
+  offers *refresh* instead. The folder check is not shown, as it still writes
+  nothing.
+  A page opened while a pass runs holds the Selection panel back — its
+  thumbnails are read off the disk the scanner is busy with, and the two
+  together crawled. It fills in when the pass ends, or at *show them now*.
+
+- The interface can be opened from a tablet or a phone on the same network. The
+  launcher has an *allow access from the local network* box with a red warning
+  under it: there is no password, and anyone on that network sees the archive
+  and can change ratings, tags and comments. The box is off at every start and
+  locked while the server runs. The server then listens on the computer's
+  private home-network address only — never on every adapter, and not at all if
+  the only address is public.
+  *Show in explorer* and *Open file* now work only from the computer running
+  photostats and only while it listens on `127.0.0.1`; otherwise the buttons are
+  gone from the page and the server refuses them with 403. They act on the
+  server's computer, and from the sofa they would open windows on an empty desk.
+
 ## [1.14.0] — 2026-10-01
 
 - Comments on photos. Any photo takes one line of your own text, up to 256

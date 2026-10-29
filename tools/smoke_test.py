@@ -284,6 +284,177 @@ def comment_checks(db, photos):
     say(pid, "")
 
 
+def sharpness_checks(db):
+    """The measure itself on pictures whose answer is known, then the pass:
+    sharpness added to an archive whose colours are done must leave every
+    colour exactly as it was."""
+    print("\nsharpness")
+    sys.path.insert(0, ROOT)
+    import random
+    import sqlite3
+    import scan
+    from PIL import Image, ImageDraw, ImageFilter
+
+    random.seed(5)
+    scene = Image.new("L", (1500, 1000), 128)
+    d = ImageDraw.Draw(scene)
+    for _ in range(900):
+        x, y, r = random.randrange(1500), random.randrange(1000), random.randrange(4, 60)
+        d.ellipse([x - r, y - r, x + r, y + r], fill=random.randrange(40, 220))
+    sharp = scan.sharpness(scene)
+    soft = scan.sharpness(scene.filter(ImageFilter.GaussianBlur(2)))
+    check("a blurred copy measures softer, in both regions",
+          soft[0] < sharp[0] / 3 and soft[1] < sharp[1] / 3, f"{sharp} vs {soft}")
+    portrait = scene.filter(ImageFilter.GaussianBlur(5))
+    side = round(1000 * scan.CENTER_AREA ** 0.5)
+    box = ((1500 - side) // 2, (1000 - side) // 2, (1500 + side) // 2, (1000 + side) // 2)
+    portrait.paste(scene.crop(box), box)
+    c, e = scan.sharpness(portrait)
+    check("a sharp centre on a blurred background is told apart", e < c / 4, f"{c}, {e}")
+    check("a plain frame has no sharpness to speak of",
+          scan.sharpness(Image.new("L", (1500, 1000), 90)) == (0.0, 0.0))
+
+    con = sqlite3.connect(db)
+    rows = con.execute("SELECT sharp_center, sharp_edge, sharp_v FROM photos").fetchall()
+    check("the image pass measured every photo",
+          rows and all(r[2] == scan.SHARP_VERSION and r[0] is not None for r in rows),
+          str(rows[:2]))
+
+    # An archive analysed before sharpness existed: colours there, sharpness not.
+    cols = ", ".join(scan.STAT_KEYS)
+    before = con.execute(f"SELECT id, {cols} FROM photos ORDER BY id").fetchall()
+    con.execute("UPDATE photos SET sharp_center = NULL, sharp_edge = NULL, sharp_v = NULL")
+    con.commit()
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "scan.py"),
+                          "--colors-only", "--db", db],
+                         capture_output=True, text=True, cwd=ROOT, timeout=300).stdout
+    check("only sharpness is worked out where colour is done",
+          "only need sharpness" in out, out[-300:])
+    after = con.execute(f"SELECT id, {cols} FROM photos ORDER BY id").fetchall()
+    check("adding sharpness leaves every colour as it was", before == after)
+    check("and fills sharpness in", not con.execute(
+        "SELECT 1 FROM photos WHERE sharp_v IS NULL").fetchone())
+    con.close()
+
+    stats = api("/api/stats")["charts"]
+    measured = [i for i in stats["sharpCenter"] if i["k"] != "__none__"]
+    check("the sharpness panels have bands", measured and stats["sharpEdge"],
+          str(stats["sharpCenter"]))
+    focus = stats["focus"]
+    check("the focus panel accounts for every photo",
+          sum(i["v"] for i in focus) == api("/api/stats")["total"], str(focus))
+    pick = focus[0]["k"]
+    check("filtering by focus selects what the panel counted",
+          api("/api/photos", focus=pick)["total"] == focus[0]["v"])
+    band = measured[0]["k"]
+    check("filtering by a sharpness band works",
+          api("/api/photos", sharp_center=band)["total"] == measured[0]["v"])
+    item = api("/api/photos", limit=1)["items"][0]
+    check("a photo carries its bands and its focus",
+          item["sharp_center_l"] and item["sharp_edge_l"] and item["focus"], str(item))
+    order = [max(p["sharp_center"], p["sharp_edge"]) for p in
+             api("/api/photos", sort="sharpness", dir="desc", limit=50)["items"]]
+    check("sorting by sharpness puts the sharpest first", order == sorted(order, reverse=True))
+    for key in ("sharp_center", "sharp_edge"):
+        vals = [p[key] for p in api("/api/photos", sort=key, limit=50)["items"]]
+        check(f"sorting by {key} goes by its value", vals == sorted(vals), str(vals))
+    with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/export", timeout=20) as r:
+        head = r.read().decode("utf-8-sig").splitlines()[0]
+    check("CSV export carries sharpness", "Sharpness centre" in head, head)
+
+
+def job_checks(db):
+    """The status line: what a pass says about itself, and what the server makes
+    of a pass that stopped saying anything."""
+    print("\njob status")
+    sys.path.insert(0, ROOT)
+    import sqlite3
+    import jobs
+
+    last = api("/api/job")["job"]
+    check("the passes run so far left a status", last is not None
+          and last["state"] == "done" and last["kind"] in jobs.KINDS, str(last))
+
+    # A pass in flight, seen from the server while it is still in the block.
+    with jobs.Job(db, "images") as job:
+        job.total, job.done = 10, 4
+        time.sleep(jobs.HEARTBEAT + 1)
+        now = api("/api/job")["job"]
+        check("a running pass is reported as running",
+              now["state"] == "running" and now["kind"] == "images", str(now))
+        check("with its progress", now["done"] == 4 and now["total"] == 10, str(now))
+    after = api("/api/job")["job"]
+    check("leaving the block marks it done",
+          after["state"] == "done" and after["finished"], str(after))
+
+    try:
+        with jobs.Job(db, "sign"):
+            raise KeyboardInterrupt
+    except KeyboardInterrupt:
+        pass
+    check("Ctrl+C reads as stopped", api("/api/job")["job"]["state"] == "stopped")
+
+    try:
+        with jobs.Job(db, "exif"):
+            raise OSError("disk went away")
+    except OSError:
+        pass
+    failed = api("/api/job")["job"]
+    check("an error reads as failed, with the reason",
+          failed["state"] == "failed" and "disk went away" in (failed["note"] or ""),
+          str(failed))
+
+    # The launcher's Stop button ends a pass where it stands, so nothing writes
+    # a final state: a "running" row whose heartbeat has gone quiet must not
+    # stay running forever.
+    con = sqlite3.connect(db)
+    t = time.time() - jobs.STALE - 5
+    con.execute("INSERT INTO jobs (kind, state, done, total, started, beat)"
+                " VALUES ('images', 'running', 3, 10, ?, ?)", (t, t))
+    con.commit()
+    con.close()
+    check("a silent running pass reads as stopped",
+          api("/api/job")["job"]["state"] == "stopped")
+
+
+def network_checks(db):
+    """Opening a file is for the computer the server runs on, and only while the
+    server listens on loopback alone. Checked in-process with a made-up client
+    address, so that no check here ever opens a real Explorer window — the one
+    request that would be allowed is never sent.
+    """
+    print("\nnetwork access")
+    sys.path.insert(0, ROOT)
+    import app as server
+    server.DB_PATH = db
+    client = server.app.test_client()
+
+    def ask(path, addr, method="get"):
+        r = getattr(client, method)(path, environ_base={"REMOTE_ADDR": addr})
+        return r.status_code, r.get_json()
+
+    server.LOOPBACK_ONLY = True
+    check("this computer may open files",
+          ask("/api/stats", "127.0.0.1")[1].get("files") is True)
+    check("so may it over IPv6 loopback",
+          ask("/api/stats", "::1")[1].get("files") is True)
+    code, body = ask("/api/stats", "192.168.1.7")
+    check("another computer is told it may not", body.get("files") is False)
+    for action in ("reveal", "open"):
+        code, body = ask(f"/api/{action}/1", "192.168.1.7", "post")
+        check(f"{action} from another computer is refused", code == 403, str(code))
+
+    # Opened to the network, the server refuses even its own machine: whatever
+    # address a request seems to come from, nothing starts a program.
+    server.LOOPBACK_ONLY = False
+    check("with network access on, nobody may open files",
+          ask("/api/stats", "127.0.0.1")[1].get("files") is False)
+    for action in ("reveal", "open"):
+        code, body = ask(f"/api/{action}/1", "127.0.0.1", "post")
+        check(f"{action} is refused with network access on", code == 403, str(code))
+    server.LOOPBACK_ONLY = True
+
+
 def tag_checks(db, photos):
     """Tags: the rule on the way in, the panel, the filter, and the two things
     that would destroy them without anybody noticing — a metadata re-read, and a
@@ -588,6 +759,9 @@ def main():
         rating_checks(db, photos)
         tag_checks(db, photos)
         comment_checks(db, photos)
+        network_checks(db)
+        job_checks(db)
+        sharpness_checks(db)
     finally:
         srv.terminate()
         srv.wait(timeout=10)
