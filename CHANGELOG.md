@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-10-29
+
 - Sharpness, in the centre and at the edges, and a **Focus** panel that
   compares the two: soft throughout, centre sharper, edges sharper, evenly
   sharp. The image pass decodes each photo a second time, grey, at 1500 pixels
