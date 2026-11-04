@@ -28,6 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = 8731
@@ -656,10 +657,11 @@ def main():
     con.close()
 
     print("\nserver")
+    server_log = tempfile.TemporaryFile(mode="w+b")
     srv = subprocess.Popen(
         [sys.executable, os.path.join(ROOT, "app.py"), "--db", db,
          "--port", str(PORT), "--no-browser"],
-        cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cwd=ROOT, stdout=server_log, stderr=subprocess.STDOUT)
     try:
         for _ in range(40):
             try:
@@ -756,6 +758,29 @@ def main():
             thumb = r.read()
         check("thumbnails", r.status == 200 and thumb[:2] == b"\xff\xd8", f"{len(thumb)} bytes")
 
+        # Distinct URLs let us check that concurrent requests each produce one
+        # timed line, including file responses and HTTP errors.
+        logged_requests = [
+            ("/api/stats?request_log_check=stats", 200),
+            ("/api/thumb/1?s=120&request_log_check=thumb", 200),
+            ("/request-log-missing?request_log_check=missing", 404),
+        ]
+
+        def fetch_logged(item):
+            path, expected = item
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}{path}",
+                                            timeout=20) as response:
+                    response.read()
+                    return response.status == expected
+            except urllib.error.HTTPError as error:
+                error.close()
+                return error.code == expected
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            check("concurrent logged requests return expected statuses",
+                  all(pool.map(fetch_logged, logged_requests)))
+
         rating_checks(db, photos)
         tag_checks(db, photos)
         comment_checks(db, photos)
@@ -765,6 +790,18 @@ def main():
     finally:
         srv.terminate()
         srv.wait(timeout=10)
+        server_log.seek(0)
+        log_text = server_log.read().decode("utf-8", errors="replace")
+        server_log.close()
+
+    print("\nrequest timing log")
+    log_text = re.sub(r"\x1b\[[0-9;]*m", "", log_text)
+    for path, status in logged_requests:
+        lines = [line for line in log_text.splitlines()
+                 if f'"GET {path} HTTP/1.1"' in line]
+        check(f"one timed log line for {status} {path}",
+              len(lines) == 1 and bool(re.search(
+                  rf'" {status} - \d+\.\d ms$', lines[0])), " | ".join(lines))
 
     check_dups_pass(tmp, photos, db)
 

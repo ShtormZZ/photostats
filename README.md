@@ -24,6 +24,12 @@ Double-click **photostats.bat**. It finds Python, sets up everything it needs on
 first run, and opens a small window with the three passes and the interface
 button. Nothing else to install by hand.
 
+The window's log shows each HTTP request with its URL, response status and server
+response time, for example `"GET /api/stats HTTP/1.1" 200 - 143.7 ms`. Time is
+measured from the start of request handling until the server starts sending the
+response headers; it excludes downloading the response body and browser rendering.
+The same log is available when the server is started from a terminal.
+
 If Python is missing the window will not open — the file tells you so and prints
 the download link. Get it from
 [python.org](https://www.python.org/downloads/windows/), tick *Add python.exe to
@@ -536,6 +542,9 @@ If you want a metric the interface does not have, it is usually one SQL query
 away. Old databases upgrade themselves: new columns are added, colour names
 were translated in place, and metadata is re-read without touching the image
 analysis.
+
+Indexes for metric filters and capture-time sorting are added automatically when
+the server or scanner starts; no photo re-scan is needed for these updates.
 
 Two columns there are yours rather than the scanner's: `mark`, the rating you
 set, and `comment`. No pass writes either, so re-reading metadata keeps them.

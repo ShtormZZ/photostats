@@ -237,6 +237,15 @@ CREATE INDEX IF NOT EXISTS ix_iso    ON photos(iso);
 CREATE INDEX IF NOT EXISTS ix_color  ON photos(color);
 CREATE INDEX IF NOT EXISTS ix_geo    ON photos(lat, lon);
 CREATE INDEX IF NOT EXISTS ix_sig    ON photos(sig);
+CREATE INDEX IF NOT EXISTS ix_taken      ON photos(taken);
+CREATE INDEX IF NOT EXISTS ix_focal35    ON photos(focal35);
+CREATE INDEX IF NOT EXISTS ix_fnumber    ON photos(fnumber);
+CREATE INDEX IF NOT EXISTS ix_exposure   ON photos(exposure);
+CREATE INDEX IF NOT EXISTS ix_brightness ON photos(brightness);
+CREATE INDEX IF NOT EXISTS ix_contrast   ON photos(contrast);
+CREATE INDEX IF NOT EXISTS ix_chroma     ON photos(chroma);
+CREATE INDEX IF NOT EXISTS ix_sharp_center ON photos(sharp_center);
+CREATE INDEX IF NOT EXISTS ix_sharp_edge   ON photos(sharp_edge);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 """
 

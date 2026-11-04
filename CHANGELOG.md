@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Sharpness filters use indexes on the centre and edge measurements instead of
+  repeatedly scanning the whole archive for the statistics panels. Existing
+  databases get the indexes when the server or scanner next starts.
+
+- Brightness, contrast, aperture, shutter speed, 35mm-equivalent focal length
+  and colour/black-and-white filters are indexed as well. A capture-time index
+  speeds up the default photo-list order. Both programs add these automatically
+  to existing databases.
+
+- HTTP request logs include server response time in milliseconds alongside the
+  URL and status, in both the launcher window and the terminal. Timing ends when
+  response headers start being sent, excluding body transfer and browser rendering.
+
 ## [1.15.0] — 2026-10-29
 
 - Sharpness, in the centre and at the edges, and a **Focus** panel that

@@ -130,6 +130,13 @@ to know:
 block in `app.py:main()` both `ALTER TABLE ... ADD COLUMN` the same list, because
 either program may meet an old database first. Adding a column means editing both.
 
+**The metric indexes are built by both programs too.** Keep `scan.py:SCHEMA` and
+the metric-index loop in `app.py:main()` in step. The server creates them after
+all column migrations, including the older `exposure` backfill. A range index is
+not always faster: on the real archive, indexing `size` made the 4–8 MB filter
+slower because it selected nearly half the table. Measure the full statistics
+request on a copy before adding an index, not just a single `COUNT` query.
+
 **Three version counters, different meanings.** `ALGO_VERSION` (`scan.py`) bumps when
 the colour/light maths changes and triggers a re-analysis of the archive.
 `EXIF_VERSION` bumps when the EXIF field set changes and triggers a metadata re-read

@@ -24,12 +24,14 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 import unicodedata
 import webbrowser
 from hashlib import md5
 
 from flask import (Flask, Response, abort, g, jsonify, request, send_file,
                    send_from_directory)
+from werkzeug.serving import WSGIRequestHandler
 
 import dupkey
 import jobs
@@ -41,6 +43,22 @@ except ImportError:          # the file was copied without version.py
     VERSION = "unknown"
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+class TimedRequestHandler(WSGIRequestHandler):
+    """Include server response time in the log the launcher already displays."""
+
+    def handle_one_request(self):
+        # A handler belongs to one connection; reset for every request so that
+        # neither concurrent requests nor a reused connection share a timer.
+        self._request_started = time.perf_counter()
+        return super().handle_one_request()
+
+    def log_request(self, code="-", size="-"):
+        # Werkzeug logs when it starts sending the response headers, before
+        # transferring the body. Large downloads must not inflate this time.
+        elapsed_ms = (time.perf_counter() - self._request_started) * 1000
+        super().log_request(code, f"{size} {elapsed_ms:.1f} ms")
 
 
 def resolve_web_dir():
@@ -1359,6 +1377,13 @@ def main():
             con.executemany("UPDATE photos SET exposure = ? WHERE id = ?", upd)
             con.commit()
             print(f"  shutter speed converted to seconds: {len(upd)} rows")
+        # Keep these in scan.py:SCHEMA too. Range filters otherwise scan the
+        # archive for nearly every panel; taken also serves the default sort.
+        # exposure must have been migrated above before its index is created.
+        for col in ("sharp_center", "sharp_edge", "brightness", "contrast",
+                    "fnumber", "exposure", "focal35", "chroma", "taken"):
+            con.execute(f"CREATE INDEX IF NOT EXISTS ix_{col} ON photos({col})")
+        con.commit()
     with db() as con:
         rename_colors(con)
     if not WEB_DIR:
@@ -1374,7 +1399,8 @@ def main():
               "         change ratings, tags and comments. Opening files is off.")
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    app.run(host=args.host, port=args.port, threaded=True)
+    app.run(host=args.host, port=args.port, threaded=True,
+            request_handler=TimedRequestHandler)
 
 
 if __name__ == "__main__":
