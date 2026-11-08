@@ -22,6 +22,7 @@
   --data:"Consolas","Cascadia Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 /* The height of body is deliberately not set. With height:100% its box ended at
    the first screen, and a sticky element only holds inside its parent's box — so
    the header and the filters scrolled away as soon as you went past one screen.
@@ -76,6 +77,80 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .tool{padding:6px 11px;border:1px solid var(--line);border-radius:3px;font-size:12px;
   color:var(--muted);letter-spacing:.04em}
 .tool:hover{border-color:var(--emulsion);color:var(--paper)}
+.pages{display:flex;gap:6px}
+.pages a{text-decoration:none}
+.pages a[aria-current="page"]{color:var(--safelight);border-color:var(--safelight)}
+
+/* ---------- directory archive ---------- */
+.directories{padding:20px;max-width:1600px;margin:auto}
+.directory-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.directory-tools h1{font:600 19px var(--display);margin:0}
+.directory-tools .search{width:280px;max-width:100%}
+#directorySummary{white-space:normal;line-height:1.6}
+.directory-note{color:var(--muted);font-size:12px;line-height:1.6;margin:8px 0 16px}
+.directory-table{overflow:auto;border:1px solid var(--line);border-radius:3px}
+.directory-table table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:660px}
+.directory-table th{font:12px var(--display);color:var(--muted);background:var(--panel);
+  padding:12px;text-align:right;border-bottom:1px solid var(--line)}
+.directory-table th:first-child{text-align:left;width:48%}
+.directory-table th:last-child{width:100px}
+.directory-table td{padding:8px 12px;border-bottom:1px solid var(--frame);
+  text-align:right;font:12px var(--data)}
+.directory-table tr:last-child td{border-bottom:0}
+.directory-table tr.selected{background:var(--panel)}
+.directory-table td:first-child{text-align:left;font:13px var(--body)}
+.directory-label{display:flex;align-items:center;gap:4px;min-width:0;padding-left:calc(var(--depth)*18px)}
+.directory-toggle{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:44px;height:38px;padding:0;border-radius:4px;font-size:28px;line-height:1;color:var(--safelight)}
+button.directory-toggle:not(:disabled):hover{background:var(--frame)}
+.directory-toggle:disabled{opacity:.5;cursor:default}
+.directory-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:700}
+.directory-table .tool{padding:5px 8px;letter-spacing:0}
+.directory-table .tool:disabled{opacity:.4;cursor:default}
+#directoryStatus{color:var(--muted);font-size:12px}
+#directoryEmpty{padding:28px;text-align:center;color:var(--muted)}
+
+/* ---------- daily photo timeline ---------- */
+.photo-timeline{padding:0 20px 30px;overflow-anchor:none}
+.timeline-tools{position:sticky;top:var(--topbar,57px);z-index:20;background:var(--ground);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 0;border-bottom:1px solid var(--line)}
+.timeline-tools h1{font:600 19px var(--display);margin:0}
+.timeline-tools label{font-size:12px;color:var(--muted)}
+.timeline-tools select{padding:6px;background:var(--panel);color:var(--paper);border:1px solid var(--line);
+  border-radius:3px;font:12px var(--body);max-width:100%}
+.timeline-help{font-size:12px;color:var(--muted);line-height:1.6;margin:12px 0}
+.timeline-stage{position:relative;margin-left:6px;border-left:1px solid var(--line);overflow-anchor:none}
+.timeline-day{position:absolute;left:0;width:100%;display:grid;grid-template-columns:var(--timeline-rail) minmax(0,1fr) 84px;
+  gap:16px;padding:16px 0 16px 16px}
+.timeline-date{position:sticky;top:calc(var(--topbar,57px) + var(--timeline-tools,66px) + 10px);align-self:start}
+.timeline-date::before{content:"";position:absolute;left:-22px;top:6px;width:10px;height:10px;
+  background:var(--safelight);border:2px solid var(--ground);border-radius:50%}
+.timeline-date time{display:block;font:700 20px/1.25 var(--display);margin-bottom:6px}
+.timeline-date .year{display:block;color:var(--safelight);font:700 18px/1.25 var(--data);margin-bottom:4px}
+.timeline-date .count{font:11px var(--data);color:var(--muted);margin:7px 0 10px}
+.timeline-date .tool{padding:5px 7px;font-size:11px;letter-spacing:0;text-align:left}
+.timeline-photos{display:grid;grid-template-columns:repeat(var(--timeline-cols),minmax(0,1fr));
+  gap:6px;align-content:start}
+.timeline-photo{position:relative;width:100%;aspect-ratio:1;padding:0;overflow:hidden;
+  border:1px solid var(--line);border-radius:3px;background:var(--panel) center/cover no-repeat}
+.timeline-photo:hover{border-color:var(--safelight)}
+.timeline-photo .noimg{font:11px var(--data);color:var(--muted)}
+.timeline-photo.in .noimg{display:none}
+.timeline-badge{position:absolute;left:3px;bottom:3px;border-radius:2px;padding:2px 4px;
+  background:#16151AD9;color:var(--safelight);font:600 10px var(--body);white-space:nowrap}
+.timeline-photo.loading{opacity:.6}
+.timeline-photos.expanded{display:block;position:relative}
+.timeline-photos.expanded .timeline-photo{position:absolute}
+.timeline-photo.pending{cursor:default;opacity:.5}
+.timeline-actions{position:sticky;top:calc(var(--topbar,57px) + var(--timeline-tools,66px) + 10px);
+  align-self:start;display:flex;flex-direction:column;gap:8px;min-width:0}
+.timeline-actions .tool{padding:8px 5px;letter-spacing:0;white-space:normal;line-height:1.4}
+.timeline-actions .remaining{display:block;color:var(--safelight);font:700 18px var(--data)}
+.timeline-actions .progress{font:11px var(--body);color:var(--muted);line-height:1.4}
+.timeline-date .timeline-actions{position:static;margin-top:10px}
+.timeline-day.narrow{grid-template-columns:var(--timeline-rail) minmax(0,1fr)}
+.timeline-footer{padding:20px 0;min-height:68px;text-align:center;color:var(--muted);font-size:13px}
+#timelineRetry{margin-left:10px}
 
 /* ---------- active filters ---------- */
 .chips{display:flex;gap:8px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--line);
@@ -557,6 +632,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 <header class="top">
   <div class="brand"><img class="mark" src="mark.svg" alt="" width="30" height="30">Photo<span>archive</span></div>
   <div class="ver" id="ver"></div>
+  <nav class="pages" aria-label="Pages">
+    <a class="tool" id="pageStats" href="#statistics" aria-current="page">Statistics</a>
+    <a class="tool" id="pageDirectories" href="#directories">Directories</a>
+    <a class="tool" id="pageTimeline" href="#timeline">Timeline</a>
+  </nav>
   <div class="tally" id="tally">loading…</div>
   <div class="job" id="job" hidden></div>
   <div class="grow"></div>
@@ -569,6 +649,52 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 <div class="chips off" id="chips"></div>
 </div>
 
+<main class="photo-timeline" id="photoTimeline" hidden>
+  <div class="timeline-tools" id="timelineTools">
+    <h1>Timeline</h1>
+    <div class="grow"></div>
+    <label for="timelineOrder">Date order</label>
+    <select id="timelineOrder">
+      <option value="desc">Newest first</option>
+      <option value="asc">Oldest first</option>
+    </select>
+    <button class="tool" id="timelineRefresh">Refresh</button>
+  </div>
+  <p class="timeline-help">The whole archive, independent of Statistics filters. Up to 15 photos per day:
+    5+, then 5 stars, then 4 stars, filled with random unrated photos. Ratings of 3 or below and bad photos
+    are excluded from highlights. Show all expands every photo here, including low ratings and bad photos.
+    Analyse day opens the day in Statistics.</p>
+  <div class="timeline-stage" id="timelineStage" aria-label="Photos by day"></div>
+  <div class="timeline-footer" id="timelineFooter">
+    <span id="timelineStatus" role="status" aria-live="polite"></span>
+    <button class="tool" id="timelineRetry" hidden>Try again</button>
+  </div>
+</main>
+<main class="directories" id="directories" hidden>
+  <div class="directory-tools">
+    <h1>Scanned directories</h1>
+    <div class="grow"></div>
+    <input class="search" id="directorySearch" type="search" placeholder="search directory path"
+           aria-label="Search directory path">
+    <button class="tool" id="directoryRefresh">Refresh</button>
+  </div>
+  <div id="directorySummary" class="tally"></div>
+  <p class="directory-note">Counts and sizes include all subdirectories and only files stored in the database.
+    Colour + sharpness counts files with both measurements available. Empty directories are not recorded.
+    Analyse opens Statistics for the directory and its subdirectories, keeping your other filters.
+    Use Refresh to see new scan results.</p>
+  <p id="directoryStatus" role="status" aria-live="polite"></p>
+  <div class="directory-table" id="directoryTable" aria-busy="false">
+    <table aria-label="Scanned directories and totals including subdirectories">
+      <thead><tr><th scope="col">Directory</th><th scope="col">Scanned files</th>
+        <th scope="col">Colour + sharpness</th><th scope="col">Size</th><th scope="col">Analysis</th></tr></thead>
+      <tbody id="directoryRows"></tbody>
+    </table>
+    <div id="directoryEmpty" hidden></div>
+  </div>
+</main>
+<div class="empty" id="archiveEmpty" hidden style="padding:40px 24px">The database is still empty.
+  Run this in the program folder:<br><code>python scan.py "D:\Photos"</code></div>
 <div class="wrap">
   <main class="left">
   <div class="group" id="g-time">
@@ -883,7 +1009,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 const NONE = "__none__";
 const MONTHS = ["January","February","March","April","May","June","July","August",
                 "September","October","November","December"];
-const NAMES = {ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
+const NAMES = {day:"Day", ym:"Month", month:"Month of year", hour:"Hour", brand:"Brand",
   camera:"Camera", lens:"Lens", focal:"Focal", year:"Year", folder:"Folder",
   q:"Search", ext:"Format", geo:"Place", aperture:"Aperture", exposure:"Shutter",
   iso:"ISO", size:"Size", color:"Colour", color_center:"Centre colour", dup:"Duplicates",
@@ -902,6 +1028,7 @@ function remember(param, items){
 }
 
 const state = {filters:{}, eq:false, sort:"taken", dir:"asc", view:"files",
+               page:["#directories", "#timeline"].includes(location.hash) ? location.hash.slice(1) : "statistics",
                limit:300, expanded:{}, mixedMax:0.20,
                // Can this browser open files on the machine running the server?
                // Told by the server; until it says, assume not — a button that
@@ -1626,6 +1753,7 @@ function setMark(it, value){
       const after = effRating(it);
       if (after !== before) bumpRating(before, after);
       refreshRating(it);
+      if (after !== before) refreshTimelineRating(it);
     })
     .catch(() => toast("Could not save the rating"))
     .finally(() => document.querySelectorAll('.rate[data-pid="' + it.id + '"]')
@@ -1971,8 +2099,8 @@ let thumbBusy = false;
    server, and a parallel batch of pictures would block clicks on the charts.
    Changing the selection raises the generation number, and anything still
    loading is cancelled. */
-function queueThumb(el, id, size){
-  thumbQ.push({el, id, size, gen: thumbGen});
+function queueThumb(el, id, size, valid = null){
+  thumbQ.push({el, id, size, gen: thumbGen, valid});
   pumpThumbs();
 }
 
@@ -1981,11 +2109,12 @@ async function pumpThumbs(){
   thumbBusy = true;
   while (thumbQ.length){
     const job = thumbQ.shift();
-    if (job.gen !== thumbGen) continue;          // the selection changed, this frame is not wanted
+    const wanted = () => job.valid ? job.valid() : job.gen === thumbGen;
+    if (!wanted()) continue;
     await new Promise(done => {
       const img = new Image();
       img.onload = () => {
-        if (job.gen === thumbGen){
+        if (wanted()){
           job.el.style.backgroundImage = "url(" + img.src + ")";
           job.el.classList.add("in");
         }
@@ -2244,7 +2373,8 @@ function renderList(data, append){
    what you were looking at: the sorted list if it was opened from a row, the
    ten random frames if from the preview strip. Flipping through the list from
    a thumbnail in the strip would jump somewhere else in the archive. */
-function openDetail(it, deck){
+function openDetail(it, deck, timelineDay = null){
+  state.timelineDay = timelineDay;
   state.deck = deck || listItems;
   state.shown = it;
   const d = $("detail");
@@ -2335,7 +2465,15 @@ function openDetail(it, deck){
   d.querySelectorAll(".act").forEach(b => b.onclick = () => {
     const a = b.dataset.a;
     if (a === "close") return closeDetail();
-    if (a === "folder"){ closeDetail(); state.filters.folder = it.folder; return load(); }
+    if (a === "folder"){
+      closeDetail();
+      if (state.page === "timeline"){ state.filters = {}; $("q").value = ""; }
+      state.filters.folder = [it.folder];
+      state.statsLoaded = false;
+      if (state.page !== "statistics") navigatePage("statistics");
+      else load();
+      return;
+    }
     fetch("/api/" + a + "/" + it.id, {method:"POST"})
       .then(r => r.json())
       .then(r => { if (!r.ok) toast(r.error || "Did not work"); })
@@ -2358,6 +2496,7 @@ function deckIndex(){
 }
 
 function moreToCome(){
+  if (state.timelineDay?.expanded) return state.timelineDay.allNext !== null;
   return state.deck === listItems && listItems.length < (state.listTotal || 0);
 }
 
@@ -2373,7 +2512,13 @@ function step(by){
   if (i < 0) return;
   const deck = state.deck;
   const next = deck[i + by];
+  const day = state.timelineDay;
+  if (next && day) return openTimelinePhoto(day, next.id, null, deck);
   if (next) return openDetail(next, deck);
+  if (by > 0 && day?.expanded && moreToCome())
+    return loadAllTimelineDay(day).then(() => {
+      if (deck[i + 1]) openTimelinePhoto(day, deck[i + 1].id, null, deck);
+    });
   if (by > 0 && moreToCome())
     loadPhotos(listItems.length).then(() => {
       const more = listItems[i + 1];
@@ -2407,6 +2552,7 @@ function sharpen(it){
 }
 
 function closeDetail(){
+  state.timelineDay = null;
   $("veil").classList.remove("on", "full");
   $("detail").innerHTML = "";
 }
@@ -2439,6 +2585,564 @@ function loadFolders(){
   ask("folders", "/api/folders?" + params())
     .then(renderFolders).catch(quiet);
 }
+
+/* The tree is its own archive-wide snapshot. Filtering or polling scan status
+   must not silently refresh it or change the branches someone is inspecting. */
+let directoryData = null;
+let directoryLoading = null;
+let directoryNodes = new Map(), directoryChildren = new Map();
+const directoryOpen = new Map();
+
+function directorySize(bytes){
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let i = 0, value = bytes;
+  while (value >= 1024 && i < units.length - 1){ value /= 1024; i++; }
+  return (i ? value.toLocaleString("en-US", {maximumFractionDigits:1}) : nf(value)) + " " + units[i];
+}
+
+function renderDirectories(){
+  if (!directoryData) return;
+  const query = $("directorySearch").value.trim().toLocaleLowerCase();
+  const visible = new Set();
+  if (query){
+    directoryNodes.forEach(node => {
+      if (!(node.path || node.name).toLocaleLowerCase().includes(query)) return;
+      let current = node;
+      while (current && !visible.has(current.path)){
+        visible.add(current.path);
+        current = directoryNodes.get(current.parent);
+      }
+    });
+  }
+  const fragment = document.createDocumentFragment();
+  const stack = (directoryChildren.get(null) || []).map(node => [node, 0]).reverse();
+  let count = 0;
+  while (stack.length){
+    const [node, depth] = stack.pop();
+    if (query && !visible.has(node.path)) continue;
+    const children = directoryChildren.get(node.path) || [];
+    if (!directoryOpen.has(node.path)) directoryOpen.set(node.path,
+      node.parent === null || (children.length === 1 && node.n === children[0].n));
+    const open = query ? true : directoryOpen.get(node.path);
+    const row = document.createElement("tr");
+    row.classList.toggle("selected", !!node.path && [].concat(picked("folder")).includes(node.path));
+    const cell = document.createElement("td");
+    const label = document.createElement("div");
+    label.className = "directory-label";
+    label.style.setProperty("--depth", depth);
+    const toggle = document.createElement(children.length ? "button" : "span");
+    toggle.className = "directory-toggle";
+    if (children.length){
+      toggle.textContent = open ? "▾" : "▸";
+      toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + (node.path || node.name));
+      toggle.setAttribute("aria-expanded", String(open));
+      // Search opens matching branches temporarily; clearing it restores the tree.
+      toggle.disabled = !!query;
+      toggle.onclick = () => {
+        directoryOpen.set(node.path, !open);
+        renderDirectories();
+        const index = Array.from($("directoryRows").children).findIndex(r => r.dataset.path === node.path);
+        if (index >= 0) $("directoryRows").children[index].querySelector("button").focus({preventScroll:true});
+      };
+    } else toggle.setAttribute("aria-hidden", "true");
+    const name = document.createElement("span");
+    name.className = "directory-name";
+    name.textContent = node.name;
+    name.title = node.path || node.name;
+    label.append(toggle, name);
+    cell.appendChild(label);
+    row.appendChild(cell);
+    [nf(node.n), nf(node.analyzed), directorySize(node.bytes)].forEach(text => {
+      const td = document.createElement("td"); td.textContent = text; row.appendChild(td);
+    });
+    row.children[3].title = nf(node.bytes) + " bytes";
+    const action = document.createElement("td");
+    const analyse = document.createElement("button");
+    analyse.className = "tool"; analyse.textContent = "Analyse";
+    analyse.disabled = !node.path;
+    analyse.setAttribute("aria-label", "Analyse " + (node.path || node.name));
+    analyse.onclick = () => {
+      state.filters.folder = [node.path];
+      state.statsLoaded = false;
+      navigatePage("statistics");
+    };
+    action.appendChild(analyse); row.appendChild(action);
+    row.dataset.path = node.path;
+    fragment.appendChild(row); count++;
+    if (open) for (let i = children.length - 1; i >= 0; i--) stack.push([children[i], depth + 1]);
+  }
+  $("directoryRows").replaceChildren(fragment);
+  $("directoryEmpty").hidden = count > 0;
+  $("directoryEmpty").textContent = query ? "No matching directories." : "No scanned directories yet.";
+  const total = directoryData.total;
+  $("directorySummary").textContent = nf(total.n) + " scanned files · " + nf(total.analyzed) +
+    " with colour + sharpness · " + directorySize(total.bytes);
+}
+
+function loadDirectories(){
+  if (directoryLoading) return directoryLoading;
+  $("directoryRefresh").disabled = true;
+  $("directoryTable").setAttribute("aria-busy", "true");
+  $("directoryStatus").textContent = "Loading directories…";
+  directoryLoading = ask("directories", "/api/directories").then(data => {
+    const nodes = new Map(data.items.map(node => [node.path, node]));
+    directoryData = data;
+    directoryNodes = nodes;
+    directoryChildren = new Map();
+    data.items.forEach(node => {
+      if (!directoryChildren.has(node.parent)) directoryChildren.set(node.parent, []);
+      directoryChildren.get(node.parent).push(node);
+    });
+    directoryChildren.forEach(children => children.sort((a, b) =>
+      a.name.localeCompare(b.name, "en", {numeric:true, sensitivity:"base"}) || a.path.localeCompare(b.path)));
+    renderDirectories();
+    state.statsLoaded = false;
+    $("directoryStatus").textContent = "Updated " + new Date().toLocaleTimeString();
+  }).catch(e => {
+    if (e.name !== "AbortError") $("directoryStatus").textContent =
+      "Could not load directories. Try Refresh. " + (directoryData ? "Previous results are still shown." : "");
+  }).finally(() => {
+    directoryLoading = null;
+    $("directoryRefresh").disabled = false;
+    $("directoryTable").setAttribute("aria-busy", "false");
+  });
+  return directoryLoading;
+}
+
+/* Only the nearby days own DOM nodes or full photo-card records. Lightweight
+   day selections stay cached, so scrolling back never reshuffles the photos. */
+function timelineSeed(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function savedTimelineOrder(){
+  try { return localStorage.getItem("timelineOrder") === "asc" ? "asc" : "desc"; }
+  catch (e){ return "desc"; }
+}
+const photoTimeline = {days:[], next:null, started:false, loading:false, ended:false, error:false,
+  seed:timelineSeed(), order:savedTimelineOrder(), epoch:0, offsets:[0], mounted:new Map(),
+  scrollY:0, frame:0, dirty:new Set(), updating:new Map()};
+$("timelineOrder").value = photoTimeline.order;
+
+function timelineURL(extra = {}){
+  return "/api/timeline/photos?" + new URLSearchParams({seed:photoTimeline.seed,
+    dir:photoTimeline.order, limit:8, ...extra});
+}
+
+function timelineDayURL(day, extra = {}){
+  return "/api/timeline/day?" + new URLSearchParams({day:day.day, ...extra});
+}
+const timelineItems = day => day.expanded ? day.allItems : day.items;
+const timelinePhotoCount = day => day.expanded ? day.total : day.items.length;
+
+function timelineIndex(y){
+  const offsets = photoTimeline.offsets;
+  let lo = 0, hi = Math.max(0, offsets.length - 2);
+  while (lo < hi){
+    const mid = Math.ceil((lo + hi) / 2);
+    if (offsets[mid] <= y) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+function timelinePosition(){
+  const t = photoTimeline, stage = $("timelineStage");
+  const top = stage.getBoundingClientRect().top + window.scrollY;
+  const index = timelineIndex(window.scrollY - top);
+  return {day:t.days[index]?.day, index, within:window.scrollY - top - (t.offsets[index] || 0)};
+}
+
+function layoutPhotoTimeline(preserve = true, position = null){
+  if (state.page !== "timeline") return;
+  const t = photoTimeline, stage = $("timelineStage");
+  const previous = position || timelinePosition();
+  const top = stage.getBoundingClientRect().top + window.scrollY;
+  const width = stage.clientWidth;
+  const narrow = width < 600;
+  const rail = narrow ? 80 : 132;
+  const photosWidth = Math.max(1, width - rail - 32 - (narrow ? 0 : 100));
+  const cols = Math.max(1, Math.min(15, Math.floor((photosWidth + 6) / 102)));
+  const tile = (photosWidth - 6 * (cols - 1)) / cols;
+  if (t.narrow !== narrow){
+    t.mounted.forEach(row => row.remove()); t.mounted.clear();
+  }
+  Object.assign(t, {narrow, cols, tile});
+  stage.style.setProperty("--timeline-rail", rail + "px");
+  stage.style.setProperty("--timeline-cols", cols);
+  document.documentElement.style.setProperty("--timeline-tools", $("timelineTools").offsetHeight + "px");
+  t.offsets = [0];
+  t.days.forEach(day => t.offsets.push(t.offsets.at(-1) +
+    Math.max(day.expanded || day.total > day.items.length ? (narrow ? 260 : 160) : 120,
+      Math.ceil(timelinePhotoCount(day) / cols) * (tile + 6) - 6) + 32));
+  stage.style.height = t.offsets.at(-1) + "px";
+  t.mounted.forEach((el, day) => {
+    const index = t.days.findIndex(d => d.day === day);
+    if (index < 0){ el.remove(); t.mounted.delete(day); return; }
+    el.style.top = t.offsets[index] + "px";
+    el.style.height = t.offsets[index + 1] - t.offsets[index] + "px";
+    el.dataset.index = index;
+  });
+  if (preserve && previous.within >= 0 && previous.day && t.days.length){
+    let index = t.days.findIndex(day => day.day === previous.day);
+    if (index < 0) index = Math.min(previous.index, t.days.length - 1);
+    const within = Math.min(previous.within, t.offsets[index + 1] - t.offsets[index] - 1);
+    window.scrollTo(0, top + t.offsets[index] + within);
+  }
+  renderPhotoTimeline();
+}
+
+function analyseTimelineDay(day){
+  closeDetail();
+  state.filters = {day:[day]};
+  $("q").value = "";
+  state.statsLoaded = false;
+  setView("files", false);
+  navigatePage("statistics");
+}
+
+function mountTimelineDay(day, index){
+  const row = document.createElement("section");
+  row.className = "timeline-day" + (photoTimeline.narrow ? " narrow" : "");
+  row.dataset.day = day.day; row.dataset.index = index;
+  row.style.top = photoTimeline.offsets[index] + "px";
+  row.style.height = photoTimeline.offsets[index + 1] - photoTimeline.offsets[index] + "px";
+  row.setAttribute("aria-label", day.day + ": " + timelinePhotoCount(day) + " photos");
+  const date = document.createElement("div"); date.className = "timeline-date";
+  const time = document.createElement("time"); time.dateTime = day.day;
+  const year = document.createElement("span"); year.className = "year"; year.textContent = day.day.slice(0, 4);
+  time.append(year, new Intl.DateTimeFormat("en", {month:"short", day:"numeric"}).format(new Date(day.day + "T12:00:00")));
+  const count = document.createElement("div"); count.className = "count";
+  count.textContent = day.expanded ? "All " + nf(day.total) : day.items.length + " of " + nf(day.total);
+  const analyse = document.createElement("button"); analyse.className = "tool";
+  analyse.textContent = "Analyse day"; analyse.title = "All " + nf(day.total) + " photos from " + day.day;
+  analyse.onclick = () => analyseTimelineDay(day.day);
+  date.append(time, count, analyse);
+  const photos = document.createElement("div"); photos.className = "timeline-photos";
+  const actions = document.createElement("div"); actions.className = "timeline-actions";
+  const toggle = document.createElement("button"); toggle.className = "tool timeline-toggle-all";
+  toggle.innerHTML = '<span class="label"></span><span class="remaining"></span>';
+  toggle.onclick = () => toggleTimelineDay(day);
+  const progress = document.createElement("span"); progress.className = "progress";
+  progress.setAttribute("role", "status");
+  const retry = document.createElement("button"); retry.className = "tool timeline-all-retry";
+  retry.textContent = "Try again"; retry.onclick = () => loadAllTimelineDay(day);
+  actions.append(toggle, progress, retry);
+  if (photoTimeline.narrow){ date.appendChild(actions); row.append(date, photos); }
+  else row.append(date, photos, actions);
+  row.photoNodes = new Map();
+  const next = Array.from($("timelineStage").children).find(el => +el.dataset.index > index);
+  $("timelineStage").insertBefore(row, next || null);
+  photoTimeline.mounted.set(day.day, row);
+  updateTimelineDayControls(day);
+  renderTimelinePhotos(day, row);
+}
+
+function updateTimelineDayControls(day){
+  const row = photoTimeline.mounted.get(day.day);
+  if (!row) return;
+  const actions = row.querySelector(".timeline-actions"), toggle = actions.querySelector(".timeline-toggle-all");
+  actions.hidden = !day.expanded && day.total <= day.items.length;
+  toggle.querySelector(".label").textContent = day.expanded ? "Show highlights" : "Show all";
+  toggle.querySelector(".remaining").textContent = day.expanded ? "" : "+" + nf(day.total - day.items.length);
+  toggle.setAttribute("aria-expanded", String(!!day.expanded));
+  toggle.setAttribute("aria-label", (day.expanded ? "Show highlights for " : "Show all photos from ") + day.day);
+  actions.querySelector(".progress").textContent = day.allLoading ? "Loading photos…" : day.allError ? "Could not load photos." : "";
+  actions.querySelector(".timeline-all-retry").hidden = !day.allError;
+}
+
+function createTimelinePhoto(day, it){
+  const button = document.createElement("button"); button.className = "timeline-photo";
+  if (!it){
+    button.classList.add("pending"); button.disabled = true;
+    button.textContent = "…"; button.setAttribute("aria-label", "Photo not loaded yet");
+    return button;
+  }
+  button.dataset.pid = it.id;
+  button.title = it.filename + "\n" + it.taken;
+  button.setAttribute("aria-label", it.filename + ", " + it.taken);
+  const placeholder = document.createElement("span"); placeholder.className = "noimg";
+  placeholder.textContent = (it.ext || "image").toUpperCase(); button.appendChild(placeholder);
+  const rating = effRating(it);
+  if (rating){
+    const badge = document.createElement("span"); badge.className = "timeline-badge";
+    badge.textContent = rating === "great" ? "5+" : rating === "bad" ? "✗ bad" : "★".repeat(+rating);
+    button.appendChild(badge);
+  }
+  button.onclick = () => openTimelinePhoto(day, it.id, button);
+  return button;
+}
+
+function renderTimelinePhotos(day, row){
+  const t = photoTimeline, photos = row.querySelector(".timeline-photos");
+  photos.classList.toggle("expanded", !!day.expanded);
+  const items = timelineItems(day), count = timelinePhotoCount(day);
+  let from = 0, until = count;
+  if (day.expanded){
+    photos.style.height = Math.max(0, Math.ceil(count / t.cols) * (t.tile + 6) - 6) + "px";
+    const top = photos.getBoundingClientRect().top;
+    from = Math.max(0, Math.floor((-top - 700) / (t.tile + 6)) * t.cols);
+    until = Math.max(from, Math.min(count, Math.ceil((window.innerHeight - top + 900) / (t.tile + 6)) * t.cols));
+  }
+  row.photoNodes.forEach((button, index) => {
+    if (index < from || index >= until || String(items[index]?.id || "") !== (button.dataset.pid || "")){
+      button.remove(); row.photoNodes.delete(index);
+    }
+  });
+  for (let i = from; i < until; i++){
+    let button = row.photoNodes.get(i);
+    if (!button){
+      button = createTimelinePhoto(day, items[i]);
+      const next = Array.from(photos.children).find(el => +el.dataset.index > i);
+      button.dataset.index = i; photos.insertBefore(button, next || null); row.photoNodes.set(i, button);
+      if (items[i]) queueThumb(button, items[i].id, 200, () => state.page === "timeline" && button.isConnected);
+    }
+    if (day.expanded){
+      Object.assign(button.style, {top:Math.floor(i / t.cols) * (t.tile + 6) + "px",
+        left:(i % t.cols) * (t.tile + 6) + "px", width:t.tile + "px", height:t.tile + "px"});
+    }
+  }
+  if (day.expanded && !day.allLoading && !day.allError && day.allNext !== null && until > items.length)
+    loadAllTimelineDay(day);
+}
+
+function toggleTimelineDay(day){
+  const t = photoTimeline, position = timelinePosition();
+  day.expanded = !day.expanded;
+  day.details = null;
+  if (day.expanded && !day.allItems){
+    day.allItems = day.items.map(it => ({...it}));
+    day.allById = new Map(day.allItems.map(it => [it.id, it]));
+    day.allNext = 0;
+  }
+  const row = t.mounted.get(day.day);
+  if (row){ row.remove(); t.mounted.delete(day.day); }
+  if (!day.expanded && !day.items.length) t.days.splice(t.days.indexOf(day), 1);
+  layoutPhotoTimeline(true, position);
+  t.mounted.get(day.day)?.querySelector(".timeline-toggle-all").focus({preventScroll:true});
+}
+
+function loadAllTimelineDay(day){
+  if (day.allTask) return day.allTask;
+  if (day.allNext === null) return Promise.resolve();
+  const t = photoTimeline, epoch = t.epoch;
+  day.allLoading = true; day.allError = false; updateTimelineDayControls(day);
+  const task = ask("timeline-all-" + day.day, timelineDayURL(day, {offset:day.allNext})).then(data => {
+    if (epoch !== t.epoch || !t.days.includes(day)) return;
+    if (!Array.isArray(data.items)) throw new Error("Invalid day response");
+    const position = timelinePosition();
+    data.items.forEach(it => {
+      const cached = day.allById.get(it.id);
+      if (cached) Object.assign(cached, it);
+      else { day.allItems.push(it); day.allById.set(it.id, it); }
+    });
+    day.total = data.total; day.allNext = data.next;
+    layoutPhotoTimeline(true, position);
+  }).catch(e => { if (e.name !== "AbortError") day.allError = true; })
+    .finally(() => {
+      day.allLoading = false; day.allTask = null;
+      updateTimelineDayControls(day); schedulePhotoTimeline();
+    });
+  day.allTask = task;
+  return task;
+}
+
+function renderPhotoTimeline(){
+  if (state.page !== "timeline") return;
+  const t = photoTimeline, stage = $("timelineStage");
+  const local = -stage.getBoundingClientRect().top;
+  const from = timelineIndex(local - 700), until = local + window.innerHeight + 900;
+  const wanted = new Set();
+  for (let i = from; i < t.days.length && t.offsets[i] < until; i++) wanted.add(t.days[i].day);
+  t.mounted.forEach((el, day) => {
+    if (!wanted.has(day)){
+      el.remove(); t.mounted.delete(day);
+      const cached = t.days.find(d => d.day === day);
+      if (cached) cached.details = null;
+    }
+  });
+  for (let i = from; i < t.days.length && t.offsets[i] < until; i++){
+    if (!t.mounted.has(t.days[i].day)) mountTimelineDay(t.days[i], i);
+    else renderTimelinePhotos(t.days[i], t.mounted.get(t.days[i].day));
+  }
+  if (t.started && !t.ended && !t.loading && !t.error &&
+      $("timelineFooter").getBoundingClientRect().top < window.innerHeight + 800) loadTimelineDays();
+}
+
+function schedulePhotoTimeline(){
+  if (state.page !== "timeline" || photoTimeline.frame) return;
+  photoTimeline.frame = requestAnimationFrame(() => { photoTimeline.frame = 0; renderPhotoTimeline(); });
+}
+window.addEventListener("scroll", schedulePhotoTimeline, {passive:true});
+window.addEventListener("resize", () => layoutPhotoTimeline());
+new ResizeObserver(() => {
+  if (state.page === "timeline"){
+    measureTop();
+    document.documentElement.style.setProperty("--timeline-tools", $("timelineTools").offsetHeight + "px");
+  }
+}).observe($("timelineTools"));
+
+function timelineStatus(){
+  const t = photoTimeline;
+  $("timelineRefresh").disabled = t.loading;
+  $("timelineStage").setAttribute("aria-busy", String(t.loading));
+  $("timelineRetry").hidden = !t.error;
+  $("timelineStatus").textContent = t.loading ? "Loading days…" : t.error
+    ? "Could not load the timeline. Your place is kept; try again."
+    : !t.days.length ? "No eligible photos with a date yet."
+    : t.ended ? "End of timeline · " + nf(t.days.length) + " days"
+    : nf(t.days.length) + " days loaded · Scroll for more";
+}
+
+function loadTimelineDays(){
+  const t = photoTimeline;
+  if (t.loading || t.ended) return;
+  const epoch = t.epoch;
+  t.loading = true; t.error = false; t.started = true; timelineStatus();
+  const extra = t.next ? {cursor:t.next} : {};
+  return ask("timeline-days", timelineURL(extra)).then(data => {
+    if (epoch !== t.epoch) return;
+    if (!Array.isArray(data.days)) throw new Error("Invalid timeline response");
+    const known = new Set(t.days.map(day => day.day));
+    t.days.push(...data.days.filter(day => !known.has(day.day)));
+    t.next = data.next; t.ended = !data.next;
+    state.files = !!data.files;
+    if (data.version) $("ver").textContent = "v" + data.version;
+    layoutPhotoTimeline(false);
+  }).catch(e => {
+    if (epoch === t.epoch && e.name !== "AbortError") t.error = true;
+  }).finally(() => {
+    if (epoch !== t.epoch) return;
+    t.loading = false; timelineStatus(); schedulePhotoTimeline();
+  });
+}
+
+function resetPhotoTimeline(reshuffle = true){
+  const t = photoTimeline;
+  t.epoch++; t.days = []; t.offsets = [0]; t.mounted.clear(); t.dirty.clear(); t.updating.clear();
+  t.next = null; t.started = false; t.loading = false; t.ended = false; t.error = false; t.scrollY = 0;
+  if (reshuffle) t.seed = timelineSeed();
+  if (ctl["timeline-days"]) ctl["timeline-days"].abort();
+  if (ctl["timeline-detail"]) ctl["timeline-detail"].abort();
+  $("timelineStage").replaceChildren(); $("timelineStage").style.height = "0px";
+  window.scrollTo(0, 0);
+  loadTimelineDays();
+}
+$("timelineRefresh").onclick = () => resetPhotoTimeline();
+$("timelineRetry").onclick = loadTimelineDays;
+$("timelineOrder").onchange = () => {
+  photoTimeline.order = $("timelineOrder").value;
+  try { localStorage.setItem("timelineOrder", photoTimeline.order); } catch (e){}
+  resetPhotoTimeline(false);
+};
+
+async function openTimelinePhoto(day, id, button = null, deck = null){
+  const epoch = photoTimeline.epoch;
+  button?.classList.add("loading");
+  try {
+    if (!day.expanded && !day.details){
+      const data = await ask("timeline-detail", timelineURL({day:day.day, details:1}));
+      if (epoch !== photoTimeline.epoch || state.page !== "timeline") return;
+      day.details = data.days[0]?.items || [];
+    }
+    let photo = day.details?.find(it => it.id === id);
+    if (!photo){
+      const data = await ask("timeline-detail", timelineDayURL(day, {photo:id}));
+      if (epoch !== photoTimeline.epoch || state.page !== "timeline") return;
+      photo = data.items?.[0];
+      if (photo){
+        day.details = (day.details || []).slice(-29); day.details.push(photo);
+      }
+    }
+    if (photo) openDetail(photo, deck || timelineItems(day), day);
+  } catch (e){ if (e.name !== "AbortError") toast("Could not load the photo. Try again."); }
+  finally { button?.classList.remove("loading"); }
+}
+
+function refreshTimelineDay(value){
+  const t = photoTimeline;
+  if (t.updating.has(value)) return t.updating.get(value);
+  const epoch = t.epoch;
+  const task = ask("timeline-day-" + value, timelineURL({day:value})).then(data => {
+    if (epoch !== t.epoch) return;
+    if (!Array.isArray(data.days)) throw new Error("Invalid timeline response");
+    const index = t.days.findIndex(day => day.day === value);
+    if (index < 0) return;
+    const position = timelinePosition();
+    const row = t.mounted.get(value);
+    if (row){ row.remove(); t.mounted.delete(value); }
+    const day = t.days[index];
+    if (data.days.length) Object.assign(day, data.days[0], {details:null});
+    else if (day.expanded){ day.items = []; day.details = null; }
+    else t.days.splice(index, 1);
+    t.dirty.delete(value);
+    layoutPhotoTimeline(true, position); timelineStatus();
+  }).catch(e => { if (e.name !== "AbortError") toast("Could not update the day. Use Refresh to retry."); })
+    .finally(() => { if (epoch === t.epoch) t.updating.delete(value); });
+  t.updating.set(value, task);
+  return task;
+}
+
+function refreshTimelineRating(it){
+  const t = photoTimeline, value = (it.taken || "").slice(0, 10);
+  const day = t.days.find(day => day.day === value);
+  if (!day) return;
+  const cached = day.allById?.get(it.id);
+  if (cached){ cached.mark = it.mark; cached.rating = it.rating; }
+  day.details = null;
+  t.dirty.add(value);
+  if (state.page === "timeline") refreshTimelineDay(value);
+}
+
+function showPage(){
+  const page = ["#directories", "#timeline"].includes(location.hash) ? location.hash.slice(1) : "statistics";
+  // A history traversal can emit both popstate and hashchange. Restore once,
+  // otherwise the second callback can undo the user's next scroll.
+  if (state.pageShown === page) return;
+  state.pageShown = page;
+  if (state.page !== page) closeDetail();
+  if (state.page === "timeline" && page !== "timeline"){
+    photoTimeline.scrollY = window.scrollY;
+    // Pending thumbnails are dropped while this page is hidden. Remounting
+    // queues them again on return instead of leaving half-loaded rows blank.
+    photoTimeline.mounted.forEach(row => row.remove());
+    photoTimeline.mounted.clear();
+    photoTimeline.days.forEach(day => { day.details = null; });
+  }
+  state.page = page;
+  const directories = page === "directories", timeline = page === "timeline", statistics = page === "statistics";
+  $("directories").hidden = !directories;
+  $("photoTimeline").hidden = !timeline;
+  document.querySelector(".wrap").hidden = !statistics || !!state.empty;
+  $("archiveEmpty").hidden = !statistics || !state.empty;
+  ["q", "csv", "chips", "tally"].forEach(id => { $(id).hidden = !statistics; });
+  ["pageStats", "pageDirectories", "pageTimeline"].forEach((id, i) => {
+    if (page === ["statistics", "directories", "timeline"][i]) $(id).setAttribute("aria-current", "page");
+    else $(id).removeAttribute("aria-current");
+  });
+  document.title = "Photo archive — " + state.page;
+  measureTop();
+  if (directories){
+    if (directoryData) renderDirectories(); else loadDirectories();
+  } else if (timeline){
+    state.statsLoaded = false;
+    window.scrollTo(0, photoTimeline.scrollY);
+    if (!photoTimeline.started) loadTimelineDays(); else layoutPhotoTimeline(false);
+    photoTimeline.dirty.forEach(refreshTimelineDay);
+  } else if (!state.statsLoaded) load();
+}
+$("directorySearch").oninput = renderDirectories;
+$("directoryRefresh").onclick = loadDirectories;
+function navigatePage(page){
+  // pushState avoids the browser scrolling to a matching fragment before we
+  // can save the timeline's position. Back/forward still keep real history.
+  if (location.hash !== "#" + page) history.pushState(null, "", "#" + page);
+  showPage();
+}
+["pageStats", "pageDirectories", "pageTimeline"].forEach(id => {
+  $(id).onclick = event => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); navigatePage($(id).hash.slice(1));
+  };
+});
+window.addEventListener("hashchange", showPage);
+window.addEventListener("popstate", showPage);
 
 /* Returns the request: the arrows in the photo card wait on it before stepping
    into a page that was not loaded yet. */
@@ -2586,21 +3290,25 @@ function releaseSelection(){
   if (!state.held) return;
   state.held = false;
   document.querySelector(".right").classList.remove("held");
+  if (state.page !== "statistics"){ state.statsLoaded = false; return; }
   if (state.view === "folders") loadFolders(); else loadPhotos(0);
   loadStrip();
 }
 
 function load(){
+  if (state.page === "directories") return loadDirectories();
+  if (state.page === "timeline") return resetPhotoTimeline();
   state.loadedAt = state.jobNow;
   renderChips();
   $("csv").href = "/api/export?" + params();
   $("pathsCsv").href = "/api/export/paths?" + params();
   ask("stats", "/api/stats?" + params()).then(d => {
+    state.statsLoaded = true;
+    state.empty = !!d.empty;
+    document.querySelector(".wrap").hidden = state.page !== "statistics" || state.empty;
+    $("archiveEmpty").hidden = state.page !== "statistics" || !state.empty;
     if (d.empty){
       $("tally").textContent = "Database is empty";
-      document.querySelector(".wrap").innerHTML =
-        '<div class="empty" style="padding:40px 24px">The database is still empty. ' +
-        'Run this in the program folder:<br><code>python scan.py "D:\\Photos"</code></div>';
       return;
     }
     $("tally").innerHTML = "<b>" + nf(d.total) + "</b> of " + nf(d.totalAll) + " photos · " +
@@ -2726,19 +3434,19 @@ $("q").oninput = e => {
   qTimer = setTimeout(() => {
     const v = e.target.value.trim();
     if (v) state.filters.q = v; else delete state.filters.q;
-    load();
+    if (state.page === "statistics") load();
   }, 350);
 };
 $("reshuffle").onclick = loadStrip;
 
-function setView(view){
+function setView(view, reload = true){
   state.view = view;
   $("viewFiles").className = "toggle" + (view === "files" ? " on" : "");
   $("viewFolders").className = "toggle" + (view === "folders" ? " on" : "");
   const files = view === "files";
   $("sortBy").disabled = !files;
   $("sortDir").disabled = !files;
-  if (files) loadPhotos(0); else loadFolders();
+  if (reload){ if (files) loadPhotos(0); else loadFolders(); }
 }
 $("viewFiles").onclick = () => setView("files");
 $("viewFolders").onclick = () => setView("folders");
@@ -2771,7 +3479,7 @@ $("eq").onclick = () => {
 fetch("/api/job").then(r => r.json()).catch(() => ({}))
   .then(d => {
     if (d.job && d.job.state === "running") holdSelection(d.job);
-    load();
+    showPage();
     pollJob();
   });
 </script>

@@ -625,6 +625,270 @@ def check_dups_pass(tmp, photos, db):
           and got.get("already scanned", 0) > 0, str(got))
 
 
+def directory_checks(db, photos):
+    """Tree totals, partial image analysis, literal paths and archive-wide scope."""
+    import sqlite3
+
+    print("\ndirectory tree")
+    con = sqlite3.connect(db, timeout=15)
+    before = api("/api/directories")
+    by_path = {item["path"]: item for item in before["items"]}
+    n, size = con.execute("SELECT COUNT(*), SUM(size) FROM photos").fetchone()
+    check("directory totals match indexed files",
+          before["total"]["n"] == n and before["total"]["bytes"] == size)
+    check("parent includes files in all descendants",
+          by_path[photos]["n"] == n and by_path[photos]["bytes"] == size)
+    check("nested directories are linked to their parent",
+          by_path[os.path.join(photos, "backup")]["parent"] == photos)
+    check("tree ignores statistics filters and list limits",
+          api("/api/directories", folder="missing", camera="missing", limit=1) == before)
+
+    last_id = con.execute("SELECT MAX(id) FROM photos").fetchone()[0]
+    base = os.path.join(photos, "Фотографии_100%!")
+    nested = os.path.join(base, "child")
+    # A successful zero sharpness is a measurement, while a version stamp on a
+    # failed attempt is not. None and 'unknown' have different scanner meanings.
+    specs = [
+        (base, "red", 0.5, 0, 0),
+        (nested, "green", 0.5, 15, 20),
+        (nested, "green", 0.5, None, None),
+        (nested, "unknown", None, 15, 20),
+        (nested, None, None, 15, 20),
+        (nested, "red", 0.5, 15, None),
+        (nested, "red", None, 15, 20),
+        (base + "-copy", "red", 0.5, 15, 20),
+        (os.path.join(photos, "ФотографииX100XYZ!", "child"), "red", 0.5, 15, 20),
+    ]
+    # Exceed even the old flat folder endpoint's maximum, without creating files.
+    specs.extend((os.path.join(photos, "many", f"folder-{i}"), None, None, None, None)
+                 for i in range(2005))
+    if os.name == "nt":
+        specs.append((r"\\archive-server\photos\trip", "red", 0.5, 15, 20))
+    try:
+        con.executemany(
+            "INSERT INTO photos (path, folder, filename, size, color, brightness,"
+            " sharp_center, sharp_edge, sharp_v) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            [(os.path.join(folder, f"directory-{i}.jpg"), folder,
+              f"directory-{i}.jpg", 100 + i, color, light, center, edge)
+             for i, (folder, color, light, center, edge) in enumerate(specs)])
+        con.commit()
+        data = api("/api/directories")
+        nodes = {item["path"]: item for item in data["items"]}
+        check("refresh reads newly committed scan results",
+              data["total"]["n"] == n + len(specs))
+        check("tree is not truncated at the flat list limit",
+              all(os.path.join(photos, "many", f"folder-{i}") in nodes for i in range(2005)))
+        check("combined analysis excludes failed and incomplete measurements",
+              nodes[base]["analyzed"] == 2 and nodes[nested]["analyzed"] == 1)
+        check("parent sizes include each file exactly once",
+              nodes[base]["n"] == 7 and nodes[base]["bytes"] == sum(range(100, 107)))
+        roots = [item for item in data["items"] if item["parent"] is None]
+        check("root totals do not double-count ancestors",
+              all(sum(item[key] for item in roots) == data["total"][key]
+                  for key in ("n", "bytes", "analyzed")))
+        check("every directory has a reachable parent",
+              all(item["parent"] is None or item["parent"] in nodes for item in data["items"]))
+        check("directory selection includes descendants and treats wildcards literally",
+              api("/api/photos", folder=base)["total"] == 7
+              and api("/api/stats", folder=base)["total"] == 7
+              and sum(item["n"] for item in api("/api/folders", folder=base)["items"]) == 7)
+        check("leaf directory selection excludes siblings",
+              api("/api/photos", folder=nested)["total"] == 6)
+        check("other filters still combine with a directory selection",
+              api("/api/photos", folder=base, color="green")["total"] == 2)
+        for root in roots:
+            check("root directory can be selected: " + root["path"],
+                  api("/api/photos", folder=root["path"])["total"] == root["n"])
+        if os.name == "nt":
+            check("UNC shares keep their own tree root",
+                  any(item["path"] == "\\\\archive-server\\photos\\" for item in roots))
+    finally:
+        con.execute("DELETE FROM photos WHERE id > ?", (last_id,))
+        con.commit()
+        con.close()
+    check("tree refresh removes deleted scan records", api("/api/directories") == before)
+
+    # Exercise the empty state with an isolated database; never empty the archive
+    # used by the other endpoint checks, even briefly.
+    sys.path.insert(0, ROOT)
+    import app as web_app
+    import scan
+    with tempfile.TemporaryDirectory(prefix="photostats-empty-tree-") as empty:
+        empty_db = os.path.join(empty, "empty.db")
+        scan.open_db(empty_db).close()
+        previous = web_app.DB_PATH
+        try:
+            web_app.DB_PATH = empty_db
+            empty_tree = web_app.app.test_client().get("/api/directories").get_json()
+            check("empty tree has zero totals", empty_tree == {
+                "items": [], "total": {"n": 0, "analyzed": 0, "bytes": 0}})
+            empty_timeline = web_app.app.test_client().get("/api/timeline/photos").get_json()
+            check("empty timeline ends without a cursor",
+                  empty_timeline["days"] == [] and empty_timeline["next"] is None)
+        finally:
+            web_app.DB_PATH = previous
+
+
+def timeline_checks(db, photos):
+    """Daily highlights, stable sampling, date cursors and the analyser handoff."""
+    import sqlite3
+
+    print("\nphoto timeline")
+    con = sqlite3.connect(db, timeout=15)
+    last_id = con.execute("SELECT MAX(id) FROM photos").fetchone()[0]
+    specs = []
+
+    def add(day, rating=None, mark=None, n=1, source="exif"):
+        specs.extend((day, rating, mark, source) for _ in range(n))
+
+    add("2010-01-01", 5, "great", 20)
+    add("2010-01-01", 5, n=20)
+    add("2010-01-01", 4, n=20)
+    add("2010-01-01", n=30)
+    add("2010-01-02", 5, "great", 2)
+    add("2010-01-02", 5, n=3)
+    add("2010-01-02", 4, n=4)
+    add("2010-01-02", 2, "4")
+    add("2010-01-02", 5, "2")
+    add("2010-01-02", 5, "bad")
+    add("2010-01-02", 3, n=3)
+    add("2010-01-02", n=30)
+    add("2010-01-04", 1)
+    add("2010-01-04", 2)
+    add("2010-01-04", 3)
+    add("2010-01-04", 5, "bad")
+    add("2010-01-05", n=2)
+    add("2010-01-06", n=1100)
+    add("2010-01-08", 4, n=2, source="file")
+    add("2010-02-30", 5)
+    add(None, 5)
+    try:
+        con.executemany(
+            "INSERT INTO photos (path, folder, filename, ext, size, taken, date_src, rating, mark)"
+            " VALUES (?, ?, ?, 'jpg', 100000, ?, ?, ?, ?)",
+            [(os.path.join(photos, f"timeline-{i}.jpg"), photos, f"timeline-{i}.jpg",
+              day + " 12:00:00" if day else None, source, rating, mark)
+             for i, (day, rating, mark, source) in enumerate(specs)])
+        con.commit()
+        first = api("/api/timeline/photos", dir="asc", limit=2, seed="smoke")
+        check("timeline starts with oldest eligible days on request",
+              [d["day"] for d in first["days"]] == ["2010-01-01", "2010-01-02"])
+        check("each day is capped at fifteen",
+              all(len(d["items"]) == 15 for d in first["days"]))
+        check("5+ wins when there are more than fifteen excellent photos",
+              all(p["mark"] == "great" for p in first["days"][0]["items"]))
+        selected = first["days"][1]["items"]
+        effective = [p["mark"] or (str(p["rating"]) if p["rating"] else None) for p in selected]
+        check("effective ratings are prioritised before random unrated fillers",
+              effective == ["great"] * 2 + ["5"] * 3 + ["4"] * 5 + [None] * 5,
+              str(effective))
+        check("day total includes low ratings for the analyser",
+              first["days"][1]["total"] == 45 and first["days"][1]["eligible"] == 40)
+        check("statistics filters do not affect the independent timeline",
+              api("/api/timeline/photos", dir="asc", limit=2, seed="smoke",
+                  folder="missing", day_filter="missing", rating="1", camera="missing") == first)
+        details = api("/api/timeline/photos", day="2010-01-02", seed="smoke", details=1)
+        check("full cards preserve the thumbnail selection and order",
+              [p["id"] for p in details["days"][0]["items"]] == [p["id"] for p in selected]
+              and all("path" in p and "tags" in p and "sharp_center" in p
+                      for p in details["days"][0]["items"]))
+        check("timeline only sends lightweight metadata until a card is opened",
+              all("path" not in p and "tags" not in p for p in selected))
+
+        def all_photos(day, limit):
+            items, offset = [], 0
+            while True:
+                page = api("/api/timeline/day", day=day, offset=offset, limit=limit)
+                items.extend(page["items"])
+                if page["next"] is None:
+                    return items
+                offset = page["next"]
+
+        expanded = all_photos("2010-01-02", 7)
+        check("expanded day includes every photo without duplicates",
+              len(expanded) == 45 and len({p["id"] for p in expanded}) == 45)
+        check("expanded day includes bad and low-rated photos",
+              any(p["mark"] == "bad" for p in expanded)
+              and any(p["mark"] == "2" for p in expanded)
+              and any(p["rating"] == 3 for p in expanded))
+        check("expanded day is independent of Statistics filters",
+              api("/api/timeline/day", day="2010-01-02", limit=7, camera="missing", rating="5")
+              == api("/api/timeline/day", day="2010-01-02", limit=7))
+        check("all photos load beyond the normal photo-list page cap",
+              len(all_photos("2010-01-06", 137)) == 1100)
+        bad = next(p for p in expanded if p["mark"] == "bad")
+        card = api("/api/timeline/day", day="2010-01-02", photo=bad["id"])["items"][0]
+        check("excluded photos open full cards in an expanded day",
+              card["id"] == bad["id"] and card["mark"] == "bad"
+              and "path" in card and "tags" in card and "sharp_center" in card)
+        check("explicit expansion can read a day with only excluded photos",
+              len(api("/api/timeline/day", day="2010-01-04")["items"]) == 4)
+        check("empty expanded day has no next page",
+              api("/api/timeline/day", day="2000-01-01")["items"] == []
+              and api("/api/timeline/day", day="2000-01-01")["next"] is None)
+        for query, expected in (("day=bad", 400), ("day=2010-01-02&limit=bad", 400),
+                                ("day=2010-01-02&offset=bad", 400), ("day=2010-01-02&photo=bad", 400),
+                                (f"day=2010-01-05&photo={bad['id']}", 404)):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/timeline/day?{query}", timeout=20).close()
+                ok = False
+            except urllib.error.HTTPError as error:
+                ok = error.code == expected
+                error.close()
+            check("expanded day validates its input: " + query, ok)
+
+        def walk(direction):
+            days, cursor = [], None
+            for _ in range(20):
+                extra = {"cursor": cursor} if cursor else {}
+                page = api("/api/timeline/photos", dir=direction, limit=2, seed="smoke", **extra)
+                days.extend(d["day"] for d in page["days"])
+                cursor = page["next"]
+                if not cursor:
+                    return days
+            return days
+
+        asc, desc = walk("asc"), walk("desc")
+        check("date cursors traverse in both directions without duplicates",
+              asc == sorted(set(asc)) and desc == list(reversed(asc)))
+        check("empty, low-rated and invalid calendar days are skipped",
+              "2010-01-03" not in asc and "2010-01-04" not in asc and "2010-02-30" not in asc)
+        check("days with fewer eligible files stay short",
+              len(api("/api/timeline/photos", day="2010-01-05")["days"][0]["items"]) == 2)
+        check("file dates work when EXIF dates are absent", "2010-01-08" in asc)
+        samples = [[p["id"] for p in api("/api/timeline/photos", day="2010-01-06", seed=seed)
+                    ["days"][0]["items"]] for seed in ("one", "one", "two")]
+        check("sampling is stable per seed and changes on refresh",
+              samples[0] == samples[1] and set(samples[0]) != set(samples[2]))
+        all_day = api("/api/photos", day="2010-01-02", limit=100)
+        check("analyser day filter includes every rating and directory",
+              all_day["total"] == 45 and all(p["taken"].startswith("2010-01-02") for p in all_day["items"])
+              and api("/api/stats", day="2010-01-02")["total"] == 45)
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/export/paths?day=2010-01-02", timeout=20) as response:
+            check("day filter also applies to path exports",
+                  len(response.read().decode("utf-8-sig").splitlines()) == 46)
+        victim = selected[0]["id"]
+        post(f"/api/mark/{victim}?value=bad")
+        refreshed = api("/api/timeline/photos", day="2010-01-02", seed="smoke")["days"][0]
+        check("lowering a rating replaces the excluded photo",
+              len(refreshed["items"]) == 15 and victim not in [p["id"] for p in refreshed["items"]])
+        check("a day containing only excluded photos returns no highlights",
+              api("/api/timeline/photos", day="2010-01-04")["days"] == [])
+        for query in ("day=2010-02-30", "cursor=bad", "dir=sideways", "limit=bad",
+                      "day=2010-01-02&cursor=2010-01-01", "seed=" + "a" * 65):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/timeline/photos?{query}", timeout=20).close()
+                ok = False
+            except urllib.error.HTTPError as error:
+                ok = error.code == 400
+                error.close()
+            check("invalid timeline input is rejected: " + query[:50], ok)
+    finally:
+        con.execute("DELETE FROM photos WHERE id > ?", (last_id,))
+        con.commit()
+        con.close()
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="photostats-smoke-")
     photos = os.path.join(tmp, "photos")
@@ -787,6 +1051,8 @@ def main():
         network_checks(db)
         job_checks(db)
         sharpness_checks(db)
+        directory_checks(db, photos)
+        timeline_checks(db, photos)
     finally:
         srv.terminate()
         srv.wait(timeout=10)

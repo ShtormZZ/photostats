@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- A separate **Timeline** page loads daily photo highlights as you scroll, with
+  at most 15 photos per day: 5+, five stars, four stars, then random unrated
+  fillers. Ratings of three or below and bad photos are excluded; empty days
+  are skipped. Date order is configurable and remembered. Virtual day blocks,
+  lightweight metadata and stable samples preserve scrolling performance and
+  position. **Analyse day** opens all photos for the date in Statistics with
+  its other filters cleared. Photo cards retain ratings, tags and comments;
+  changing a rating refreshes that day's highlights. **Show all** expands every
+  photo from a day in place, including bad and low-rated files, while keeping
+  the original highlights first. Large days are paged and their thumbnails are
+  virtualised; **Show highlights** restores the selection.
+
+- A **Directories** page shows the whole indexed archive as an expandable,
+  searchable tree, with recursive file counts, successful colour-and-sharpness
+  counts and total sizes. **Analyse** applies a directory and its descendants to
+  Statistics while keeping other filters. **Refresh** updates the snapshot on
+  demand and keeps expanded branches. Directory names containing SQL wildcard
+  characters are matched literally when selecting files.
+
 - Sharpness filters use indexes on the centre and edge measurements instead of
   repeatedly scanning the whole archive for the statistics panels. Existing
   databases get the indexes when the server or scanner next starts.

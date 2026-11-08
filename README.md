@@ -383,6 +383,56 @@ a count and a date range each. Click one to narrow the selection to it. That is
 usually the faster way to find where a batch came from than paging through the
 files themselves.
 
+### Directory tree
+
+Open **Directories** in the top navigation for a tree of the whole indexed
+archive, independent of the filters in **Statistics**. Expand a directory with
+its arrow or search by any part of its path; hovering a name shows the full path.
+The columns show scanned file count, files with both colour and sharpness
+successfully measured, and total file size. Each directory includes all its
+descendants, with each file counted once. Failed or incomplete image analysis
+does not count as measured; a sharpness value of zero does.
+
+**Analyse** opens **Statistics** for that directory and its subdirectories,
+keeping the other filters. Remove the Folder filter chip to remove the directory
+restriction. **Refresh** reloads the tree from the database; it does not update
+automatically. Expanded branches and the search are kept when refreshing or
+switching pages in the same browser tab.
+
+The tree describes files stored in the database, not the live filesystem.
+Empty directories and directories with no indexed files are not recorded;
+intermediate parent directories are included to show the hierarchy.
+
+### Photo timeline
+
+**Timeline** is a separate view of the whole archive and ignores Statistics
+filters. Days run vertically; each shows up to 15 photos, in this order: **5+**,
+**5 stars**, **4 stars**, then a random sample of unrated photos to fill the
+remaining places. Your own rating overrides the EXIF rating. Photos rated
+three stars or lower, and photos marked bad, are excluded from highlights. Days without eligible
+photos are skipped; a day with fewer than 15 eligible photos stays short.
+
+**Date order** switches between newest first (the default) and oldest first;
+the browser remembers the setting. Days and thumbnails load as you scroll.
+Distant day blocks are removed from the display, while their selections and
+your scroll position are kept when you return or switch pages. **Refresh**
+restarts the timeline with current database results and a new random sample.
+Dates come from EXIF, falling back to the file date as elsewhere in the app;
+files without a usable date cannot appear on the timeline.
+
+Click a thumbnail for the usual full photo card, ratings, tags and comments.
+Changing a rating updates the day's selection. **Analyse day** opens Statistics
+with just that date selected and every photo from that day, including low-rated
+photos and files from all directories. The Day filter chip can be removed there.
+Narrow screens use fewer columns; a row never exceeds 15 photos.
+
+**Show all**, to the right of a day's photos, expands every photo from that day
+directly in Timeline, including low ratings and bad photos. The original highlights
+stay first; the remaining files follow in capture-time order without duplicates.
+Large days load in batches and only nearby thumbnails are drawn. **Show highlights**
+returns to the original selection. Expanded days stay expanded when scrolling or
+switching pages, until Refresh. On narrow screens the control is below the date.
+
 ## How some of it is worked out
 
 **Colour is a vote, not an average.** The frame is scaled to 48×48, every pixel

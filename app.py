@@ -20,6 +20,7 @@ import datetime
 import io
 import ipaddress
 import os
+import secrets
 import sqlite3
 import subprocess
 import sys
@@ -27,6 +28,7 @@ import threading
 import time
 import unicodedata
 import webbrowser
+from contextlib import closing
 from hashlib import md5
 
 from flask import (Flask, Response, abort, g, jsonify, request, send_file,
@@ -394,6 +396,19 @@ def focal_col():
     return "focal35" if request.args.get("eq") == "1" else "focal"
 
 
+def day_bounds(value):
+    """Half-open timestamp bounds keep day queries on the capture-time index."""
+    try:
+        day = datetime.date.fromisoformat(value)
+        if day.isoformat() != value:
+            raise ValueError
+    except (ValueError, TypeError):
+        abort(400, description="Expected a date in YYYY-MM-DD format")
+    following = ((day + datetime.timedelta(days=1)).isoformat()
+                 if day < datetime.date.max else "9999-12-32")
+    return value, following
+
+
 def build_where(skip=None):
     """Assembles the WHERE from the active filters. skip is the dimension (or
     several) left out, so that a chart does not truncate itself."""
@@ -419,6 +434,12 @@ def build_where(skip=None):
                 parts.append(f"{col} = ?")
                 params.append(v)
         clauses.append("(" + " OR ".join(parts) + ")")
+
+    day = request.args.get("day")
+    if day and "day" not in skips:
+        lo, hi = day_bounds(day)
+        clauses.append("(taken >= ? AND taken < ?)")
+        params += [lo, hi]
 
     for key in RANGE_DIMS:
         vals = request.args.getlist(key)
@@ -496,8 +517,11 @@ def build_where(skip=None):
 
     folder = request.args.get("folder")
     if folder and "folder" not in skips:
-        clauses.append("(folder = ? OR folder LIKE ?)")
-        params += [folder, folder.rstrip("\\/") + os.sep + "%"]
+        # A directory name can contain SQL wildcards; they must stay literal.
+        prefix = os.path.join(folder, "")
+        prefix = prefix.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        clauses.append("(folder = ? OR folder LIKE ? ESCAPE '!')")
+        params += [folder, prefix + "%"]
 
     q = request.args.get("q")
     if q:
@@ -900,6 +924,178 @@ SORTS = {
     "sharp_center": ["COALESCE(sharp_center, -1)", "taken"],
     "sharp_edge": ["COALESCE(sharp_edge, -1)", "taken"],
 }
+
+
+def timeline_columns(details=False):
+    if not details:
+        return "id, filename, taken, ext, rating, mark"
+    return (
+        "id, path, filename, folder, taken, date_src, brand, camera, lens,"
+        " focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
+        f" lat, lon, rating, mark, comment, {TAG_COL},"
+        " color, color_hex, color_share, color_center, color_center_hex,"
+        " color_center_share, brightness, contrast, chroma, clip_hi, clip_lo,"
+        f" {SHARP_COLS}")
+
+
+@app.get("/api/timeline/day")
+def api_timeline_day():
+    """All files from an explicitly expanded day, including excluded ratings.
+
+    Page only lightweight records; an individual full card is fetched on click.
+    This keeps a day with thousands of photos from producing one huge response.
+    """
+    day = request.args.get("day")
+    lo, hi = day_bounds(day)
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+        limit = max(1, min(int(request.args.get("limit", 200)), 500))
+        photo = int(request.args["photo"]) if "photo" in request.args else None
+    except ValueError:
+        abort(400, description="Invalid photo page")
+    with closing(db()) as con:
+        con.execute("BEGIN")
+        total = con.execute("SELECT COUNT(*) FROM photos WHERE taken >= ? AND taken < ?",
+                            (lo, hi)).fetchone()[0]
+        columns = timeline_columns(details=photo is not None)
+        if photo is not None:
+            rows = con.execute(f"SELECT {columns} FROM photos"
+                               " WHERE taken >= ? AND taken < ? AND id = ?",
+                               (lo, hi, photo)).fetchall()
+            if not rows:
+                abort(404, description="No photo for this day")
+        else:
+            rows = con.execute(f"SELECT {columns} FROM photos"
+                               " WHERE taken >= ? AND taken < ? ORDER BY taken, id LIMIT ? OFFSET ?",
+                               (lo, hi, limit, offset)).fetchall()
+    following = offset + len(rows)
+    return jsonify({"day": day, "total": total, "items": [dict(row) for row in rows],
+                    "next": following if photo is None and rows and following < total else None})
+
+
+@app.get("/api/timeline/photos")
+def api_timeline_photos():
+    """A day cursor over the whole archive, with up to 15 highlights per day.
+
+    Discover days through ix_taken rather than grouping the remaining archive
+    on every scroll. A seed gives unrated files a stable random order when a day
+    is revisited or its full photo cards are requested later.
+    """
+    direction = request.args.get("dir", "desc")
+    if direction not in ("asc", "desc"):
+        abort(400, description="Unknown date order")
+    try:
+        limit = max(1, min(int(request.args.get("limit", 8)), 20))
+    except ValueError:
+        abort(400, description="Invalid day limit")
+    seed = request.args.get("seed") or secrets.token_hex(12)
+    if len(seed) > 64:
+        abort(400, description="Seed is too long")
+    cursor = request.args.get("cursor")
+    single = request.args.get("day")
+    if cursor and single:
+        abort(400, description="Choose a day or a cursor")
+    lower, upper = "0001-01-01", "9999-12-32"
+    if cursor:
+        lo, hi = day_bounds(cursor)
+        if direction == "asc":
+            lower = hi
+        else:
+            upper = lo
+    if single:
+        lower, upper = day_bounds(single)
+    key = rating_key()
+    eligible = f"({key} IS NULL OR {key} IN ('great', '5', '4'))"
+    order = "ASC" if direction == "asc" else "DESC"
+    days = []
+    with closing(db()) as con:
+        # All queries in a page see the same committed scanner/rating state.
+        con.execute("BEGIN")
+        con.create_function("timeline_pick", 1, lambda pid: md5(
+            f"{seed}:{pid}".encode("utf-8")).hexdigest(), deterministic=True)
+        dates = []
+        while len(dates) <= (1 if single else limit):
+            row = con.execute(
+                f"SELECT taken FROM photos WHERE taken >= ? AND taken < ?"
+                f" AND date(taken) IS NOT NULL AND {eligible}"
+                f" ORDER BY taken {order} LIMIT 1", (lower, upper)).fetchone()
+            if not row:
+                break
+            day = row["taken"][:10]
+            try:
+                datetime.date.fromisoformat(day)
+            except ValueError:
+                # Some old EXIF dates pass SQLite's permissive date parser but
+                # are not calendar days (for example February 30).
+                if direction == "asc":
+                    lower = day + "\uffff"
+                else:
+                    upper = day
+                continue
+            lo, hi = day_bounds(day)
+            dates.append(day)
+            if single:
+                break
+            if direction == "asc":
+                lower = hi
+            else:
+                upper = lo
+        more = not single and len(dates) > limit
+        for day in dates[:limit]:
+            lo, hi = day_bounds(day)
+            total, count = con.execute(
+                f"SELECT COUNT(*), COALESCE(SUM(CASE WHEN {eligible} THEN 1"
+                " ELSE 0 END), 0) FROM photos WHERE taken >= ? AND taken < ?",
+                (lo, hi)).fetchone()
+            ids = [r[0] for r in con.execute(
+                f"SELECT id FROM photos WHERE taken >= ? AND taken < ? AND {eligible}"
+                f" ORDER BY {rating_rank()} DESC,"
+                f" CASE WHEN {key} IS NULL THEN timeline_pick(id) END, taken, id LIMIT 15",
+                (lo, hi))]
+            columns = timeline_columns(details=request.args.get("details") == "1")
+            records = {r["id"]: dict(r) for r in con.execute(
+                f"SELECT {columns} FROM photos WHERE id IN ({','.join('?' for _ in ids)})", ids)}
+            days.append({"day": day, "total": total, "eligible": count,
+                         "items": [records[pid] for pid in ids]})
+    return jsonify({"days": days, "next": days[-1]["day"] if more else None,
+                    "seed": seed, "dir": direction, "files": files_here(), "version": VERSION})
+
+
+@app.get("/api/directories")
+def api_directories():
+    """The whole indexed archive, independent of the statistics filters.
+
+    Group files once, then roll each directory into its ancestors. A flat result
+    avoids JSON nesting limits for deep archives and needs no per-folder query.
+    """
+    with closing(db()) as con:
+        rows = con.execute(
+            "SELECT folder, COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes,"
+            " SUM(CASE WHEN color IS NOT NULL AND color != ?"
+            " AND brightness IS NOT NULL AND sharp_center IS NOT NULL"
+            " AND sharp_edge IS NOT NULL THEN 1 ELSE 0 END) AS analyzed"
+            " FROM photos GROUP BY folder", (COLOR_UNKNOWN,)).fetchall()
+    nodes = {}
+    total = {"n": 0, "analyzed": 0, "bytes": 0}
+    for row in rows:
+        for key in total:
+            total[key] += row[key]
+        path = os.path.normpath(row["folder"]) if row["folder"] else ""
+        while True:
+            parent = os.path.dirname(path)
+            parent = parent if parent and parent != path else None
+            node = nodes.setdefault(path, {
+                "path": path, "parent": parent,
+                "name": os.path.basename(path) or path or "Unknown directory",
+                "n": 0, "analyzed": 0, "bytes": 0,
+            })
+            for key in total:
+                node[key] += row[key]
+            if parent is None:
+                break
+            path = parent
+    return jsonify({"total": total, "items": sorted(
+        nodes.values(), key=lambda node: (node["path"].casefold(), node["path"]))})
 
 
 @app.get("/api/folders")
