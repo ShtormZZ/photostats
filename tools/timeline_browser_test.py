@@ -183,14 +183,18 @@ SCRIPT = r"""
     await wait(() => state.timelineDay === paused && state.shown.id === unrated.id, "unrated card for ordering edit");
     $("detail").querySelector(".rate .great").click();
     await wait(() => state.shown.mark === "great" && !photoTimeline.updating.size, "promote photo to 5+");
+    // The refreshed highlights can arrive before the full-day metadata prefetch.
+    await settled();
     check("Rating edit moves a photo into the leading time-sorted group", inCaptureOrder(paused.allItems) &&
       paused.allItems.slice(0, greats.length + 1).some(it => it.id === unrated.id) && inCaptureOrder(state.deck));
     $("detail").querySelector(".rate .bad").click();
     await wait(() => state.shown.mark === "bad" && !photoTimeline.updating.size, "move photo to bad");
+    await settled();
     check("Rating edit moves a photo into the trailing time-sorted group", inCaptureOrder(paused.allItems) &&
       paused.allItems.slice(-(bads.length + 1)).some(it => it.id === unrated.id) && inCaptureOrder(state.deck));
     $("detail").querySelector(".rate .bad").click();
     await wait(() => !state.shown.mark && !photoTimeline.updating.size, "restore unrated photo");
+    await settled();
     closeDetail();
 
     const annotated = paused.allItems.find(it => it.mark === "great" && it.camera && it.lens && it.focal && it.fnumber);
