@@ -36,6 +36,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 
+import db_schema
 import dupkey
 import jobs
 import tags
@@ -169,85 +170,6 @@ def norm_lens(*candidates):
 # The database
 # --------------------------------------------------------------------------
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS photos (
-    id          INTEGER PRIMARY KEY,
-    path        TEXT UNIQUE NOT NULL,
-    folder      TEXT,
-    filename    TEXT,
-    ext         TEXT,
-    size        INTEGER,
-    mtime       REAL,
-    taken       TEXT,      -- 'YYYY-MM-DD HH:MM:SS'
-    date_src    TEXT,      -- exif | file
-    year        INTEGER,
-    month       INTEGER,
-    ym          TEXT,      -- 'YYYY-MM'
-    day         INTEGER,
-    hour        INTEGER,
-    weekday     INTEGER,   -- 0 = Monday
-    brand       TEXT,
-    camera      TEXT,
-    lens        TEXT,
-    focal       REAL,
-    focal35     REAL,
-    iso         INTEGER,
-    fnumber     REAL,
-    shutter     TEXT,      -- for display: '1/125'
-    exposure    REAL,      -- the same in seconds, for the distribution
-    width       INTEGER,
-    height      INTEGER,
-    lat         REAL,      -- coordinates from EXIF, signed degrees
-    lon         REAL,
-    rating      INTEGER,   -- stars from EXIF, 1…5; NULL = the file has none
-    -- Your own mark, set in the interface: '1'…'5', 'bad' or 'great'. Deliberately
-    -- not in COLUMNS, so that re-reading EXIF cannot overwrite it — the scanner
-    -- owns every other column here, and this is the one column it must not touch.
-    mark        TEXT,
-    -- Your own note on the photo, up to 256 characters, set in the interface.
-    -- Kept out of COLUMNS for the reason `mark` is.
-    comment     TEXT,
-    sig         TEXT,      -- content signature; NULL = the pass was never run
-    color       TEXT,      -- dominant colour group; NULL = not analysed yet
-    color_hex   TEXT,      -- the average shade of that group, for the swatch
-    color_share REAL,      -- what share of the frame it holds
-    color_center       TEXT,   -- the same over the middle half of the frame area
-    color_center_hex   TEXT,
-    color_center_share REAL,
-    brightness  REAL,      -- average brightness, 0…1
-    contrast    REAL,      -- the spread of brightness
-    chroma      REAL,      -- share of coloured pixels; near zero means a black and white frame
-    clip_hi     REAL,      -- share of pixels blown out to white
-    clip_lo     REAL,      -- share of pixels crushed to black
-    -- Sharpness of the centre square and of the rest of the frame: the RMS of the
-    -- Laplacian at 1500 px, in the sharpest tenth of the tiles (see sharpness()).
-    sharp_center REAL,
-    sharp_edge   REAL,
-    sharp_v      INTEGER   -- the SHARP_VERSION it was measured under; NULL = never
-);
-CREATE INDEX IF NOT EXISTS ix_year   ON photos(year);
-CREATE INDEX IF NOT EXISTS ix_ym     ON photos(ym);
-CREATE INDEX IF NOT EXISTS ix_month  ON photos(month);
-CREATE INDEX IF NOT EXISTS ix_hour   ON photos(hour);
-CREATE INDEX IF NOT EXISTS ix_brand  ON photos(brand);
-CREATE INDEX IF NOT EXISTS ix_camera ON photos(camera);
-CREATE INDEX IF NOT EXISTS ix_lens   ON photos(lens);
-CREATE INDEX IF NOT EXISTS ix_focal  ON photos(focal);
-CREATE INDEX IF NOT EXISTS ix_iso    ON photos(iso);
-CREATE INDEX IF NOT EXISTS ix_color  ON photos(color);
-CREATE INDEX IF NOT EXISTS ix_geo    ON photos(lat, lon);
-CREATE INDEX IF NOT EXISTS ix_sig    ON photos(sig);
-CREATE INDEX IF NOT EXISTS ix_taken      ON photos(taken);
-CREATE INDEX IF NOT EXISTS ix_focal35    ON photos(focal35);
-CREATE INDEX IF NOT EXISTS ix_fnumber    ON photos(fnumber);
-CREATE INDEX IF NOT EXISTS ix_exposure   ON photos(exposure);
-CREATE INDEX IF NOT EXISTS ix_brightness ON photos(brightness);
-CREATE INDEX IF NOT EXISTS ix_contrast   ON photos(contrast);
-CREATE INDEX IF NOT EXISTS ix_chroma     ON photos(chroma);
-CREATE INDEX IF NOT EXISTS ix_sharp_center ON photos(sharp_center);
-CREATE INDEX IF NOT EXISTS ix_sharp_edge   ON photos(sharp_edge);
-CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
-"""
 
 COLUMNS = [
     "path", "folder", "filename", "ext", "size", "mtime", "taken", "date_src",
@@ -261,73 +183,17 @@ COLUMNS = [
 # the same time, and without waiting nearly half the queries fail with "database
 # is locked": over a measured three seconds of concurrent work that was 891 read
 # errors and 513 write errors.
-BUSY_MS = 15000
+BUSY_MS = db_schema.BUSY_MS
 
 
-def tune(con):
-    """The modes without which the scanner and the server cannot run together."""
-    con.execute(f"PRAGMA busy_timeout = {BUSY_MS}")
-    # WAL lets a reader and a writer through at once and gives half again as many
-    # reads. On network drives it is unavailable — the ordinary journal then stays
-    # in place silently, and only the lock wait above saves the situation.
-    try:
-        con.execute("PRAGMA journal_mode = WAL")
-    except sqlite3.Error:
-        pass
-    return con
+tune = db_schema.tune
 
 
 def open_db(path):
-    """Tables, then the migration, and only then the indexes: an index on a new
-    column cannot be created before the migration adds it to a database that
-    already exists."""
-    con = tune(sqlite3.connect(path, timeout=BUSY_MS / 1000))
-    # comments are stripped before parsing: they contain semicolons
-    clean = "\n".join(re.sub(r"--.*$", "", ln) for ln in SCHEMA.splitlines())
-    stmts = [x.strip() for x in clean.split(";") if x.strip()]
-    for st in stmts:
-        if not st.upper().startswith("CREATE INDEX"):
-            con.execute(st)
-    migrate(con)
-    for st in stmts:
-        if st.upper().startswith("CREATE INDEX"):
-            con.execute(st)
-    con.commit()
-    # Tags live in a table of their own and are not part of SCHEMA above: the
-    # statements there are split on semicolons, and a trigger body holds one.
-    # The scanner never writes a tag — it needs the table only so that the
-    # trigger is in place when rows for vanished files are dropped.
-    tags.ensure_schema(con)
-    return con
+    return db_schema.open_database(path)
 
 
-def migrate(con):
-    """Builds up databases made by earlier versions of the program."""
-    cols = {r[1] for r in con.execute("PRAGMA table_info(photos)")}
-    for name, decl in (("lat", "REAL"), ("lon", "REAL"), ("sig", "TEXT"),
-                       ("rating", "INTEGER"), ("mark", "TEXT"),
-                       ("comment", "TEXT"),
-                       ("color", "TEXT"), ("color_hex", "TEXT"),
-                       ("color_share", "REAL"), ("color_center", "TEXT"),
-                       ("color_center_hex", "TEXT"),
-                       ("color_center_share", "REAL"), ("brightness", "REAL"),
-                       ("contrast", "REAL"), ("chroma", "REAL"),
-                       ("clip_hi", "REAL"), ("clip_lo", "REAL"),
-                       ("sharp_center", "REAL"), ("sharp_edge", "REAL"),
-                       ("sharp_v", "INTEGER")):
-        if name not in cols:
-            con.execute(f"ALTER TABLE photos ADD COLUMN {name} {decl}")
-            con.commit()
-    if "exposure" not in cols:
-        con.execute("ALTER TABLE photos ADD COLUMN exposure REAL")
-        rows = con.execute("SELECT id, shutter FROM photos "
-                           "WHERE shutter IS NOT NULL").fetchall()
-        upd = [(shutter_seconds(t), i) for i, t in rows]
-        con.executemany("UPDATE photos SET exposure = ? WHERE id = ?",
-                        [u for u in upd if u[0]])
-        con.commit()
-        print(f"Database upgraded: shutter speed converted to seconds "
-              f"({len(upd)} rows).")
+migrate = db_schema.ensure_schema
 
 
 # --------------------------------------------------------------------------
@@ -416,18 +282,7 @@ def fmt_shutter(sec):
     return f"1/{int(round(1 / sec))}"
 
 
-def shutter_seconds(txt):
-    """The reverse: '1/125' -> 0.008. Needed when migrating old databases."""
-    if not txt:
-        return None
-    t = str(txt).strip().rstrip("sс")
-    try:
-        if "/" in t:
-            a, b = t.split("/")
-            return float(a) / float(b)
-        return float(t)
-    except (ValueError, ZeroDivisionError):
-        return None
+shutter_seconds = db_schema.shutter_seconds
 
 
 def gps_value(raw, ref):
@@ -1767,6 +1622,7 @@ def main():
         with jobs.Job(args.db, "sign") as job:
             sign_files(con, min((os.cpu_count() or 4) * 2, 12),
                        full=args.hash_full, job=job)
+        db_schema.maintain_statistics(con)
         con.close()
         print("\nDone. Now run:  python app.py")
         return
@@ -1779,6 +1635,7 @@ def main():
         with jobs.Job(args.db, "images") as job:
             analyze_colors(con, find_exiftool()[0], min(os.cpu_count() or 4, 8),
                            reset=args.recolor, job=job)
+        db_schema.maintain_statistics(con)
         con.close()
         print("\nDone. Now run:  python app.py")
         return
@@ -1855,6 +1712,7 @@ def exif_pass(args, job):
     print(f"New and changed: {len(todo)}   already in the database: {skipped}")
     report_passed(passed_by)
     if not todo:
+        db_schema.maintain_statistics(con)
         con.close()
         print("Nothing to update.")
         job.note = "nothing new"
@@ -1950,6 +1808,7 @@ def exif_pass(args, job):
     pending_color, = con.execute("SELECT COUNT(*) FROM photos "
                                  "WHERE color IS NULL OR brightness IS NULL"
                                  ).fetchone()
+    db_schema.maintain_statistics(con)
     year_limit = datetime.now().year + 1
     odd, = con.execute("SELECT COUNT(*) FROM photos WHERE year < 1990 OR year > ?",
                        (year_limit,)).fetchone()

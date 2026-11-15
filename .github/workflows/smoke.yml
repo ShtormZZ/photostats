@@ -2,7 +2,7 @@ name: smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
@@ -29,10 +29,21 @@ jobs:
           pip install -r requirements.txt
 
       - name: Compile
-        run: python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py tools
+        run: python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py db_schema.py tools
 
       - name: License file
         run: python tools/check_license.py
 
       - name: Smoke test
         run: python tools/smoke_test.py
+
+      - name: Database migrations and planner
+        run: python tools/test_database.py
+
+      - name: Timeline API filters and paging
+        run: python tools/test_timeline.py
+
+      - name: Timeline browser
+        run: |
+          python tools/timeline_browser_test.py --allow-skip
+          python tools/timeline_browser_test.py --allow-skip --width 360

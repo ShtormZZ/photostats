@@ -1,0 +1,1039 @@
+{
+  "runs": [
+    {
+      "python": "3.12.7",
+      "sqlite": "3.45.3",
+      "platform": "Windows",
+      "source": "synthetic",
+      "distribution": "unrated",
+      "rows": 10000,
+      "seed": 42,
+      "warmups": 5,
+      "repeats": 30,
+      "before_plan": [
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "INDEX 2",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "after_plan": [
+        "SEARCH photos USING INDEX ix_taken (taken>? AND taken<?)"
+      ],
+      "maintenance": {
+        "at": "2026-11-13T13:49:29+00:00",
+        "sqlite_version": "3.45.3",
+        "schema_version": 4,
+        "method": "ANALYZE photos; ANALYZE photo_tags",
+        "reason": "manual",
+        "rows": 10000,
+        "photo_changes": 10000,
+        "duration_ms": 16.794,
+        "result": "ok"
+      },
+      "before": {
+        "statistics": {
+          "median_ms": 155.571,
+          "p95_ms": 162.754,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3011,
+          "digest": "c1c8b739175b9c426b3af9dac54b874d33c5d20ff20992308af1db9677f8c45d"
+        },
+        "statistics_day": {
+          "median_ms": 71.073,
+          "p95_ms": 77.31,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2544,
+          "digest": "70a277d94d198b149555ae226228b48bf7094735dad9ceacc2ea609922362f14"
+        },
+        "directories": {
+          "median_ms": 9.653,
+          "p95_ms": 10.202,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 99.525,
+          "p95_ms": 101.17,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15806,
+          "digest": "224b922501c5d37f0a42b910141c372adf74d43b0f577940a1830396c43ec4a3"
+        },
+        "timeline_day": {
+          "median_ms": 9.522,
+          "p95_ms": 10.446,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 1994,
+          "digest": "95c0102c6186cf7503e58e8537f9141812cf48a90dbbda882959a5a49134556c"
+        },
+        "expanded_day": {
+          "median_ms": 2.072,
+          "p95_ms": 2.563,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12336,
+          "digest": "4dc17de568d2de5cf740f186dccba0fbe012ef304eb6fd2c9955699562dd2b18"
+        },
+        "photos": {
+          "median_ms": 7.049,
+          "p95_ms": 7.307,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91388,
+          "digest": "a9cb8ef7a9858a0ba79e7a8852f0995a3f7b45dfd8050542820dc791f585096e"
+        },
+        "random": {
+          "median_ms": 6.361,
+          "p95_ms": 6.981,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9098,
+          "digest": null
+        }
+      },
+      "after": {
+        "statistics": {
+          "median_ms": 151.989,
+          "p95_ms": 156.016,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3011,
+          "digest": "c1c8b739175b9c426b3af9dac54b874d33c5d20ff20992308af1db9677f8c45d"
+        },
+        "statistics_day": {
+          "median_ms": 71.222,
+          "p95_ms": 72.327,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2544,
+          "digest": "70a277d94d198b149555ae226228b48bf7094735dad9ceacc2ea609922362f14"
+        },
+        "directories": {
+          "median_ms": 9.462,
+          "p95_ms": 10.395,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 4.57,
+          "p95_ms": 4.989,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15806,
+          "digest": "224b922501c5d37f0a42b910141c372adf74d43b0f577940a1830396c43ec4a3"
+        },
+        "timeline_day": {
+          "median_ms": 2.255,
+          "p95_ms": 2.575,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 1994,
+          "digest": "95c0102c6186cf7503e58e8537f9141812cf48a90dbbda882959a5a49134556c"
+        },
+        "expanded_day": {
+          "median_ms": 2.074,
+          "p95_ms": 2.458,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12336,
+          "digest": "4dc17de568d2de5cf740f186dccba0fbe012ef304eb6fd2c9955699562dd2b18"
+        },
+        "photos": {
+          "median_ms": 7.111,
+          "p95_ms": 7.678,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91388,
+          "digest": "a9cb8ef7a9858a0ba79e7a8852f0995a3f7b45dfd8050542820dc791f585096e"
+        },
+        "random": {
+          "median_ms": 6.453,
+          "p95_ms": 6.932,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9096,
+          "digest": null
+        }
+      },
+      "comparison": {
+        "statistics": {
+          "median_ratio": 0.977,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "statistics_day": {
+          "median_ratio": 1.0021,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "directories": {
+          "median_ratio": 0.9802,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline": {
+          "median_ratio": 0.0459,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline_day": {
+          "median_ratio": 0.2368,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "expanded_day": {
+          "median_ratio": 1.001,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "photos": {
+          "median_ratio": 1.0088,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "random": {
+          "median_ratio": 1.0145,
+          "over_10_percent": false,
+          "same_response": null
+        }
+      }
+    },
+    {
+      "python": "3.12.7",
+      "sqlite": "3.45.3",
+      "platform": "Windows",
+      "source": "synthetic",
+      "distribution": "bad",
+      "rows": 10000,
+      "seed": 42,
+      "warmups": 5,
+      "repeats": 30,
+      "before_plan": [
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "INDEX 2",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "after_plan": [
+        "SEARCH photos USING INDEX ix_taken (taken>? AND taken<?)"
+      ],
+      "maintenance": {
+        "at": "2026-11-13T13:49:48+00:00",
+        "sqlite_version": "3.45.3",
+        "schema_version": 4,
+        "method": "ANALYZE photos; ANALYZE photo_tags",
+        "reason": "manual",
+        "rows": 10000,
+        "photo_changes": 10000,
+        "duration_ms": 16.823,
+        "result": "ok"
+      },
+      "before": {
+        "statistics": {
+          "median_ms": 150.37,
+          "p95_ms": 152.892,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3055,
+          "digest": "1f014786f4c9e78ce23527d8cf269f540e157680d788eb4104db448a36bf03eb"
+        },
+        "statistics_day": {
+          "median_ms": 70.246,
+          "p95_ms": 80.732,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2580,
+          "digest": "250c1fbb45ac982aec74404499fde43fe14e28af64b9b254d47315cd88540123"
+        },
+        "directories": {
+          "median_ms": 9.334,
+          "p95_ms": 9.858,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 3.814,
+          "p95_ms": 4.053,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 1807,
+          "digest": "b3b3278de1044e902cdfaf9f4bc08d1a8d3c00c3abfc839bdea6d455cb4a7f34"
+        },
+        "timeline_day": {
+          "median_ms": 2.342,
+          "p95_ms": 2.572,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 275,
+          "digest": "b1b97e3c69be04903bfff5f06d363cc7e953b99862c6c69818eae8622371b345"
+        },
+        "expanded_day": {
+          "median_ms": 2.031,
+          "p95_ms": 2.275,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12399,
+          "digest": "42dfbcfc8f43428d0d9c2e3014b0c6540bb76429c548fa2196a8e43e8813dcac"
+        },
+        "photos": {
+          "median_ms": 7.223,
+          "p95_ms": 8.07,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91462,
+          "digest": "80ce87f505ab4f016ebfbd0b08abfd9e669b38c99a8f8f4046d6649c74e54b81"
+        },
+        "random": {
+          "median_ms": 6.355,
+          "p95_ms": 8.933,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9105,
+          "digest": null
+        }
+      },
+      "after": {
+        "statistics": {
+          "median_ms": 151.476,
+          "p95_ms": 155.308,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3055,
+          "digest": "1f014786f4c9e78ce23527d8cf269f540e157680d788eb4104db448a36bf03eb"
+        },
+        "statistics_day": {
+          "median_ms": 71.0,
+          "p95_ms": 72.359,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2580,
+          "digest": "250c1fbb45ac982aec74404499fde43fe14e28af64b9b254d47315cd88540123"
+        },
+        "directories": {
+          "median_ms": 9.349,
+          "p95_ms": 9.922,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 4.633,
+          "p95_ms": 5.23,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 1807,
+          "digest": "b3b3278de1044e902cdfaf9f4bc08d1a8d3c00c3abfc839bdea6d455cb4a7f34"
+        },
+        "timeline_day": {
+          "median_ms": 2.059,
+          "p95_ms": 2.425,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 275,
+          "digest": "b1b97e3c69be04903bfff5f06d363cc7e953b99862c6c69818eae8622371b345"
+        },
+        "expanded_day": {
+          "median_ms": 2.064,
+          "p95_ms": 2.38,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12399,
+          "digest": "42dfbcfc8f43428d0d9c2e3014b0c6540bb76429c548fa2196a8e43e8813dcac"
+        },
+        "photos": {
+          "median_ms": 7.131,
+          "p95_ms": 7.558,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91462,
+          "digest": "80ce87f505ab4f016ebfbd0b08abfd9e669b38c99a8f8f4046d6649c74e54b81"
+        },
+        "random": {
+          "median_ms": 6.33,
+          "p95_ms": 6.762,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9102,
+          "digest": null
+        }
+      },
+      "comparison": {
+        "statistics": {
+          "median_ratio": 1.0074,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "statistics_day": {
+          "median_ratio": 1.0107,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "directories": {
+          "median_ratio": 1.0016,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline": {
+          "median_ratio": 1.2147,
+          "over_10_percent": true,
+          "same_response": true
+        },
+        "timeline_day": {
+          "median_ratio": 0.8792,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "expanded_day": {
+          "median_ratio": 1.0162,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "photos": {
+          "median_ratio": 0.9873,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "random": {
+          "median_ratio": 0.9961,
+          "over_10_percent": false,
+          "same_response": null
+        }
+      }
+    },
+    {
+      "python": "3.12.7",
+      "sqlite": "3.45.3",
+      "platform": "Windows",
+      "source": "synthetic",
+      "distribution": "great",
+      "rows": 10000,
+      "seed": 42,
+      "warmups": 5,
+      "repeats": 30,
+      "before_plan": [
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "INDEX 2",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "after_plan": [
+        "SEARCH photos USING INDEX ix_taken (taken>? AND taken<?)"
+      ],
+      "maintenance": {
+        "at": "2026-11-13T13:50:13+00:00",
+        "sqlite_version": "3.45.3",
+        "schema_version": 4,
+        "method": "ANALYZE photos; ANALYZE photo_tags",
+        "reason": "manual",
+        "rows": 10000,
+        "photo_changes": 10000,
+        "duration_ms": 17.424,
+        "result": "ok"
+      },
+      "before": {
+        "statistics": {
+          "median_ms": 151.086,
+          "p95_ms": 155.594,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3054,
+          "digest": "f891e521f4b9686299a48cfb3a42f15f5e555d56d07dd1e60df29376c9149c94"
+        },
+        "statistics_day": {
+          "median_ms": 70.431,
+          "p95_ms": 74.824,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2715,
+          "digest": "b90a7dea064750c9b15b80f5e4b27f3c98f89db57bbb1b27ac5bba8c0f850dd5"
+        },
+        "directories": {
+          "median_ms": 9.277,
+          "p95_ms": 9.884,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 129.402,
+          "p95_ms": 132.643,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 16160,
+          "digest": "5d6e1b3320165aa2c2fe0f512fc529e137df3a363a8c27991a0dae2ec98146e2"
+        },
+        "timeline_day": {
+          "median_ms": 14.001,
+          "p95_ms": 15.458,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 2028,
+          "digest": "3533d834eb87b553b4c328baa7ab957f0f3ce49b602c986e5807319e0ee02f8b"
+        },
+        "expanded_day": {
+          "median_ms": 2.084,
+          "p95_ms": 2.569,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12523,
+          "digest": "1225ea70ea05190b828487f8a45c4a73bb0b8be25a878147cf06891af851211a"
+        },
+        "photos": {
+          "median_ms": 7.099,
+          "p95_ms": 7.501,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91611,
+          "digest": "ba2e60c45bd5be1e61df974258711e1c744a9b9f271e779b7fc993707f758625"
+        },
+        "random": {
+          "median_ms": 6.343,
+          "p95_ms": 6.732,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9120,
+          "digest": null
+        }
+      },
+      "after": {
+        "statistics": {
+          "median_ms": 152.251,
+          "p95_ms": 159.73,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3054,
+          "digest": "f891e521f4b9686299a48cfb3a42f15f5e555d56d07dd1e60df29376c9149c94"
+        },
+        "statistics_day": {
+          "median_ms": 71.512,
+          "p95_ms": 83.144,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2715,
+          "digest": "b90a7dea064750c9b15b80f5e4b27f3c98f89db57bbb1b27ac5bba8c0f850dd5"
+        },
+        "directories": {
+          "median_ms": 9.735,
+          "p95_ms": 14.546,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 4.049,
+          "p95_ms": 4.638,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 16160,
+          "digest": "5d6e1b3320165aa2c2fe0f512fc529e137df3a363a8c27991a0dae2ec98146e2"
+        },
+        "timeline_day": {
+          "median_ms": 2.331,
+          "p95_ms": 2.669,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 2028,
+          "digest": "3533d834eb87b553b4c328baa7ab957f0f3ce49b602c986e5807319e0ee02f8b"
+        },
+        "expanded_day": {
+          "median_ms": 2.184,
+          "p95_ms": 2.409,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12523,
+          "digest": "1225ea70ea05190b828487f8a45c4a73bb0b8be25a878147cf06891af851211a"
+        },
+        "photos": {
+          "median_ms": 7.281,
+          "p95_ms": 7.737,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91611,
+          "digest": "ba2e60c45bd5be1e61df974258711e1c744a9b9f271e779b7fc993707f758625"
+        },
+        "random": {
+          "median_ms": 6.432,
+          "p95_ms": 6.919,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9114,
+          "digest": null
+        }
+      },
+      "comparison": {
+        "statistics": {
+          "median_ratio": 1.0077,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "statistics_day": {
+          "median_ratio": 1.0153,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "directories": {
+          "median_ratio": 1.0494,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline": {
+          "median_ratio": 0.0313,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline_day": {
+          "median_ratio": 0.1665,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "expanded_day": {
+          "median_ratio": 1.048,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "photos": {
+          "median_ratio": 1.0256,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "random": {
+          "median_ratio": 1.014,
+          "over_10_percent": false,
+          "same_response": null
+        }
+      }
+    },
+    {
+      "python": "3.12.7",
+      "sqlite": "3.45.3",
+      "platform": "Windows",
+      "source": "synthetic",
+      "distribution": "sparse",
+      "rows": 10000,
+      "seed": 42,
+      "warmups": 5,
+      "repeats": 30,
+      "before_plan": [
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "INDEX 2",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "after_plan": [
+        "SEARCH photos USING INDEX ix_taken (taken>? AND taken<?)"
+      ],
+      "maintenance": {
+        "at": "2026-11-13T13:50:37+00:00",
+        "sqlite_version": "3.45.3",
+        "schema_version": 4,
+        "method": "ANALYZE photos; ANALYZE photo_tags",
+        "reason": "manual",
+        "rows": 10000,
+        "photo_changes": 10000,
+        "duration_ms": 16.912,
+        "result": "ok"
+      },
+      "before": {
+        "statistics": {
+          "median_ms": 150.808,
+          "p95_ms": 162.109,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 4737,
+          "digest": "be707570bbe0a60b1a08efb795c8d2872df9ed20fbd980a0d0310ba86cc98c49"
+        },
+        "statistics_day": {
+          "median_ms": 70.277,
+          "p95_ms": 81.281,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2685,
+          "digest": "f507233cf8bed3b83cc617cc84b48f95a842d35910700c9e39872a82fbd04baa"
+        },
+        "directories": {
+          "median_ms": 9.285,
+          "p95_ms": 9.592,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 106.915,
+          "p95_ms": 108.139,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15628,
+          "digest": "1e35f2359991f1e9941c697a60b36bef991bb4b43d10f20da1143692d9bac3da"
+        },
+        "timeline_day": {
+          "median_ms": 11.02,
+          "p95_ms": 11.652,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 1975,
+          "digest": "0ecea4442596c34bff6f16703ce1d6268c544f990a5c0d86efaa24b36f669c9f"
+        },
+        "expanded_day": {
+          "median_ms": 2.036,
+          "p95_ms": 2.272,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12300,
+          "digest": "6df2657029341746a2390d41e006cf7f267f4704c0952eab052d414aa5de5d28"
+        },
+        "photos": {
+          "median_ms": 7.011,
+          "p95_ms": 7.442,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91346,
+          "digest": "e32d397a2072a3f6d7e1a1391686d10cbf358fc6013a061bf142ea8382a89f01"
+        },
+        "random": {
+          "median_ms": 6.255,
+          "p95_ms": 6.634,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9087,
+          "digest": null
+        }
+      },
+      "after": {
+        "statistics": {
+          "median_ms": 151.018,
+          "p95_ms": 155.764,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 4737,
+          "digest": "be707570bbe0a60b1a08efb795c8d2872df9ed20fbd980a0d0310ba86cc98c49"
+        },
+        "statistics_day": {
+          "median_ms": 71.68,
+          "p95_ms": 75.202,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2685,
+          "digest": "f507233cf8bed3b83cc617cc84b48f95a842d35910700c9e39872a82fbd04baa"
+        },
+        "directories": {
+          "median_ms": 9.724,
+          "p95_ms": 10.217,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 4.593,
+          "p95_ms": 5.138,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15628,
+          "digest": "1e35f2359991f1e9941c697a60b36bef991bb4b43d10f20da1143692d9bac3da"
+        },
+        "timeline_day": {
+          "median_ms": 2.276,
+          "p95_ms": 2.568,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 1975,
+          "digest": "0ecea4442596c34bff6f16703ce1d6268c544f990a5c0d86efaa24b36f669c9f"
+        },
+        "expanded_day": {
+          "median_ms": 2.084,
+          "p95_ms": 2.552,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 12300,
+          "digest": "6df2657029341746a2390d41e006cf7f267f4704c0952eab052d414aa5de5d28"
+        },
+        "photos": {
+          "median_ms": 7.163,
+          "p95_ms": 7.944,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 91346,
+          "digest": "e32d397a2072a3f6d7e1a1391686d10cbf358fc6013a061bf142ea8382a89f01"
+        },
+        "random": {
+          "median_ms": 6.324,
+          "p95_ms": 6.608,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9087,
+          "digest": null
+        }
+      },
+      "comparison": {
+        "statistics": {
+          "median_ratio": 1.0014,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "statistics_day": {
+          "median_ratio": 1.02,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "directories": {
+          "median_ratio": 1.0473,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline": {
+          "median_ratio": 0.043,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline_day": {
+          "median_ratio": 0.2065,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "expanded_day": {
+          "median_ratio": 1.0236,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "photos": {
+          "median_ratio": 1.0217,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "random": {
+          "median_ratio": 1.011,
+          "over_10_percent": false,
+          "same_response": null
+        }
+      }
+    },
+    {
+      "python": "3.12.7",
+      "sqlite": "3.45.3",
+      "platform": "Windows",
+      "source": "synthetic",
+      "distribution": "large-day",
+      "rows": 10000,
+      "seed": 42,
+      "warmups": 5,
+      "repeats": 30,
+      "before_plan": [
+        "MULTI-INDEX OR",
+        "INDEX 1",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "INDEX 2",
+        "SEARCH photos USING INDEX ix_rating (<expr>=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "after_plan": [
+        "SEARCH photos USING INDEX ix_taken (taken>? AND taken<?)"
+      ],
+      "maintenance": {
+        "at": "2026-11-13T13:51:04+00:00",
+        "sqlite_version": "3.45.3",
+        "schema_version": 4,
+        "method": "ANALYZE photos; ANALYZE photo_tags",
+        "reason": "manual",
+        "rows": 10000,
+        "photo_changes": 10000,
+        "duration_ms": 17.105,
+        "result": "ok"
+      },
+      "before": {
+        "statistics": {
+          "median_ms": 149.931,
+          "p95_ms": 157.55,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3409,
+          "digest": "c969a04ba81cba9cc28c16aaecbf2ad5cb94023b3bc83af03d848ae56faabaea"
+        },
+        "statistics_day": {
+          "median_ms": 147.338,
+          "p95_ms": 150.466,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2881,
+          "digest": "f64769689a4705a69b8b5c41e687b94de437fe6838d873d5ee8356d9f871419e"
+        },
+        "directories": {
+          "median_ms": 9.614,
+          "p95_ms": 10.429,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 99.347,
+          "p95_ms": 101.745,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15634,
+          "digest": "662b59f120d36a36e7a90ec3626d60103b24be90d27360a1a66caeae0794f293"
+        },
+        "timeline_day": {
+          "median_ms": 21.027,
+          "p95_ms": 21.861,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 2043,
+          "digest": "4a622d721f81a605f1720611df32843e6b0d6601b36967e20afff607a87ba5c6"
+        },
+        "expanded_day": {
+          "median_ms": 2.706,
+          "p95_ms": 3.107,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 24749,
+          "digest": "b0521c7532df5c3f526e83911d45aad8e636b4841b0281e9107f1c4cfa137c6a"
+        },
+        "photos": {
+          "median_ms": 6.732,
+          "p95_ms": 7.336,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 92041,
+          "digest": "6ae82ad7831c747b2f66fd5a56e8c003e979df5b45dab92a515dfa9acc8b8701"
+        },
+        "random": {
+          "median_ms": 6.316,
+          "p95_ms": 6.95,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9089,
+          "digest": null
+        }
+      },
+      "after": {
+        "statistics": {
+          "median_ms": 151.655,
+          "p95_ms": 160.444,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 3409,
+          "digest": "c969a04ba81cba9cc28c16aaecbf2ad5cb94023b3bc83af03d848ae56faabaea"
+        },
+        "statistics_day": {
+          "median_ms": 149.692,
+          "p95_ms": 157.609,
+          "selects": 30,
+          "connections": 26,
+          "response_bytes": 2881,
+          "digest": "f64769689a4705a69b8b5c41e687b94de437fe6838d873d5ee8356d9f871419e"
+        },
+        "directories": {
+          "median_ms": 9.429,
+          "p95_ms": 10.017,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 1115,
+          "digest": "51ea38b5202a9dbf2ca036b51722372fd993ddd9d2f38bcd101eaf6da978a54b"
+        },
+        "timeline": {
+          "median_ms": 13.771,
+          "p95_ms": 14.408,
+          "selects": 33,
+          "connections": 1,
+          "response_bytes": 15634,
+          "digest": "662b59f120d36a36e7a90ec3626d60103b24be90d27360a1a66caeae0794f293"
+        },
+        "timeline_day": {
+          "median_ms": 11.069,
+          "p95_ms": 11.904,
+          "selects": 4,
+          "connections": 1,
+          "response_bytes": 2043,
+          "digest": "4a622d721f81a605f1720611df32843e6b0d6601b36967e20afff607a87ba5c6"
+        },
+        "expanded_day": {
+          "median_ms": 2.698,
+          "p95_ms": 2.993,
+          "selects": 2,
+          "connections": 1,
+          "response_bytes": 24749,
+          "digest": "b0521c7532df5c3f526e83911d45aad8e636b4841b0281e9107f1c4cfa137c6a"
+        },
+        "photos": {
+          "median_ms": 6.768,
+          "p95_ms": 7.44,
+          "selects": 3,
+          "connections": 2,
+          "response_bytes": 92041,
+          "digest": "6ae82ad7831c747b2f66fd5a56e8c003e979df5b45dab92a515dfa9acc8b8701"
+        },
+        "random": {
+          "median_ms": 6.338,
+          "p95_ms": 6.956,
+          "selects": 1,
+          "connections": 1,
+          "response_bytes": 9093,
+          "digest": null
+        }
+      },
+      "comparison": {
+        "statistics": {
+          "median_ratio": 1.0115,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "statistics_day": {
+          "median_ratio": 1.016,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "directories": {
+          "median_ratio": 0.9808,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline": {
+          "median_ratio": 0.1386,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "timeline_day": {
+          "median_ratio": 0.5264,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "expanded_day": {
+          "median_ratio": 0.997,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "photos": {
+          "median_ratio": 1.0053,
+          "over_10_percent": false,
+          "same_response": true
+        },
+        "random": {
+          "median_ratio": 1.0035,
+          "over_10_percent": false,
+          "same_response": null
+        }
+      }
+    }
+  ]
+}

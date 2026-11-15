@@ -405,33 +405,82 @@ intermediate parent directories are included to show the hierarchy.
 
 ### Photo timeline
 
-**Timeline** is a separate view of the whole archive and ignores Statistics
-filters. Days run vertically; each shows up to 15 photos, in this order: **5+**,
-**5 stars**, **4 stars**, then a random sample of unrated photos to fill the
-remaining places. Your own rating overrides the EXIF rating. Photos rated
-three stars or lower, and photos marked bad, are excluded from highlights. Days without eligible
-photos are skipped; a day with fewer than 15 eligible photos stays short.
+**Timeline** has its own filters, independent of Statistics. **Tags** lets you
+search and select several existing tags; a photo needs at least one selected tag.
+No tag selection includes the whole archive. Chips remove individual selections.
+**Rating** offers **Good to bad** (`5+`, `5`, `4`, `3`, `2`, `1`, `bad`),
+**Good only** (`5+`, `5`, `4`, the default) and **5+ only**. Your rating overrides
+EXIF stars. Ratings and the stable random seed determine the 15-photo highlight
+selection. For both highlights and full days, the browser puts **5+ first**,
+other rated and unrated photos in the middle, and **bad last**, even after
+unrated photos. Each group is ordered by capture time, earliest first, with photo
+ID breaking ties. Date order changes the order of days only. Days without
+matching dated photos are skipped.
 
-**Date order** switches between newest first (the default) and oldest first;
-the browser remembers the setting. Days and thumbnails load as you scroll.
-Distant day blocks are removed from the display, while their selections and
-your scroll position are kept when you return or switch pages. **Refresh**
-restarts the timeline with current database results and a new random sample.
-Dates come from EXIF, falling back to the file date as elsewhere in the app;
-files without a usable date cannot appear on the timeline.
+**Filter** chooses one additional dimension: **Year**, **Camera models**,
+**Lenses**, **Focal lengths** or **Aperture**. The second list selects one option.
+It loads 30 choices at a time; type part of a name or range to search, or use
+**More**. Search ignores case, including Cyrillic, and treats punctuation literally.
+Choices and counts follow the current tag/rating/unrated filters. The selected
+option stays visible; choosing another dimension clears it. **Clear option**
+removes just the value, and **No extra filter** removes the dimension too.
+Focal length and aperture ranges match Statistics; focal lengths use actual mm,
+independent of Statistics' 35mm-equivalent switch. Missing metadata is offered as
+**not specified** when present. The extra condition also applies to days, counts,
+Show all and cards, before the 15-per-day limit.
 
-Click a thumbnail for the usual full photo card, ratings, tags and comments.
-Changing a rating updates the day's selection. **Analyse day** opens Statistics
-with just that date selected and every photo from that day, including low-rated
-photos and files from all directories. The Day filter chip can be removed there.
-Narrow screens use fewer columns; a row never exceeds 15 photos.
+**Include unrated** is on by default and independently adds photos without a
+rating, including in 5+ mode. **15 per day** is a separate display toggle, off by
+default. When enabled, it limits each day to 15 photographs **after** applying
+all tag, rating and unrated filters. If more than 15 match, **Show all** expands
+every remaining match under those same filters; **Show highlights** collapses
+them. With the limit off, every matching photo is shown automatically with paged
+loading and virtual thumbnails, regardless of the Include unrated setting.
+Counters refer to matching photos. Large days load as you scroll and only nearby
+thumbnails are drawn, including on narrow screens. Before displaying a full day,
+the client collects its lightweight records in batches of up to 500 and sorts
+them locally; a loading counter is shown meanwhile. Metadata loading pauses when
+a day leaves the visible area or is collapsed. This avoids moving already visible
+photos when a later server batch contains earlier capture times. Photo cards
+follow the displayed order. No chronological SQL sort is added.
 
-**Show all**, to the right of a day's photos, expands every photo from that day
-directly in Timeline, including low ratings and bad photos. The original highlights
-stay first; the remaining files follow in capture-time order without duplicates.
-Large days load in batches and only nearby thumbnails are drawn. **Show highlights**
-returns to the original selection. Expanded days stay expanded when scrolling or
-switching pages, until Refresh. On narrow screens the control is below the date.
+Tags, rating mode, Include unrated, 15 per day and the extra filter are kept only while the page is open;
+reloading restores all tags, Good only, Include unrated on, 15 per day off and no extra filter. Changing these options
+restarts the view and cancels obsolete requests. **Date order** still switches
+between newest and oldest first and remembers its existing browser setting.
+**Refresh** reloads database results and changes the random unrated highlight sample. Switching
+pages or using Back keeps the current Timeline filters and scroll position.
+Dates come from EXIF or the file date; files without usable dates are omitted.
+
+Hover over a thumbnail for its filename, date, camera model, lens, one line with
+focal length/aperture/ISO/shutter speed, tags and comment. Separate tag and
+comment-bubble badges at the bottom right, opposite the rating, indicate each
+annotation independently; both appear when both are present. Empty Lens, Tags and
+Comment rows are omitted; other missing shooting metadata is shown as a dash.
+Tooltip data arrives with Timeline records, with no request
+on hover; saving tags or comments updates the tooltip and badges, including cached
+days and the collapsed highlight selection.
+
+**Add tags** under a day's date opens a tag picker with search and new-tag entry.
+Press **OK** to add the selected tags to every photo matching the current Timeline
+filters in that day, including photos hidden by **15 per day**. The dialog shows
+the number of matches and warns when filters exclude any photos from the day.
+Existing tags are kept and duplicates ignored. If adding the tags would exceed
+the three-tag limit on any photo, the entire operation is blocked with an
+explanation; choose fewer tags. Cancel leaves the photos unchanged.
+
+**Remove tags** opens a checklist of all tags used by matching photos in that day,
+with counts and a text search. Select one or more tags and press **OK** to remove
+only those tags from the entire filtered selection, including photos hidden by
+**15 per day**. Other tags are kept. The dialog warns when filters exclude part
+of the day. Removing a tag used by the current filter still processes the whole
+original selection, then refreshes the day's results. Cancel makes no changes.
+
+Click a thumbnail for the usual card with ratings, tags and comments. Editing a
+rating or tag refreshes the day's matching photos, including expanded pages.
+**Analyse day** always opens Statistics with only that date selected and **every
+photo from the day**, regardless of Timeline filters. Remove the Day chip there
+to return to the whole archive.
 
 ## How some of it is worked out
 
@@ -628,12 +677,22 @@ shot as RAW+JPEG. Filter by format, or rebuild with `--full` without `--raw`.
 ```
 python tools/smoke_test.py
 python tools/check_license.py
+python tools/test_timeline.py
+python tools/timeline_browser_test.py --allow-skip
 ```
 
 Builds a small archive of generated photos in a temporary folder, scans it,
 analyses it, starts the server and checks every endpoint including the CSV
 export and thumbnails. It touches nothing outside the temporary folder. The
 same script runs in CI on Windows and Linux.
+
+Timeline API tests cover every rating/unrated combination and match-any tag
+selection, including Unicode, day cursors, filtered cards and duplicate-free
+paging. The browser test uses an already installed Chromium browser, a temporary
+profile and generated fixtures; `--allow-skip` reports a skip if no browser is
+installed. Use `--width 360` for the narrow-screen checks. It verifies the actual
+controls, reload/Back, rating/tag edits and a deliberately delayed obsolete
+response. No browser packages are downloaded.
 
 ```
 python tools/make_icon.py
@@ -645,6 +704,40 @@ drawing without its tile, which is the one in the header of the interface. The
 shape lives in the script as a handful of numbers, so it is edited there and not
 in a graphics program. The files are committed; you only need this after
 changing them.
+
+## Database maintenance
+
+Server, scanner and job tracking share numbered migrations in `db_schema.py`.
+Existing catalogues upgrade at startup without rescanning, preserving photo IDs,
+ratings, comments and tags. Schema changes, backfills and success records commit
+together; interrupted migrations roll back and retry. Changed index expressions
+are detected and rebuilt. Before changing a nonempty catalogue, the program
+creates and checks a SQLite backup in `<database filename>.backups/` next to it;
+a backup failure stops migration. These retained copies contain private catalogue
+data, **not original photos**. See [recovery instructions](docs/database-maintenance.md).
+
+Planner statistics are collected once for catalogues that lack them, after index
+changes, and after completed scans or analysis change at least
+`max(1000, 10% of the last analysed photo count)` rows. Committed work from an
+interrupted pass is checked at the next startup. Maintenance runs at startup and
+writer boundaries, never in GET requests. Table-scoped `ANALYZE` handles older
+SQLite; SQLite 3.46+ also gets bounded `PRAGMA optimize`. The timestamp, versions,
+method, duration, result and any error are available at
+[`/api/db/diagnostics`](http://127.0.0.1:5577/api/db/diagnostics).
+A persistent revision changes in the same transaction as photos, annotations and
+signature mode, ready for future cache invalidation.
+
+```
+python tools/test_database.py
+python tools/db_benchmark.py --rows 100000 --distribution unrated --output report.json
+python tools/db_benchmark.py --source photos.db --output report.json
+```
+
+The benchmark compares one temporary synthetic catalogue or backup copy before
+and after maintenance with a fixed seed, 5 warmups and 30 measured requests by
+default. JSON contains versions, median/p95, SQL/connection counts, response sizes,
+query plans and checksums, without photo paths or coordinates. Other distributions
+are `bad`, `great`, `sparse` and `large-day`. Source catalogues are read-only.
 
 ## Credits
 

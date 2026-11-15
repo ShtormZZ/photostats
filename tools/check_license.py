@@ -46,7 +46,10 @@ def main():
 
     text = open(PATH, encoding="utf-8", errors="replace").read()
     lines = text.count("\n") + 1
-    problems = [m for m in MUST_CONTAIN if m not in text]
+    # The canonical licence wraps sentences across lines; whitespace is not
+    # evidence that the network clause is missing.
+    normalised = " ".join(text.split())
+    problems = [m for m in MUST_CONTAIN if " ".join(m.split()) not in normalised]
 
     if lines < MIN_LINES:
         problems.append(f"only {lines} lines, expected at least {MIN_LINES}")

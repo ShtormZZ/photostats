@@ -782,8 +782,9 @@ def timeline_checks(db, photos):
         check("effective ratings are prioritised before random unrated fillers",
               effective == ["great"] * 2 + ["5"] * 3 + ["4"] * 5 + [None] * 5,
               str(effective))
-        check("day total includes low ratings for the analyser",
-              first["days"][1]["total"] == 45 and first["days"][1]["eligible"] == 40)
+        check("day separates matching photos from the whole analyser day",
+              first["days"][1]["total"] == 40 and first["days"][1]["archive_total"] == 45
+              and first["days"][1]["eligible"] == 40)
         check("statistics filters do not affect the independent timeline",
               api("/api/timeline/photos", dir="asc", limit=2, seed="smoke",
                   folder="missing", day_filter="missing", rating="1", camera="missing") == first)
@@ -793,7 +794,8 @@ def timeline_checks(db, photos):
               and all("path" in p and "tags" in p and "sharp_center" in p
                       for p in details["days"][0]["items"]))
         check("timeline only sends lightweight metadata until a card is opened",
-              all("path" not in p and "tags" not in p for p in selected))
+              all("path" not in p and "lat" not in p and "sharp_center" not in p
+                  and "camera" in p and "tags" in p and "comment" in p for p in selected))
 
         def all_photos(day, limit):
             items, offset = [], 0
@@ -936,7 +938,7 @@ def main():
 
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=20) as r:
             page = r.read().decode()
-        check("page served", r.status == 200 and "Photoarchive" not in page or True,
+        check("page served", r.status == 200 and 'id="list"' in page and 'id="strip"' in page,
               f"{len(page)} bytes")
         check("interface markup present", 'id="list"' in page and 'id="strip"' in page)
 

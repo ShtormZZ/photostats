@@ -20,6 +20,8 @@ what you typed.
 import re
 import unicodedata
 
+import db_schema
+
 # Three is the whole point of the limit: a photo with a dozen tags is a photo
 # nobody will ever find again, and three fit on one line everywhere they are
 # shown — in a list row, over a thumbnail and in the card.
@@ -31,37 +33,10 @@ MAX_LEN = 24              # longer than this and the chips wrap the layout apart
 # hand rather than by listing every alphabet that is allowed in.
 VALID = re.compile(r"\A[^\W_]+\Z", re.UNICODE)
 
-# The table is separate, so `photos` stays what it is: one row per file, with
-# every column a dimension the panels group by. A tag is not that shape.
-#
-# The trigger is what keeps the two in step. The scanner drops rows for files
-# that are gone from the disk (scan.py, "Dropped from the database"), and
-# without the trigger their tags would sit here forever, counted by a panel that
-# can no longer show a single photo behind the number. A foreign key would do the
-# same job only if every connection in both programs remembered to switch
-# `PRAGMA foreign_keys` on, which is off by default and per connection; the
-# trigger is stored in the database and cannot be forgotten.
-SCHEMA = [
-    """CREATE TABLE IF NOT EXISTS photo_tags (
-           photo_id INTEGER NOT NULL,
-           tag      TEXT NOT NULL,
-           PRIMARY KEY (photo_id, tag)
-       )""",
-    "CREATE INDEX IF NOT EXISTS ix_tag ON photo_tags(tag, photo_id)",
-    """CREATE TRIGGER IF NOT EXISTS photo_tags_gone
-       AFTER DELETE ON photos BEGIN
-           DELETE FROM photo_tags WHERE photo_id = OLD.id;
-       END""",
-]
-
-
+# The shared schema installs photo_tags and its delete trigger before either
+# program writes photos. Tag normalisation stays independent of storage.
 def ensure_schema(con):
-    """Both programs call this: either of them may meet a database that has never
-    had a tag in it, and the trigger has to be there before the scanner deletes
-    its first row."""
-    for stmt in SCHEMA:
-        con.execute(stmt)
-    con.commit()
+    return db_schema.ensure_schema(con)
 
 
 def normalize(raw):

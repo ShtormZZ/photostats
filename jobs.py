@@ -25,9 +25,10 @@ working: walking a large archive on a network drive, or a hundred RAW files in
 one batch.
 """
 
-import sqlite3
 import threading
 import time
+
+import db_schema
 
 HEARTBEAT = 3        # seconds between the writes of a running pass
 # Silence after which "running" is taken to mean stopped. Several heartbeats,
@@ -38,25 +39,9 @@ KEEP = 50            # rows kept; this is a status line, not a log
 KINDS = {"exif": "Reading EXIF", "images": "Analysing images",
          "sign": "Signing files"}
 
-SCHEMA = """CREATE TABLE IF NOT EXISTS jobs (
-    id       INTEGER PRIMARY KEY,
-    kind     TEXT NOT NULL,      -- a key of KINDS
-    state    TEXT NOT NULL,      -- running | done | stopped | failed
-    phase    TEXT,               -- what a running pass is busy with, in words
-    done     INTEGER NOT NULL DEFAULT 0,
-    total    INTEGER,            -- NULL while it is not known yet
-    started  REAL NOT NULL,      -- Unix time, so the server can measure silence
-    beat     REAL NOT NULL,
-    finished REAL,
-    note     TEXT                -- the closing word: an error, "nothing to do"
-)"""
-
 
 def ensure_schema(con):
-    """Both programs call this, as with tags: either may meet a database that
-    predates the table, and the server has to be able to read an empty one."""
-    con.execute(SCHEMA)
-    con.commit()
+    return db_schema.ensure_schema(con)
 
 
 def latest(con):
@@ -105,18 +90,8 @@ class Job:
     def __enter__(self):
         # A connection of its own: the pass's connection belongs to its thread,
         # and its transactions are its own business.
-        self._con = sqlite3.connect(self._path, timeout=15,
-                                    check_same_thread=False)
-        self._con.execute("PRAGMA busy_timeout = 15000")
-        # On a first run this connection creates the file, before the scanner's
-        # own does — and WAL, which lets the server read while the pass writes,
-        # is switched on by whoever gets there first. Unavailable on network
-        # drives, where the ordinary journal stays and the lock wait copes.
-        try:
-            self._con.execute("PRAGMA journal_mode = WAL")
-        except sqlite3.Error:
-            pass
-        ensure_schema(self._con)
+        self._con = db_schema.open_database(
+            self._path, maintenance=False, check_same_thread=False)
         now = time.time()
         with self._lock:
             self.id = self._con.execute(

@@ -6,17 +6,74 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-- A separate **Timeline** page loads daily photo highlights as you scroll, with
-  at most 15 photos per day: 5+, five stars, four stars, then random unrated
-  fillers. Ratings of three or below and bad photos are excluded; empty days
-  are skipped. Date order is configurable and remembered. Virtual day blocks,
-  lightweight metadata and stable samples preserve scrolling performance and
-  position. **Analyse day** opens all photos for the date in Statistics with
-  its other filters cleared. Photo cards retain ratings, tags and comments;
-  changing a rating refreshes that day's highlights. **Show all** expands every
-  photo from a day in place, including bad and low-rated files, while keeping
-  the original highlights first. Large days are paged and their thumbnails are
-  virtualised; **Show highlights** restores the selection.
+## [1.16.0] — 2026-11-15
+
+- Timeline adds **Remove tags** under each day. Its searchable checklist includes
+  every tag on photos matching the current filters, with per-tag counts. Removal
+  affects the whole filtered day, including photos hidden by the 15-photo limit,
+  and warns about excluded photos. Multiple selected tags are removed atomically
+  from a frozen target set, including when removing the current filter tag;
+  unrelated tags and excluded photos are preserved. Stale previews require review.
+  Saving refreshes Timeline membership, tooltips, badges and Statistics data.
+
+- Timeline adds **Add tags** under each day: a searchable tag picker adds existing
+  or new tags to every match after all Timeline filters, including photos hidden
+  by the 15-photo preview. It previews affected/excluded counts and warns when
+  filters hide part of the day. Existing tags are preserved; duplicates ignored.
+  A single transaction freezes the target set and rejects the whole batch if any
+  photo would exceed three tags. Concurrent archive edits require reviewing fresh
+  counts before retrying. Saving refreshes day thumbnails and Statistics data.
+
+- Timeline thumbnail tooltips include camera model, lens, a single line of
+  exposure settings, tags and comment. Separate tag and comment-bubble badges at
+  bottom right indicate each annotation independently; empty lens/tag/comment rows are
+  omitted from tooltips. Annotation edits update tooltips
+  and badges in visible and cached day selections. Required metadata is included
+  in thumbnail records without per-hover requests; paths, coordinates and image
+  analysis remain in full-card responses.
+
+- Timeline orders both highlights and full days on the client: 5+ first,
+  other rated and unrated photos next, bad last even after unrated. Each group
+  follows capture time, using photo IDs to stabilise equal timestamps. Highlight membership
+  retains its rating/seed rules. Visible expanded days collect lightweight
+  metadata in batches before sorting and revealing thumbnails, avoiding jumps
+  when later batches contain earlier photos. Card navigation uses the displayed
+  order; server SQL is unchanged. Browser tests deliberately reorder responses
+  across batches and exercise duplicate timestamps and rating edits between groups.
+
+- Timeline adds a single extra filter for year, camera model, lens, focal-length
+  range or aperture range, combined with its tag/rating options before the daily
+  display limit. A searchable option picker loads 30 values at a time, supports
+  Unicode and More, and clears its value when changing dimensions. Ranges share
+  Statistics definitions. The selection is kept in memory only; Analyse day
+  continues to open the entire day. API and browser regressions cover the picker,
+  pagination, range boundaries and obsolete option responses.
+
+- Server, scanner and job tracking now use one transactional, versioned schema.
+  Legacy catalogues upgrade without rescanning or losing photo IDs and annotations;
+  expression indexes are rebuilt when their definition changes. Nonempty catalogues
+  get a verified SQLite backup before migration. A transactional data revision
+  tracks photo, annotation and signature-mode changes for future caching.
+
+- SQLite planner statistics are bootstrapped for existing catalogues and refreshed
+  after index changes or substantial scanning/analysis changes, outside GET requests.
+  `/api/db/diagnostics` reports schema history, revision and maintenance results.
+  Database regression tests and a reproducible, privacy-preserving benchmark cover
+  migrations, concurrency, rollback and Timeline distributions. Server request
+  connections are closed explicitly. Smoke and licence checks no longer hide an
+  incorrect page or reject a valid licence because of line wrapping.
+
+- **Timeline** has independent multi-tag selection (match any), three rating
+  modes (good to bad, good only, 5+ only), an Include unrated toggle and an
+  independent 15 per day display limit. The limit applies after every filter;
+  Show all expands every matching photo when more than 15 remain. With the limit
+  off, every match is shown with paged loading and virtual thumbnails, regardless
+  of the unrated setting. Counts, cards and day cursors
+  share the filters. Rating/tag edits refresh the affected day. New options reset
+  on reload; Back and page switching retain the current view. Analyse day still
+  opens the entire day in Statistics. Stable seeded ordering, date order, Refresh
+  and lightweight metadata are preserved. API and real-browser regressions cover
+  filter combinations, large-day paging, edits and obsolete network responses.
 
 - A **Directories** page shows the whole indexed archive as an expandable,
   searchable tree, with recursive file counts, successful colour-and-sharpness
@@ -37,6 +94,18 @@ All notable changes to this project are documented here. The format follows
 - HTTP request logs include server response time in milliseconds alongside the
   URL and status, in both the launcher window and the terminal. Timing ends when
   response headers start being sent, excluding body transfer and browser rendering.
+
+### Known limitations
+
+- Files moved or renamed outside the program are not reconciled with their old
+  catalogue records. A normal EXIF scan can remove the old record and its user
+  annotations, then import the new path as a separate photo. Missing-file cleanup
+  currently checks the whole catalogue, including unselected folders; an offline
+  drive can therefore lose catalogue records. Filesystem reconciliation remains
+  planned work; schema migration backups do not make EXIF scanning a safe relink.
+- Re-reading EXIF after content changes at the same path currently retains old
+  signatures and image-analysis results. A forced EXIF pass also leaves missing
+  records in the catalogue. These scanner limitations are unchanged in this release.
 
 ## [1.15.0] — 2026-10-29
 

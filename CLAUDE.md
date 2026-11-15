@@ -19,8 +19,9 @@ For development, use the venv directly — `.venv/Scripts/python.exe` on Windows
 
 ```bash
 python tools/smoke_test.py          # the whole test suite
+python tools/test_database.py       # migrations, concurrency and planner policy
 python tools/check_license.py       # LICENSE must be the canonical AGPL text
-python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py tools
+python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py db_schema.py tools
 python tools/make_icon.py           # redraw the icon files (they are committed)
 ```
 
@@ -54,7 +55,7 @@ itself.
 **Passes are separate and resumable.** EXIF, image analysis and signatures are three
 independent passes over the same rows; each stores what it has done in batches, so
 stopping one loses nothing. A pass and the server run at the same time — both open
-SQLite with WAL and `busy_timeout` (`scan.py:tune()`, `app.py:db()`), which is what
+SQLite with WAL and `busy_timeout` (`db_schema.py:tune()`, `app.py:db()`), which is what
 makes concurrency work. Do not remove either.
 
 **The launcher is a process supervisor, not a library.** It spawns `scan.py`/`app.py`
@@ -78,11 +79,46 @@ CTRL_BREAK cannot write an end state, which is why `jobs.latest()` reads a
 `running` row whose heartbeat is older than `STALE` as stopped — do not
 "fix" that by adding a SIGBREAK handler (see above). A new pass needs a
 `KINDS` entry and a `Job`; `--check-dups` deliberately has none, as it never
-writes. `jobs.ensure_schema()` is called from both programs, like tags'.
+writes. `db_schema.py` creates the job table along with the rest of the schema.
 
 **The interface is a single file.** `web/index.html` is markup, CSS and JS in one
 file with no build step and no package manager. Leaflet and map tiles are the only
 external fetch, loaded on demand behind a button.
+
+**Timeline owns its filters.** `photoTimeline` holds match-any tags, rating mode
+and the unrated toggle in memory only; do not copy Statistics filters into it or
+persist these options. `app.py:timeline_filter()` serves date discovery, counts,
+highlights, expanded pages and cards. Keep tag matching correlated with the photo
+so date queries retain `ix_taken`. The independent 15 per day toggle limits
+results after all filters, including Include unrated; Show all expands every
+matching photo when the filtered count exceeds 15. With the limit off, matching
+days expand automatically whether unrated photos are included or not.
+Day-wide Add tags uses the same predicate without a display limit. Preview and
+write count all matching photos, warn about excluded photos, and preserve existing
+tags. The write freezes targets in one transaction and rejects the whole batch
+on a three-tag capacity conflict or a stale preview revision.
+Remove tags shares that endpoint with `operation=remove` and repeated `remove_tag`
+fields. Its preview lists every tag on matching photos with counts, never archive
+suggestions. Removal has no three-tag selection limit; freeze targets before
+deleting so removing a filter tag cannot skip later requested tags. Preserve
+unselected tags, reject stale revisions and refresh the day's membership after save.
+The client sorts highlights and full days by group (great first, other ratings
+and unrated together, bad last), then `(taken, id)`, for display and card
+navigation. Keep highlight selection separate from display order. Expanded days
+collect lightweight metadata in batches before revealing their globally sorted
+photos; loading pauses for unmounted/collapsed days. Do not sort only each batch
+or put the original highlights ahead of earlier photos in a full day.
+Thumbnail records include tooltip fields (camera/lens, exposure settings, tags,
+comment), but no paths, coordinates or image-analysis metrics. Tooltips must not
+fetch per hover. Keep annotation badges/tooltips in sync in highlights, full-day
+caches and mounted nodes after saves; comment edits need no day reload.
+One optional extra dimension/value (year, camera, lens, focal or aperture range)
+lives in the same state and predicate. `/api/timeline/options` returns bounded
+searchable choices under tag/rating filters, excluding its own current selection.
+Reuse Statistics' bucket constants; focal lengths are actual mm. Keep scalar
+metadata checks correlated too, to retain date-ordered scans for broad ranges.
+Analyse day always opens the whole date in Statistics. Run
+`tools/test_timeline.py` and `tools/timeline_browser_test.py` for changes here.
 
 ## Invariants that span files
 
@@ -90,7 +126,7 @@ external fetch, loaded on demand behind a button.
 `scan.py --check-dups` both import it. The rule is a signature when every row has
 one, otherwise name + exact size + capture time. Two traps:
 
-- `name_key()` is also the text of the `ix_dupkey` index built in `app.py` at
+- `name_key()` is also the text of the `ix_dupkey` index built in `db_schema.py` at
   startup. Changing the expression without rebuilding the index makes duplicate
   queries table-scan.
 - Build candidate keys with SQLite, not Python. SQLite's `lower()` folds only ASCII;
@@ -113,10 +149,8 @@ takes up to three, which is not the shape of a column, so they live in
 `photo_tags` (photo_id, tag) — the only table the panels join to. Three things
 to know:
 
-- `tags.ensure_schema()` is called from both `scan.py:open_db()` and
-  `app.py:main()`, for the reason the migration list below is duplicated. It is
-  not part of `scan.py:SCHEMA`: that text is split on semicolons, and a trigger
-  body contains one.
+- `db_schema.py` owns the tag table, index and cleanup trigger. The compatibility
+  `tags.ensure_schema()` entry point delegates to its versioned migrations.
 - The trigger is what keeps the table honest — the scanner deletes rows for files
   that are gone, and without it their tags stay behind and are counted. A foreign
   key would not do: `PRAGMA foreign_keys` is off by default and per connection.
@@ -126,16 +160,24 @@ to know:
   entirely when nothing is filtered: measured on 105k photos, the join cost
   317 ms against 9 for the same count straight off `ix_tag`.
 
-**The migration column list is duplicated.** `scan.py:migrate()` and the startup
-block in `app.py:main()` both `ALTER TABLE ... ADD COLUMN` the same list, because
-either program may meet an old database first. Adding a column means editing both.
+**The schema has one owner.** `db_schema.py` creates tables, backfills legacy
+columns, translates old colour names and reconciles index expressions. The app,
+scanner and job writer all use it. Migrations and success records run under one
+`BEGIN IMMEDIATE`; do not commit inside a migration or use `executescript`, which
+can commit implicitly. A verified backup precedes changes to a nonempty catalogue.
+See `docs/database-maintenance.md` for recovery and the planner policy.
 
-**The metric indexes are built by both programs too.** Keep `scan.py:SCHEMA` and
-the metric-index loop in `app.py:main()` in step. The server creates them after
-all column migrations, including the older `exposure` backfill. A range index is
-not always faster: on the real archive, indexing `size` made the 4–8 MB filter
-slower because it selected nearly half the table. Measure the full statistics
-request on a copy before adding an index, not just a single `COUNT` query.
+**Data revision is transactional.** Database triggers update `db_state.revision`
+for changes to photos, tags and algorithm/signature metadata. Job heartbeats and
+maintenance do not invalidate data. Keep new persisted photo/annotation fields
+covered by the revision triggers when adding a migration.
+
+**Statistics maintenance belongs at writer boundaries.** Startup and completed
+passes call `maintain_statistics`, never a GET. Index changes, missing statistics
+or substantial photo changes trigger analysis. A range index is not always
+faster: measure complete requests on a disposable copy with
+`tools/db_benchmark.py`, not just one COUNT query. The diagnostic endpoint only
+reads metadata. Server request connections must be closed explicitly.
 
 **Three version counters, different meanings.** `ALGO_VERSION` (`scan.py`) bumps when
 the colour/light maths changes and triggers a re-analysis of the archive.
@@ -164,7 +206,7 @@ without bumping `ALGO_VERSION` leaves the archive inconsistent.
   Russian comments the program was first written with were translated in full; do
   not reintroduce any.
 - Three pieces of Cyrillic are *data* and must stay: the `COLOR_RENAME` keys in
-  `app.py`, which have to match the colour names stored in old databases, and the
+  `db_schema.py`, which have to match the colour names stored in old databases, and the
   `rstrip("sс")` in `app.py` and `scan.py`, which strips a Cyrillic seconds suffix
   from a shutter value. `README.ru.md` and the link to it are Russian by design.
 - Comments explain *why*, usually naming the failure that motivated the code. Keep

@@ -119,6 +119,42 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .timeline-tools select{padding:6px;background:var(--panel);color:var(--paper);border:1px solid var(--line);
   border-radius:3px;font:12px var(--body);max-width:100%}
 .timeline-help{font-size:12px;color:var(--muted);line-height:1.6;margin:12px 0}
+.timeline-option{display:flex;align-items:center;gap:6px;min-width:0}
+.timeline-option input{accent-color:var(--safelight)}
+.timeline-tags{position:relative;max-width:100%}
+.timeline-tags summary{cursor:pointer;padding:6px 9px;border:1px solid var(--line);border-radius:3px;
+  font-size:12px;overflow-wrap:anywhere}
+.timeline-tag-menu{position:absolute;top:100%;right:0;z-index:25;width:260px;max-width:calc(100vw - 48px);
+  padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  box-shadow:0 6px 18px rgba(8,7,11,.6)}
+.timeline-tag-menu input[type=search]{width:100%;min-width:0;padding:7px;border:1px solid var(--line);
+  background:var(--ground);color:var(--paper);border-radius:3px;font:12px var(--body)}
+.timeline-tag-menu .tool{margin-top:6px;font-size:11px}
+.timeline-tag-options{max-height:220px;overflow:auto;margin-top:8px}
+.timeline-tag-options label{display:flex;align-items:center;gap:7px;padding:6px 0;color:var(--paper)}
+.timeline-tag-options .n{margin-left:auto;color:var(--muted);font:11px var(--data)}
+.timeline-tag-status{font-size:11px;color:var(--muted);margin-top:6px}
+.timeline-tag-chips{display:flex;flex-wrap:wrap;gap:5px;max-width:100%}
+.timeline-tag-chips:empty{display:none}
+.timeline-tag-chips button{font-size:11px;color:var(--safelight);border:1px solid var(--line);
+  border-radius:12px;padding:3px 8px;overflow-wrap:anywhere;max-width:100%}
+.timeline-tools :focus-visible{outline:2px solid var(--safelight);outline-offset:3px}
+.timeline-extra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-basis:100%;min-width:0}
+.timeline-extra-options{position:relative;width:360px;max-width:100%;min-width:0}
+.timeline-extra-options summary{padding:6px 9px;border:1px solid var(--line);border-radius:3px;
+  cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.timeline-extra-options.disabled{opacity:.5;pointer-events:none}
+.timeline-extra-menu{position:absolute;top:100%;right:0;width:100%;z-index:25;background:var(--panel);
+  padding:10px;border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 18px rgba(8,7,11,.6)}
+.timeline-extra-menu input{width:100%;min-width:0;padding:7px;background:var(--ground);color:var(--paper);
+  border:1px solid var(--line);border-radius:3px;font:12px var(--body)}
+.timeline-extra-list{max-height:220px;overflow:auto;margin:6px 0}
+.timeline-extra-list button{display:flex;width:100%;gap:8px;padding:7px;text-align:left;font-size:12px;border-radius:3px}
+.timeline-extra-list button:hover,.timeline-extra-list button[aria-selected=true]{background:var(--frame);color:var(--safelight)}
+.timeline-extra-list .name{min-width:0;flex:1;overflow-wrap:anywhere}
+.timeline-extra-list .n{font:11px var(--data);color:var(--muted)}
+.timeline-extra-menu .tool{margin:4px 4px 0 0;font-size:11px}
+.timeline-extra-status{font-size:11px;color:var(--muted);margin:6px 0}
 .timeline-stage{position:relative;margin-left:6px;border-left:1px solid var(--line);overflow-anchor:none}
 .timeline-day{position:absolute;left:0;width:100%;display:grid;grid-template-columns:var(--timeline-rail) minmax(0,1fr) 84px;
   gap:16px;padding:16px 0 16px 16px}
@@ -129,6 +165,28 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .timeline-date .year{display:block;color:var(--safelight);font:700 18px/1.25 var(--data);margin-bottom:4px}
 .timeline-date .count{font:11px var(--data);color:var(--muted);margin:7px 0 10px}
 .timeline-date .tool{padding:5px 7px;font-size:11px;letter-spacing:0;text-align:left}
+.timeline-date .timeline-add-tags,.timeline-date .timeline-remove-tags{display:block;margin-top:7px}
+.timeline-bulk{width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;
+  padding:20px;border:1px solid var(--line);border-radius:6px;background:var(--ground);color:var(--paper)}
+.timeline-bulk::backdrop{background:rgba(0,0,0,.65)}
+.timeline-bulk h2{margin:0 0 12px;font:700 20px var(--display)}
+.timeline-bulk p{font-size:12px;line-height:1.5;margin:10px 0}
+.timeline-bulk .warning{color:var(--safelight)}
+.timeline-bulk fieldset{border:0;padding:0;margin:0;min-width:0}
+.timeline-bulk label{display:block;margin:14px 0 7px;font-size:12px}
+.timeline-bulk .tag-entry{display:flex;gap:7px;margin:10px 0}
+.timeline-bulk input{width:100%;min-width:0;padding:7px;background:var(--frame);color:var(--paper);
+  border:1px solid var(--line);border-radius:3px;font:inherit;font-size:12px}
+.timeline-bulk .suggestions{display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow:auto}
+.timeline-bulk .suggestions button{font-size:12px;text-align:left}
+.timeline-bulk .suggestions small{color:var(--muted);margin-left:6px}
+.timeline-bulk .tag-removal-options{display:block;max-height:220px}
+.timeline-bulk .tag-removal-options label{display:flex;align-items:center;gap:8px;margin:0;padding:7px 0;cursor:pointer}
+.timeline-bulk .tag-removal-options input{width:auto;flex:none}
+.timeline-bulk .tag-removal-options small{margin-left:auto}
+.timeline-bulk .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.timeline-bulk button:disabled{opacity:.45;cursor:default}
+.timeline-bulk .dialog-status{min-height:18px;color:var(--muted)}
 .timeline-photos{display:grid;grid-template-columns:repeat(var(--timeline-cols),minmax(0,1fr));
   gap:6px;align-content:start}
 .timeline-photo{position:relative;width:100%;aspect-ratio:1;padding:0;overflow:hidden;
@@ -138,6 +196,10 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .timeline-photo.in .noimg{display:none}
 .timeline-badge{position:absolute;left:3px;bottom:3px;border-radius:2px;padding:2px 4px;
   background:#16151AD9;color:var(--safelight);font:600 10px var(--body);white-space:nowrap}
+.timeline-annotations{position:absolute;right:3px;bottom:3px;display:flex;gap:3px;pointer-events:none}
+.timeline-annotation{display:inline-flex;align-items:center;justify-content:center;border-radius:2px;padding:2px;
+  background:#16151AD9;color:var(--safelight)}
+.timeline-annotation svg{display:block;width:12px;height:12px}
 .timeline-photo.loading{opacity:.6}
 .timeline-photos.expanded{display:block;position:relative}
 .timeline-photos.expanded .timeline-photo{position:absolute}
@@ -653,23 +715,88 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
   <div class="timeline-tools" id="timelineTools">
     <h1>Timeline</h1>
     <div class="grow"></div>
-    <label for="timelineOrder">Date order</label>
+    <details class="timeline-tags" id="timelineTags">
+      <summary id="timelineTagsSummary">Tags: all</summary>
+      <div class="timeline-tag-menu">
+        <input type="search" id="timelineTagSearch" placeholder="Search tags" aria-label="Search Timeline tags">
+        <button class="tool" id="timelineTagsClear">Clear selected tags</button>
+        <div class="timeline-tag-options" id="timelineTagOptions" role="group" aria-label="Match any selected tag"></div>
+        <div class="timeline-tag-status" id="timelineTagStatus" role="status" aria-live="polite"></div>
+      </div>
+    </details>
+    <span class="timeline-option"><label for="timelineRating">Rating</label>
+    <select id="timelineRating" autocomplete="off">
+      <option value="all">Good to bad</option>
+      <option value="good" selected>Good only (5+, 5, 4)</option>
+      <option value="great">5+ only</option>
+    </select></span>
+    <label class="timeline-option"><input id="timelineUnrated" type="checkbox" autocomplete="off" checked>Include unrated</label>
+    <label class="timeline-option"><input id="timelineLimit" type="checkbox" autocomplete="off">15 per day</label>
+    <span class="timeline-option"><label for="timelineOrder">Date order</label>
     <select id="timelineOrder">
       <option value="desc">Newest first</option>
       <option value="asc">Oldest first</option>
-    </select>
+    </select></span>
     <button class="tool" id="timelineRefresh">Refresh</button>
+    <div class="timeline-tag-chips" id="timelineTagChips" aria-label="Selected Timeline tags"></div>
+    <div class="timeline-extra">
+      <label for="timelineFilter">Filter</label>
+      <select id="timelineFilter" autocomplete="off">
+        <option value="">No extra filter</option>
+        <option value="year">Year</option>
+        <option value="camera">Camera models</option>
+        <option value="lens">Lenses</option>
+        <option value="focal">Focal lengths</option>
+        <option value="aperture">Aperture</option>
+      </select>
+      <details class="timeline-extra-options disabled" id="timelineFilterOptions">
+        <summary id="timelineFilterSummary" aria-label="Timeline filter option" aria-disabled="true" tabindex="-1">Choose a filter first</summary>
+        <div class="timeline-extra-menu">
+          <input id="timelineOptionSearch" type="search" autocomplete="off" maxlength="200" placeholder="Search options" aria-label="Search filter options">
+          <div class="timeline-extra-list" id="timelineOptionList" role="listbox" aria-label="Choose one filter option"></div>
+          <div class="timeline-extra-status" id="timelineOptionStatus" role="status" aria-live="polite"></div>
+          <button class="tool" id="timelineOptionMore" hidden>More</button>
+          <button class="tool" id="timelineOptionRetry" hidden>Try again</button>
+          <button class="tool" id="timelineOptionClear" disabled>Clear option</button>
+        </div>
+      </details>
+    </div>
   </div>
-  <p class="timeline-help">The whole archive, independent of Statistics filters. Up to 15 photos per day:
-    5+, then 5 stars, then 4 stars, filled with random unrated photos. Ratings of 3 or below and bad photos
-    are excluded from highlights. Show all expands every photo here, including low ratings and bad photos.
-    Analyse day opens the day in Statistics.</p>
+  <p class="timeline-help">Timeline filters are independent of Statistics. Match any selected tag; no selection means all tags.
+    Within each day, 5+ photos come first, other photos follow, and bad photos come last, after unrated.
+    Each group is ordered from earliest to latest. 15 per day limits the results after all filters;
+    Show all reveals every remaining match. Turn the limit off to show all matches automatically.
+    Choose at most one extra filter and one option; search to find more options. Focal lengths use actual mm.
+    Analyse day always opens the whole day in Statistics. These filters reset when the page is reloaded.</p>
   <div class="timeline-stage" id="timelineStage" aria-label="Photos by day"></div>
   <div class="timeline-footer" id="timelineFooter">
     <span id="timelineStatus" role="status" aria-live="polite"></span>
     <button class="tool" id="timelineRetry" hidden>Try again</button>
   </div>
 </main>
+<dialog class="timeline-bulk" id="timelineBulk" aria-labelledby="timelineBulkTitle" aria-describedby="timelineBulkScope timelineBulkWarning">
+  <form id="timelineBulkForm">
+    <h2 id="timelineBulkTitle">Add tags</h2>
+    <p id="timelineBulkScope" role="status" aria-live="polite"></p>
+    <p id="timelineBulkWarning" class="warning" hidden></p>
+    <fieldset id="timelineBulkFields">
+      <label id="timelineBulkLabel" for="timelineBulkSearch">Tags to add</label>
+      <div class="tagctl" id="timelineBulkSelected" aria-label="Tags to add"></div>
+      <div class="tag-entry">
+        <input id="timelineBulkSearch" type="text" maxlength="24" autocomplete="off" placeholder="Search or create a tag">
+        <button class="tool" id="timelineBulkAdd" type="button">Add</button>
+      </div>
+      <div class="suggestions" id="timelineBulkSuggestions" aria-label="Suggested tags"></div>
+      <p id="timelineBulkHelp">Existing tags are kept. Up to 3 tags per photo; duplicates are ignored.</p>
+    </fieldset>
+    <p class="dialog-status" id="timelineBulkStatus" role="status" aria-live="polite"></p>
+    <button class="tool" id="timelineBulkRetry" type="button" hidden>Try again</button>
+    <div class="dialog-actions">
+      <button class="tool" id="timelineBulkCancel" type="button">Cancel</button>
+      <button class="tool" id="timelineBulkOK" type="submit" disabled>OK</button>
+    </div>
+  </form>
+</dialog>
 <main class="directories" id="directories" hidden>
   <div class="directory-tools">
     <h1>Scanned directories</h1>
@@ -1753,7 +1880,7 @@ function setMark(it, value){
       const after = effRating(it);
       if (after !== before) bumpRating(before, after);
       refreshRating(it);
-      if (after !== before) refreshTimelineRating(it);
+      if (after !== before) refreshTimelinePhoto(it);
     })
     .catch(() => toast("Could not save the rating"))
     .finally(() => document.querySelectorAll('.rate[data-pid="' + it.id + '"]')
@@ -1955,6 +2082,8 @@ function saveTags(it, next){
       listItems.forEach(p => { if (p.id === it.id) p.tags = it.tags; });
       bumpTags(before, r.tags);
       refreshTags(it);
+      refreshTimelineAnnotations(it);
+      refreshTimelinePhoto(it);
     })
     .catch(() => toast("Could not save the tags"))
     .finally(() => busy(false));
@@ -1984,6 +2113,9 @@ function refreshTags(it){
    sentence — and the text is read and edited in the card. There is no panel for
    comments: they are notes, not a dimension to count photos by. */
 const COMMENT_MAX = 256;
+const TAG_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true">' +
+  '<path d="M2 2h6l6 6-6 6-6-6V2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+  '<circle cx="5" cy="5" r="1" fill="currentColor"/></svg>';
 const NOTE_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" ' +
   'd="M2 2h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H7l-3.5 3v-3H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/></svg>';
 
@@ -2067,6 +2199,7 @@ function saveComment(it, text){
         set.forEach(p => { if (p.id === it.id) p.comment = r.comment; }));
       it.comment = r.comment;
       refreshComment(it);
+      refreshTimelineAnnotations(it);
     })
     .catch(() => toast("Could not save the comment"))
     .finally(() => boxes().forEach(b => b.classList.remove("busy")));
@@ -2501,6 +2634,7 @@ function moreToCome(){
 }
 
 function canStep(by){
+  if (state.timelineDay?.refreshing) return false;
   const i = deckIndex();
   if (i < 0) return false;
   if (by < 0) return i > 0;
@@ -2718,19 +2852,450 @@ function savedTimelineOrder(){
 }
 const photoTimeline = {days:[], next:null, started:false, loading:false, ended:false, error:false,
   seed:timelineSeed(), order:savedTimelineOrder(), epoch:0, offsets:[0], mounted:new Map(),
+  ratingMode:"good", includeUnrated:true, limitDaily:false, tags:[],
+  extraType:"", extraValue:"", extraLabel:"",
   scrollY:0, frame:0, dirty:new Set(), updating:new Map()};
 $("timelineOrder").value = photoTimeline.order;
+$("timelineRating").value = photoTimeline.ratingMode;
+$("timelineUnrated").checked = photoTimeline.includeUnrated;
+$("timelineLimit").checked = photoTimeline.limitDaily;
+$("timelineFilter").value = photoTimeline.extraType;
+const timelineOptions = {epoch:0, items:[], next:null, loading:false};
+
+function timelineParams(extra = {}){
+  const t = photoTimeline;
+  const params = new URLSearchParams({seed:t.seed, rating_mode:t.ratingMode,
+    unrated:t.includeUnrated ? "1" : "0", ...extra});
+  t.tags.forEach(tag => params.append("tag", tag));
+  if (t.extraType) params.set("extra_type", t.extraType);
+  if (t.extraValue) params.set("extra_value", t.extraValue);
+  return params;
+}
+
+const timelineBulk = {session:0, previewSerial:0, suggestSerial:0, selected:[], preview:null, busy:false};
+
+function closeTimelineBulk(){
+  if (timelineBulk.busy) return;
+  timelineBulk.session++;
+  ctl["timeline-bulk-preview"]?.abort();
+  ctl["timeline-bulk-suggest"]?.abort();
+  $("timelineBulk").close();
+}
+
+function drawTimelineBulk(){
+  const b = timelineBulk, preview = b.preview, removing = b.mode === "remove";
+  $("timelineBulkSelected").replaceChildren();
+  b.selected.forEach(tag => {
+    const chip = document.createElement("span"); chip.className = "tg";
+    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×";
+    remove.setAttribute("aria-label", "Remove " + tag);
+    remove.onclick = () => {
+      b.selected = b.selected.filter(value => value !== tag);
+      previewTimelineBulk(); suggestTimelineBulk();
+    };
+    chip.append(document.createTextNode(tag), remove); $("timelineBulkSelected").append(chip);
+  });
+  $("timelineBulkFields").disabled = b.busy;
+  $("timelineBulkCancel").disabled = b.busy;
+  $("timelineBulkOK").disabled = b.busy || !preview || !b.selected.length || !preview.matched || !!preview.conflicts ||
+    (removing && !preview.changed);
+  $("timelineBulkOK").textContent = b.busy ? (removing ? "Removing…" : "Adding…") : "OK";
+  $("timelineBulkAdd").disabled = b.selected.length >= TAG_MAX || !$("timelineBulkSearch").value.trim();
+  $("timelineBulkSearch").disabled = !removing && b.selected.length >= TAG_MAX;
+  $("timelineBulkScope").textContent = preview ? nf(preview.matched) + " of " + nf(preview.total) +
+    " photos in this day match the current filters." + (b.limited && preview.matched > 15
+      ? " Includes " + nf(preview.matched - 15) + " photos hidden by the 15-photo limit." : "") : "Checking photos…";
+  $("timelineBulkWarning").hidden = !preview?.hidden;
+  $("timelineBulkWarning").textContent = preview?.hidden
+    ? (removing ? "Tags will not be removed from every photo: filters exclude " : "Not all photos will be tagged: filters exclude ") +
+      nf(preview.hidden) + " photos from this day." : "";
+  if (removing) drawTimelineRemovalTags();
+}
+
+function timelineBulkStatus(preview){
+  if (timelineBulk.mode === "remove"){
+    if (!preview.matched) return "No photos match these filters.";
+    if (!preview.available.length) return "No tags on matching photos.";
+    if (!timelineBulk.selected.length) return "Choose one or more tags to remove.";
+    return nf(preview.changed) + " photos will have the selected tags removed. Other tags are kept.";
+  }
+  return preview.conflicts ? "Adding these tags would exceed 3 tags on " + nf(preview.conflicts) +
+    " photos. No photos will be changed. Choose fewer tags."
+    : !preview.matched ? "No photos match these filters."
+    : !timelineBulk.selected.length ? "Choose at least one tag."
+    : nf(preview.changed) + " photos will receive new tags.";
+}
+
+async function previewTimelineBulk(){
+  const b = timelineBulk, session = b.session, serial = ++b.previewSerial;
+  b.preview = null; drawTimelineBulk();
+  $("timelineBulkStatus").textContent = "Checking selection…";
+  $("timelineBulkRetry").hidden = true;
+  const query = new URLSearchParams(b.query);
+  b.selected.forEach(tag => query.append(b.mode === "remove" ? "remove_tag" : "add_tag", tag));
+  try {
+    const data = await ask("timeline-bulk-preview", "/api/timeline/day/tags?" + query);
+    if (b.session !== session || serial !== b.previewSerial) return;
+    if (!data.ok) throw new Error(data.error || "Could not check the selection.");
+    b.selected = data.tags; b.preview = data;
+    if (b.mode === "remove") b.available = data.available;
+    drawTimelineBulk();
+    $("timelineBulkStatus").textContent = timelineBulkStatus(data);
+  } catch (error){
+    if (b.session !== session || serial !== b.previewSerial || error.name === "AbortError") return;
+    $("timelineBulkStatus").textContent = error.message || "Could not check the selection.";
+    $("timelineBulkRetry").hidden = false;
+  }
+}
+
+async function suggestTimelineBulk(){
+  const b = timelineBulk, session = b.session, serial = ++b.suggestSerial;
+  if (b.mode === "remove"){ drawTimelineRemovalTags(); return; }
+  const query = new URLSearchParams({q:$("timelineBulkSearch").value, limit:8});
+  $("timelineBulkSuggestions").replaceChildren();
+  if (b.selected.length >= TAG_MAX) return;
+  try {
+    const data = await ask("timeline-bulk-suggest", "/api/tags?" + query);
+    if (b.session !== session || serial !== b.suggestSerial) return;
+    for (const item of data.items || []){
+      if (b.selected.includes(item.tag)) continue;
+      const button = document.createElement("button"); button.type = "button"; button.className = "tool";
+      const count = document.createElement("small"); count.textContent = nf(item.n);
+      button.append(document.createTextNode(item.tag), count);
+      button.onclick = () => addTimelineBulkTag(item.tag);
+      $("timelineBulkSuggestions").append(button);
+    }
+  } catch (error){
+    if (b.session === session && serial === b.suggestSerial && error.name !== "AbortError"){
+      const note = document.createElement("p"); note.textContent = "Suggestions unavailable. Type a tag to add it.";
+      $("timelineBulkSuggestions").append(note);
+    }
+  }
+}
+
+function drawTimelineRemovalTags(){
+  const b = timelineBulk, list = $("timelineBulkSuggestions");
+  const focusedTag = list.contains(document.activeElement) ? document.activeElement.value : null;
+  const position = list.scrollTop;
+  list.replaceChildren();
+  const query = tagClean($("timelineBulkSearch").value);
+  const items = (b.available || []).filter(item => item.tag.includes(query));
+  for (const item of items){
+    const label = document.createElement("label"), input = document.createElement("input");
+    input.type = "checkbox"; input.value = item.tag; input.checked = b.selected.includes(item.tag);
+    input.onchange = () => {
+      b.selected = input.checked ? [...b.selected, item.tag] : b.selected.filter(tag => tag !== item.tag);
+      previewTimelineBulk();
+    };
+    const count = document.createElement("small"); count.textContent = nf(item.n);
+    label.append(input, document.createTextNode(item.tag), count); list.append(label);
+  }
+  if (!items.length){
+    const note = document.createElement("p");
+    note.textContent = b.available === null ? "Loading tags…" : b.available.length ? "No matching tags." : "No tags on matching photos.";
+    list.append(note);
+  }
+  if (focusedTag) [...list.querySelectorAll("input")].find(input => input.value === focusedTag)?.focus({preventScroll:true});
+  list.scrollTop = position;
+}
+
+function addTimelineBulkTag(raw){
+  const b = timelineBulk, tag = tagClean(raw);
+  if (b.busy || b.mode === "remove" || b.selected.length >= TAG_MAX) return;
+  if (!tag || !TAG_OK.test(tag) || [...tag].length > TAG_LEN){
+    $("timelineBulkStatus").textContent = TAG_RULE; return;
+  }
+  if (!b.selected.includes(tag)) b.selected.push(tag);
+  $("timelineBulkSearch").value = "";
+  previewTimelineBulk(); suggestTimelineBulk();
+}
+
+function openTimelineBulk(day, mode = "add"){
+  if (timelineBulk.busy) return;
+  closeDetail();
+  Object.assign(timelineBulk, {session:timelineBulk.session + 1, query:timelineParams({day:day.day, operation:mode}),
+    day:day.day, mode, epoch:photoTimeline.epoch, limited:photoTimeline.limitDaily, selected:[], preview:null, available:null});
+  const removing = mode === "remove", label = removing ? "Tags to remove" : "Tags to add";
+  $("timelineBulkTitle").textContent = (removing ? "Remove tags · " : "Add tags · ") + day.day;
+  $("timelineBulkLabel").textContent = label;
+  $("timelineBulkSelected").setAttribute("aria-label", label);
+  $("timelineBulkSuggestions").classList.toggle("tag-removal-options", removing);
+  $("timelineBulkSuggestions").setAttribute("aria-label", removing ? "Tags on matching photos" : "Suggested tags");
+  $("timelineBulkSearch").placeholder = removing ? "Search this day's tags" : "Search or create a tag";
+  $("timelineBulkAdd").hidden = removing;
+  $("timelineBulkHelp").textContent = removing ? "Only selected tags are removed from matching photos. Other tags are kept."
+    : "Existing tags are kept. Up to 3 tags per photo; duplicates are ignored.";
+  $("timelineBulkSearch").value = "";
+  $("timelineBulk").showModal();
+  previewTimelineBulk(); suggestTimelineBulk();
+  $("timelineBulkSearch").focus();
+}
+
+$("timelineBulkCancel").onclick = closeTimelineBulk;
+$("timelineBulkRetry").onclick = previewTimelineBulk;
+$("timelineBulk").addEventListener("cancel", event => { event.preventDefault(); closeTimelineBulk(); });
+$("timelineBulk").addEventListener("keydown", event => { if (event.key === "Escape") event.stopPropagation(); });
+$("timelineBulkSearch").oninput = () => { drawTimelineBulk(); suggestTimelineBulk(); };
+$("timelineBulkSearch").onkeydown = event => {
+  if (event.key === "Enter"){
+    event.preventDefault();
+    if (timelineBulk.mode !== "remove") addTimelineBulkTag(event.currentTarget.value);
+  }
+};
+$("timelineBulkAdd").onclick = () => addTimelineBulkTag($("timelineBulkSearch").value);
+$("timelineBulkForm").onsubmit = async event => {
+  event.preventDefault();
+  const b = timelineBulk;
+  if ($("timelineBulkOK").disabled) return;
+  b.busy = true; drawTimelineBulk();
+  $("timelineBulkRetry").hidden = true;
+  const removing = b.mode === "remove";
+  $("timelineBulkStatus").textContent = removing ? "Removing tags…" : "Adding tags…";
+  const body = new URLSearchParams({revision:b.preview.revision});
+  b.selected.forEach(tag => body.append(removing ? "remove_tag" : "add_tag", tag));
+  let applied = false;
+  try {
+    const response = await fetch("/api/timeline/day/tags?" + b.query, {method:"POST", body});
+    const data = await response.json();
+    if (!response.ok || !data.ok){
+      if (data.revision !== undefined){
+        b.preview = data; b.selected = data.tags;
+        if (removing) b.available = data.available;
+      }
+      else b.preview = null;
+      $("timelineBulkStatus").textContent = data.error || "Could not change tags. Try again.";
+      $("timelineBulkRetry").hidden = !!b.preview;
+    } else {
+      applied = true;
+      state.statsLoaded = false;
+      toast((removing ? "Removed tags from " : "Added tags to ") + nf(data.changed) + " photos.");
+    }
+  } catch (error){
+    b.preview = null;
+    $("timelineBulkStatus").textContent = removing
+      ? "Could not confirm the result. Check the selection before retrying."
+      : "Could not confirm the result. Check the selection before retrying; duplicate tags are ignored.";
+    $("timelineBulkRetry").hidden = false;
+  } finally { b.busy = false; drawTimelineBulk(); }
+  if (applied){
+    closeTimelineBulk();
+    photoTimeline.dirty.add(b.day);
+    if (photoTimeline.epoch === b.epoch && state.page === "timeline") await refreshTimelineDay(b.day);
+  }
+};
+
+function drawTimelineExtraSelection(){
+  const t = photoTimeline, picker = $("timelineFilterOptions"), summary = $("timelineFilterSummary");
+  picker.classList.toggle("disabled", !t.extraType);
+  summary.setAttribute("aria-disabled", String(!t.extraType));
+  summary.tabIndex = t.extraType ? 0 : -1;
+  summary.textContent = !t.extraType ? "Choose a filter first" : t.extraValue ? t.extraLabel : "Select option…";
+  summary.title = summary.textContent;
+  $("timelineOptionClear").disabled = !t.extraValue;
+}
+
+function drawTimelineOptions(){
+  const list = $("timelineOptionList"); list.replaceChildren();
+  timelineOptions.items.forEach(item => {
+    const button = document.createElement("button");
+    button.type = "button"; button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(item.k === photoTimeline.extraValue));
+    button.dataset.value = item.k; button.title = item.l;
+    const name = document.createElement("span"), count = document.createElement("span");
+    name.className = "name"; name.textContent = item.l;
+    count.className = "n"; count.textContent = nf(item.n);
+    button.append(name, count);
+    button.onclick = () => {
+      photoTimeline.extraValue = item.k; photoTimeline.extraLabel = item.l;
+      $("timelineFilterOptions").open = false;
+      drawTimelineExtraSelection(); resetPhotoTimeline(false); $("timelineFilterSummary").focus();
+    };
+    list.appendChild(button);
+  });
+  $("timelineOptionMore").hidden = timelineOptions.next === null;
+  $("timelineOptionMore").disabled = timelineOptions.loading;
+}
+
+function invalidateTimelineOptions(){
+  clearTimeout(timelineOptionTimer);
+  timelineOptions.epoch++; timelineOptions.items = []; timelineOptions.next = null; timelineOptions.loading = false;
+  if (ctl["timeline-options"]) ctl["timeline-options"].abort();
+  drawTimelineOptions(); $("timelineOptionStatus").textContent = ""; $("timelineOptionRetry").hidden = true;
+}
+
+async function loadTimelineOptions(append = false){
+  if (!photoTimeline.extraType || timelineOptions.loading || (append && timelineOptions.next === null)) return;
+  const epoch = timelineOptions.epoch, field = photoTimeline.extraType;
+  const query = $("timelineOptionSearch").value.trim();
+  timelineOptions.loading = true;
+  $("timelineOptionStatus").textContent = "Loading options…"; $("timelineOptionRetry").hidden = true;
+  drawTimelineOptions();
+  try {
+    const params = timelineParams({field, q:query, limit:30, offset:append ? timelineOptions.next : 0});
+    const data = await ask("timeline-options", "/api/timeline/options?" + params);
+    if (epoch !== timelineOptions.epoch || field !== photoTimeline.extraType || query !== $("timelineOptionSearch").value.trim()) return;
+    if (!Array.isArray(data.items)) throw new Error("Invalid options response");
+    timelineOptions.items = append ? timelineOptions.items.concat(data.items) : data.items;
+    timelineOptions.next = data.next;
+    $("timelineOptionStatus").textContent = !timelineOptions.items.length ? "No matching options."
+      : data.next !== null ? "Search or use More to find other options." : "Choose one option.";
+  } catch (error){
+    if (epoch === timelineOptions.epoch && error.name !== "AbortError"){
+      $("timelineOptionStatus").textContent = "Could not load options."; $("timelineOptionRetry").hidden = false;
+    }
+  } finally {
+    if (epoch === timelineOptions.epoch){ timelineOptions.loading = false; drawTimelineOptions(); }
+  }
+}
+
+$("timelineFilter").onchange = () => {
+  photoTimeline.extraType = $("timelineFilter").value;
+  photoTimeline.extraValue = ""; photoTimeline.extraLabel = ""; $("timelineOptionSearch").value = "";
+  if (!photoTimeline.extraType) $("timelineFilterOptions").open = false;
+  drawTimelineExtraSelection(); resetPhotoTimeline(false);
+  if (photoTimeline.extraType){ $("timelineFilterOptions").open = true; $("timelineOptionSearch").focus(); }
+};
+$("timelineFilterOptions").ontoggle = () => {
+  if ($("timelineFilterOptions").open && photoTimeline.extraType){
+    $("timelineTags").open = false; loadTimelineOptions();
+  }
+};
+let timelineOptionTimer;
+$("timelineOptionSearch").oninput = () => {
+  clearTimeout(timelineOptionTimer); invalidateTimelineOptions();
+  timelineOptionTimer = setTimeout(loadTimelineOptions, 160);
+};
+$("timelineOptionMore").onclick = () => loadTimelineOptions(true);
+$("timelineOptionRetry").onclick = () => loadTimelineOptions(!!timelineOptions.items.length);
+$("timelineOptionClear").onclick = () => {
+  photoTimeline.extraValue = ""; photoTimeline.extraLabel = "";
+  drawTimelineExtraSelection(); resetPhotoTimeline(false);
+};
+$("timelineOptionSearch").onkeydown = event => {
+  if (event.key === "ArrowDown"){
+    event.preventDefault(); $("timelineOptionList").querySelector("button")?.focus();
+  }
+};
+$("timelineOptionList").onkeydown = event => {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const buttons = [...$("timelineOptionList").querySelectorAll("button")];
+  const index = buttons.indexOf(document.activeElement);
+  const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : index + (event.key === "ArrowDown" ? 1 : -1);
+  if (next < 0) $("timelineOptionSearch").focus(); else buttons[Math.min(next, buttons.length - 1)]?.focus();
+};
+$("timelineFilterOptions").addEventListener("keydown", event => {
+  if (event.key === "Escape"){
+    event.preventDefault(); event.stopPropagation();
+    $("timelineFilterOptions").open = false; $("timelineFilterSummary").focus();
+  }
+});
+document.addEventListener("click", event => {
+  if (!$("timelineFilterOptions").contains(event.target) && event.target !== $("timelineFilter"))
+    $("timelineFilterOptions").open = false;
+});
+drawTimelineExtraSelection();
 
 function timelineURL(extra = {}){
-  return "/api/timeline/photos?" + new URLSearchParams({seed:photoTimeline.seed,
-    dir:photoTimeline.order, limit:8, ...extra});
+  return "/api/timeline/photos?" + timelineParams({dir:photoTimeline.order, limit:8, ...extra});
 }
 
 function timelineDayURL(day, extra = {}){
-  return "/api/timeline/day?" + new URLSearchParams({day:day.day, ...extra});
+  return "/api/timeline/day?" + timelineParams({day:day.day, ...extra});
 }
 const timelineItems = day => day.expanded ? day.allItems : day.items;
 const timelinePhotoCount = day => day.expanded ? day.total : day.items.length;
+
+function timelinePhotoGroup(it){
+  const rating = effRating(it);
+  return rating === "great" ? 0 : rating === "bad" ? 2 : 1;
+}
+
+function timelinePhotoOrder(a, b){
+  const group = timelinePhotoGroup(a) - timelinePhotoGroup(b);
+  if (group) return group;
+  // Capture times are stored as sortable YYYY-MM-DD HH:MM:SS strings; parsing
+  // them as browser dates would introduce local timezone differences.
+  const left = a.taken || "\uffff", right = b.taken || "\uffff";
+  return (left < right ? -1 : left > right ? 1 : 0) || a.id - b.id;
+}
+
+function prepareTimelineDay(data, expanded = !photoTimeline.limitDaily){
+  const items = data.items.slice().sort(timelinePhotoOrder);
+  const allItems = items.map(it => ({...it}));
+  return {...data, items, expanded, details:null, allItems, allById:new Map(allItems.map(it => [it.id, it])),
+    serial:0, allNext:allItems.length >= data.total ? null : 0, allLoading:false, allError:false, allTask:null};
+}
+
+function drawTimelineTagSelection(){
+  const selected = photoTimeline.tags;
+  $("timelineTagsSummary").textContent = selected.length ? "Tags: " + selected.length : "Tags: all";
+  $("timelineTagsClear").disabled = !selected.length;
+  $("timelineTagChips").replaceChildren();
+  selected.forEach(tag => {
+    const button = document.createElement("button");
+    button.textContent = tag + " ×"; button.setAttribute("aria-label", "Remove Timeline tag " + tag);
+    button.onclick = () => selectTimelineTag(tag, false);
+    $("timelineTagChips").appendChild(button);
+  });
+  $("timelineTagOptions").querySelectorAll("input").forEach(input => {
+    input.checked = selected.includes(input.value);
+  });
+}
+
+function selectTimelineTag(tag, selected){
+  const tags = photoTimeline.tags;
+  if (selected && !tags.includes(tag)){
+    if (tags.length >= 100){ drawTimelineTagSelection(); return toast("Select up to 100 tags."); }
+    tags.push(tag);
+  } else if (!selected) photoTimeline.tags = tags.filter(value => value !== tag);
+  drawTimelineTagSelection();
+  resetPhotoTimeline(false);
+}
+
+async function loadTimelineTags(){
+  const query = $("timelineTagSearch").value.trim();
+  $("timelineTagStatus").textContent = "Loading tags…";
+  try {
+    const data = await ask("timeline-tags", "/api/tags?limit=40&q=" + encodeURIComponent(query));
+    if (query !== $("timelineTagSearch").value.trim()) return;
+    if (!Array.isArray(data.items)) throw new Error("Invalid tags response");
+    $("timelineTagOptions").replaceChildren();
+    data.items.forEach(item => {
+      const label = document.createElement("label"), input = document.createElement("input");
+      input.type = "checkbox"; input.value = item.tag; input.checked = photoTimeline.tags.includes(item.tag);
+      input.onchange = () => selectTimelineTag(item.tag, input.checked);
+      const count = document.createElement("span"); count.className = "n"; count.textContent = nf(item.n);
+      label.append(input, document.createTextNode(item.tag), count);
+      $("timelineTagOptions").appendChild(label);
+    });
+    $("timelineTagStatus").textContent = data.items.length >= 40 ? "Search to find more tags."
+      : data.items.length ? "Matches any selected tag." : "No tags found.";
+  } catch (error){
+    if (error.name !== "AbortError") $("timelineTagStatus").textContent = "Could not load tags. Reopen to retry.";
+  }
+}
+let timelineTagTimer;
+$("timelineTags").ontoggle = () => {
+  if ($("timelineTags").open){ $("timelineFilterOptions").open = false; loadTimelineTags(); }
+};
+$("timelineTagSearch").oninput = () => {
+  clearTimeout(timelineTagTimer);
+  if (ctl["timeline-tags"]) ctl["timeline-tags"].abort();
+  timelineTagTimer = setTimeout(loadTimelineTags, 160);
+};
+$("timelineTagsClear").onclick = () => {
+  photoTimeline.tags = []; drawTimelineTagSelection(); resetPhotoTimeline(false);
+};
+document.addEventListener("click", event => {
+  if (!$("timelineTags").contains(event.target)) $("timelineTags").open = false;
+});
+$("timelineTags").addEventListener("keydown", event => {
+  if (event.key === "Escape"){
+    event.preventDefault(); $("timelineTags").open = false; $("timelineTagsSummary").focus();
+  }
+});
+drawTimelineTagSelection();
 
 function timelineIndex(y){
   const offsets = photoTimeline.offsets;
@@ -2769,7 +3334,7 @@ function layoutPhotoTimeline(preserve = true, position = null){
   document.documentElement.style.setProperty("--timeline-tools", $("timelineTools").offsetHeight + "px");
   t.offsets = [0];
   t.days.forEach(day => t.offsets.push(t.offsets.at(-1) +
-    Math.max(day.expanded || day.total > day.items.length ? (narrow ? 260 : 160) : 120,
+    Math.max(day.expanded || day.total > day.items.length ? (narrow ? 325 : 215) : 185,
       Math.ceil(timelinePhotoCount(day) / cols) * (tile + 6) - 6) + 32));
   stage.style.height = t.offsets.at(-1) + "px";
   t.mounted.forEach((el, day) => {
@@ -2811,9 +3376,15 @@ function mountTimelineDay(day, index){
   const count = document.createElement("div"); count.className = "count";
   count.textContent = day.expanded ? "All " + nf(day.total) : day.items.length + " of " + nf(day.total);
   const analyse = document.createElement("button"); analyse.className = "tool";
-  analyse.textContent = "Analyse day"; analyse.title = "All " + nf(day.total) + " photos from " + day.day;
+  analyse.textContent = "Analyse day"; analyse.title = "All " + nf(day.archive_total) + " photos from " + day.day;
   analyse.onclick = () => analyseTimelineDay(day.day);
-  date.append(time, count, analyse);
+  const addTags = document.createElement("button"); addTags.className = "tool timeline-add-tags";
+  addTags.textContent = "Add tags"; addTags.title = "Add tags to all photos matching this day's filters";
+  addTags.onclick = () => openTimelineBulk(day);
+  const removeTags = document.createElement("button"); removeTags.className = "tool timeline-remove-tags";
+  removeTags.textContent = "Remove tags"; removeTags.title = "Remove tags from all photos matching this day's filters";
+  removeTags.onclick = () => openTimelineBulk(day, "remove");
+  date.append(time, count, analyse, addTags, removeTags);
   const photos = document.createElement("div"); photos.className = "timeline-photos";
   const actions = document.createElement("div"); actions.className = "timeline-actions";
   const toggle = document.createElement("button"); toggle.className = "tool timeline-toggle-all";
@@ -2838,13 +3409,57 @@ function updateTimelineDayControls(day){
   const row = photoTimeline.mounted.get(day.day);
   if (!row) return;
   const actions = row.querySelector(".timeline-actions"), toggle = actions.querySelector(".timeline-toggle-all");
-  actions.hidden = !day.expanded && day.total <= day.items.length;
+  toggle.hidden = !photoTimeline.limitDaily || day.total <= day.items.length;
+  actions.hidden = toggle.hidden && !day.allLoading && !day.allError;
   toggle.querySelector(".label").textContent = day.expanded ? "Show highlights" : "Show all";
   toggle.querySelector(".remaining").textContent = day.expanded ? "" : "+" + nf(day.total - day.items.length);
   toggle.setAttribute("aria-expanded", String(!!day.expanded));
   toggle.setAttribute("aria-label", (day.expanded ? "Show highlights for " : "Show all photos from ") + day.day);
-  actions.querySelector(".progress").textContent = day.allLoading ? "Loading photos…" : day.allError ? "Could not load photos." : "";
+  actions.querySelector(".progress").textContent = day.allLoading
+    ? "Loading photos… " + nf(day.allItems.length) + "/" + nf(day.total)
+    : day.allError ? "Could not load photos." : "";
   actions.querySelector(".timeline-all-retry").hidden = !day.allError;
+}
+
+function timelinePhotoTitle(it){
+  const present = value => value !== null && value !== undefined && value !== "";
+  const value = (raw, prefix = "", suffix = "") => present(raw) ? prefix + raw + suffix : "—";
+  const lines = [it.filename || "", it.taken || "",
+    "Camera model: " + value(it.camera)];
+  if (present(it.lens)) lines.push("Lens: " + it.lens);
+  lines.push("Focal length: " + value(it.focal, "", " mm") + " · Aperture: " + value(it.fnumber, "f/") +
+    " · ISO: " + value(it.iso) + " · Shutter speed: " + value(it.shutter));
+  const tags = tagsOf(it);
+  if (tags.length) lines.push("Tags: " + tags.join(", "));
+  if (it.comment) lines.push("Comment: " + it.comment);
+  return lines.join("\n");
+}
+
+function updateTimelinePhotoInfo(button, it){
+  button.title = timelinePhotoTitle(it);
+  button.setAttribute("aria-label", button.title);
+  const hasTags = tagsOf(it).length > 0, hasComment = !!it.comment;
+  button.querySelector(".timeline-tags-badge").hidden = !hasTags;
+  button.querySelector(".timeline-comment-badge").hidden = !hasComment;
+  button.querySelector(".timeline-annotations").hidden = !(hasTags || hasComment);
+}
+
+function refreshTimelineAnnotations(it){
+  const annotations = {};
+  if ("tags" in it) annotations.tags = it.tags;
+  if ("comment" in it) annotations.comment = it.comment;
+  photoTimeline.days.forEach(day => {
+    if (day.day !== (it.taken || "").slice(0, 10)) return;
+    [day.items, day.allItems, day.details || []].forEach(items =>
+      items.forEach(photo => { if (photo.id === it.id) Object.assign(photo, annotations); }));
+    const row = photoTimeline.mounted.get(day.day);
+    if (row) row.photoNodes.forEach(button => {
+      if (button.dataset.pid === String(it.id)){
+        const cached = day.allById.get(it.id) || day.items.find(photo => photo.id === it.id);
+        updateTimelinePhotoInfo(button, cached || it);
+      }
+    });
+  });
 }
 
 function createTimelinePhoto(day, it){
@@ -2855,8 +3470,6 @@ function createTimelinePhoto(day, it){
     return button;
   }
   button.dataset.pid = it.id;
-  button.title = it.filename + "\n" + it.taken;
-  button.setAttribute("aria-label", it.filename + ", " + it.taken);
   const placeholder = document.createElement("span"); placeholder.className = "noimg";
   placeholder.textContent = (it.ext || "image").toUpperCase(); button.appendChild(placeholder);
   const rating = effRating(it);
@@ -2865,6 +3478,14 @@ function createTimelinePhoto(day, it){
     badge.textContent = rating === "great" ? "5+" : rating === "bad" ? "✗ bad" : "★".repeat(+rating);
     button.appendChild(badge);
   }
+  const annotations = document.createElement("span"); annotations.className = "timeline-annotations";
+  annotations.setAttribute("aria-hidden", "true");
+  [["timeline-tags-badge", TAG_SVG], ["timeline-comment-badge", NOTE_SVG]].forEach(([name, svg]) => {
+    const badge = document.createElement("span"); badge.className = "timeline-annotation " + name;
+    badge.innerHTML = svg; annotations.appendChild(badge);
+  });
+  button.appendChild(annotations);
+  updateTimelinePhotoInfo(button, it);
   button.onclick = () => openTimelinePhoto(day, it.id, button);
   return button;
 }
@@ -2872,7 +3493,10 @@ function createTimelinePhoto(day, it){
 function renderTimelinePhotos(day, row){
   const t = photoTimeline, photos = row.querySelector(".timeline-photos");
   photos.classList.toggle("expanded", !!day.expanded);
-  const items = timelineItems(day), count = timelinePhotoCount(day);
+  // Until all lightweight records arrive, unknown photos might belong before
+  // any loaded one. Keep placeholders instead of moving visible photos later.
+  const items = day.expanded && day.allNext !== null ? [] : timelineItems(day);
+  const count = timelinePhotoCount(day);
   let from = 0, until = count;
   if (day.expanded){
     photos.style.height = Math.max(0, Math.ceil(count / t.cols) * (t.tile + 6) - 6) + "px";
@@ -2903,6 +3527,7 @@ function renderTimelinePhotos(day, row){
 }
 
 function toggleTimelineDay(day){
+  if (!photoTimeline.limitDaily) return;
   const t = photoTimeline, position = timelinePosition();
   day.expanded = !day.expanded;
   day.details = null;
@@ -2919,23 +3544,37 @@ function toggleTimelineDay(day){
 }
 
 function loadAllTimelineDay(day){
+  if (day.refreshing) return Promise.resolve();
   if (day.allTask) return day.allTask;
   if (day.allNext === null) return Promise.resolve();
-  const t = photoTimeline, epoch = t.epoch;
+  const t = photoTimeline, epoch = t.epoch, serial = day.serial;
   day.allLoading = true; day.allError = false; updateTimelineDayControls(day);
-  const task = ask("timeline-all-" + day.day, timelineDayURL(day, {offset:day.allNext})).then(data => {
-    if (epoch !== t.epoch || !t.days.includes(day)) return;
-    if (!Array.isArray(data.items)) throw new Error("Invalid day response");
-    const position = timelinePosition();
-    data.items.forEach(it => {
-      const cached = day.allById.get(it.id);
-      if (cached) Object.assign(cached, it);
-      else { day.allItems.push(it); day.allById.set(it.id, it); }
-    });
-    day.total = data.total; day.allNext = data.next;
-    layoutPhotoTimeline(true, position);
-  }).catch(e => { if (e.name !== "AbortError") day.allError = true; })
+  const task = (async () => {
+    do {
+      const offset = day.allNext;
+      const data = await ask("timeline-all-" + day.day, timelineDayURL(day, {offset, limit:500}));
+      if (epoch !== t.epoch || serial !== day.serial || !t.days.includes(day)) return;
+      if (!Array.isArray(data.items) || (data.next !== null && data.next <= offset))
+        throw new Error("Invalid day response");
+      data.items.forEach(it => {
+        const cached = day.allById.get(it.id);
+        if (cached) Object.assign(cached, it);
+        else { day.allItems.push(it); day.allById.set(it.id, it); }
+      });
+      day.total = data.total; day.allNext = data.next;
+      updateTimelineDayControls(day);
+      // Only visible expanded days prefetch metadata. Leaving a day or
+      // collapsing it pauses after this batch; remounting resumes the cursor.
+    } while (day.allNext !== null && day.expanded &&
+             (t.mounted.has(day.day) || state.timelineDay === day));
+    if (day.allNext === null) day.allItems.sort(timelinePhotoOrder);
+    layoutPhotoTimeline(true, timelinePosition());
+  })().catch(e => {
+    if (epoch === t.epoch && serial === day.serial && t.days.includes(day) && e.name !== "AbortError")
+      day.allError = true;
+  })
     .finally(() => {
+      if (epoch !== t.epoch || serial !== day.serial || !t.days.includes(day)) return;
       day.allLoading = false; day.allTask = null;
       updateTimelineDayControls(day); schedulePhotoTimeline();
     });
@@ -2985,7 +3624,7 @@ function timelineStatus(){
   $("timelineRetry").hidden = !t.error;
   $("timelineStatus").textContent = t.loading ? "Loading days…" : t.error
     ? "Could not load the timeline. Your place is kept; try again."
-    : !t.days.length ? "No eligible photos with a date yet."
+    : !t.days.length ? "No dated photos match the Timeline filters."
     : t.ended ? "End of timeline · " + nf(t.days.length) + " days"
     : nf(t.days.length) + " days loaded · Scroll for more";
 }
@@ -3000,7 +3639,7 @@ function loadTimelineDays(){
     if (epoch !== t.epoch) return;
     if (!Array.isArray(data.days)) throw new Error("Invalid timeline response");
     const known = new Set(t.days.map(day => day.day));
-    t.days.push(...data.days.filter(day => !known.has(day.day)));
+    t.days.push(...data.days.filter(day => !known.has(day.day)).map(day => prepareTimelineDay(day)));
     t.next = data.next; t.ended = !data.next;
     state.files = !!data.files;
     if (data.version) $("ver").textContent = "v" + data.version;
@@ -3015,17 +3654,30 @@ function loadTimelineDays(){
 
 function resetPhotoTimeline(reshuffle = true){
   const t = photoTimeline;
+  closeTimelineBulk();
+  closeDetail();
   t.epoch++; t.days = []; t.offsets = [0]; t.mounted.clear(); t.dirty.clear(); t.updating.clear();
   t.next = null; t.started = false; t.loading = false; t.ended = false; t.error = false; t.scrollY = 0;
   if (reshuffle) t.seed = timelineSeed();
-  if (ctl["timeline-days"]) ctl["timeline-days"].abort();
-  if (ctl["timeline-detail"]) ctl["timeline-detail"].abort();
+  Object.keys(ctl).filter(key => key.startsWith("timeline-") && key !== "timeline-tags")
+    .forEach(key => ctl[key].abort());
+  invalidateTimelineOptions();
+  if ($("timelineFilterOptions").open && t.extraType) loadTimelineOptions();
   $("timelineStage").replaceChildren(); $("timelineStage").style.height = "0px";
   window.scrollTo(0, 0);
   loadTimelineDays();
 }
 $("timelineRefresh").onclick = () => resetPhotoTimeline();
 $("timelineRetry").onclick = loadTimelineDays;
+$("timelineRating").onchange = () => {
+  photoTimeline.ratingMode = $("timelineRating").value; resetPhotoTimeline(false);
+};
+$("timelineUnrated").onchange = () => {
+  photoTimeline.includeUnrated = $("timelineUnrated").checked; resetPhotoTimeline(false);
+};
+$("timelineLimit").onchange = () => {
+  photoTimeline.limitDaily = $("timelineLimit").checked; resetPhotoTimeline(false);
+};
 $("timelineOrder").onchange = () => {
   photoTimeline.order = $("timelineOrder").value;
   try { localStorage.setItem("timelineOrder", photoTimeline.order); } catch (e){}
@@ -3057,34 +3709,77 @@ async function openTimelinePhoto(day, id, button = null, deck = null){
 
 function refreshTimelineDay(value){
   const t = photoTimeline;
-  if (t.updating.has(value)) return t.updating.get(value);
+  const day = t.days.find(day => day.day === value);
+  if (!day) return Promise.resolve();
   const epoch = t.epoch;
-  const task = ask("timeline-day-" + value, timelineURL({day:value})).then(data => {
-    if (epoch !== t.epoch) return;
+  const serial = ++day.serial;
+  day.refreshing = true;
+  if (ctl["timeline-all-" + value]) ctl["timeline-all-" + value].abort();
+  day.allTask = null; day.allLoading = false;
+  const task = ask("timeline-day-" + value, timelineURL({day:value})).then(async data => {
+    if (epoch !== t.epoch || t.updating.get(value) !== task) return;
     if (!Array.isArray(data.days)) throw new Error("Invalid timeline response");
     const index = t.days.findIndex(day => day.day === value);
     if (index < 0) return;
     const position = timelinePosition();
     const row = t.mounted.get(value);
     if (row){ row.remove(); t.mounted.delete(value); }
-    const day = t.days[index];
-    if (data.days.length) Object.assign(day, data.days[0], {details:null});
-    else if (day.expanded){ day.items = []; day.details = null; }
+    if (data.days.length)
+      Object.assign(day, prepareTimelineDay(data.days[0], day.expanded), {serial, refreshing:false});
     else t.days.splice(index, 1);
     t.dirty.delete(value);
     layoutPhotoTimeline(true, position); timelineStatus();
-  }).catch(e => { if (e.name !== "AbortError") toast("Could not update the day. Use Refresh to retry."); })
-    .finally(() => { if (epoch === t.epoch) t.updating.delete(value); });
+    if (state.timelineDay === day){
+      if (!data.days.length || !matchesTimelinePhoto(state.shown)) closeDetail();
+      else {
+        // A rating change can move the open photo far down a large day. Rebind
+        // its navigation to the new order once the page containing it arrives.
+        while (day.expanded && !day.allById.has(state.shown.id) && day.allNext !== null && !day.allError){
+          await loadAllTimelineDay(day);
+          if (epoch !== t.epoch || t.updating.get(value) !== task || state.timelineDay !== day) return;
+        }
+        state.deck = timelineItems(day);
+      }
+    }
+  }).catch(e => {
+    if (epoch === t.epoch && t.updating.get(value) === task && e.name !== "AbortError")
+      toast("Could not update the day. Use Refresh to retry.");
+  }).finally(() => {
+    if (epoch !== t.epoch || t.updating.get(value) !== task) return;
+    day.refreshing = false; t.updating.delete(value);
+    if (state.timelineDay === day){
+      $("detail").querySelector(".nav.prev").disabled = !canStep(-1);
+      $("detail").querySelector(".nav.next").disabled = !canStep(1);
+    }
+    schedulePhotoTimeline();
+  });
   t.updating.set(value, task);
   return task;
 }
 
-function refreshTimelineRating(it){
+function matchesTimelinePhoto(it){
+  const t = photoTimeline, rating = effRating(it);
+  const matchesRating = !rating ? t.includeUnrated : t.ratingMode === "all" ||
+    (t.ratingMode === "great" ? rating === "great" : ["great", "5", "4"].includes(rating));
+  let matchesExtra = true;
+  if (t.extraType && t.extraValue){
+    const column = t.extraType === "aperture" ? "fnumber" : t.extraType;
+    const value = it[column];
+    if (t.extraValue === NONE) matchesExtra = value === null || value === undefined;
+    else if (["focal", "aperture"].includes(t.extraType)){
+      const [lo, hi] = t.extraValue.split("-").map(Number);
+      matchesExtra = value !== null && value !== undefined && value >= lo && value < hi;
+    } else matchesExtra = String(value) === t.extraValue;
+  }
+  return matchesRating && matchesExtra && (!t.tags.length || tagsOf(it).some(tag => t.tags.includes(tag)));
+}
+
+function refreshTimelinePhoto(it){
   const t = photoTimeline, value = (it.taken || "").slice(0, 10);
   const day = t.days.find(day => day.day === value);
   if (!day) return;
   const cached = day.allById?.get(it.id);
-  if (cached){ cached.mark = it.mark; cached.rating = it.rating; }
+  if (cached){ cached.mark = it.mark; cached.rating = it.rating; cached.tags = it.tags; }
   day.details = null;
   t.dirty.add(value);
   if (state.page === "timeline") refreshTimelineDay(value);
@@ -3096,7 +3791,7 @@ function showPage(){
   // otherwise the second callback can undo the user's next scroll.
   if (state.pageShown === page) return;
   state.pageShown = page;
-  if (state.page !== page) closeDetail();
+  if (state.page !== page){ closeDetail(); closeTimelineBulk(); }
   if (state.page === "timeline" && page !== "timeline"){
     photoTimeline.scrollY = window.scrollY;
     // Pending thumbnails are dropped while this page is hidden. Remounting
