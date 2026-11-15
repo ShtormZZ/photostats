@@ -770,12 +770,20 @@ def main():
                 try:
                     port_file = Path(folder) / "profile/DevToolsActivePort"
                     deadline = time.monotonic() + 45
-                    while not port_file.exists():
+                    while True:
+                        try:
+                            # Chromium can create the file before releasing its
+                            # Windows write lock or finishing the first line.
+                            port = int(port_file.read_text(encoding="utf-8").splitlines()[0])
+                            if not 0 < port < 65536:
+                                raise ValueError("Invalid DevTools port")
+                            break
+                        except (OSError, ValueError, IndexError):
+                            pass
                         if process.poll() is not None or time.monotonic() > deadline:
                             log.seek(0)
                             raise RuntimeError("Chromium did not start: " + log.read().decode(errors="replace")[-1500:])
                         time.sleep(0.05)
-                    port = int(port_file.read_text().splitlines()[0])
                     with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as response:
                         pages = json.load(response)
                     page = next(page for page in pages if page["type"] == "page")
