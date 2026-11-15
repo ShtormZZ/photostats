@@ -1082,4 +1082,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows CI may use a Western console code page; fixtures include Cyrillic.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

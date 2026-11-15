@@ -61,7 +61,8 @@ All notable changes to this project are documented here. The format follows
   Database regression tests and a reproducible, privacy-preserving benchmark cover
   migrations, concurrency, rollback and Timeline distributions. Server request
   connections are closed explicitly. Smoke and licence checks no longer hide an
-  incorrect page or reject a valid licence because of line wrapping.
+  incorrect page or reject a valid licence because of line wrapping. Test output
+  uses UTF-8 on Windows; SQLite failure-injection checks support Python 3.10.
 
 - **Timeline** has independent multi-tag selection (match any), three rating
   modes (good to bad, good only, 5+ only), an Include unrated toggle and an

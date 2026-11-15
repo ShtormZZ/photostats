@@ -216,8 +216,11 @@ class DatabaseTests(unittest.TestCase):
         schema.maintain_statistics(con)
         before = schema._get(con, "planner_maintenance")
         con.set_authorizer(lambda action, *args: sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_ANALYZE else sqlite3.SQLITE_OK)
-        self.assertEqual(schema.maintain_statistics(con, force=True)["result"], "error")
-        con.set_authorizer(None)
+        try:
+            self.assertEqual(schema.maintain_statistics(con, force=True)["result"], "error")
+        finally:
+            # Python 3.10 cannot disable an authorizer with None (added in 3.11).
+            con.set_authorizer(lambda *args: sqlite3.SQLITE_OK)
         self.assertEqual(schema._get(con, "planner_maintenance"), before)
         self.assertIsNotNone(schema._get(con, "planner_error"))
         self.assertEqual(schema.maintain_statistics(con, force=True)["result"], "ok")
