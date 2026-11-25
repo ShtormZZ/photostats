@@ -55,6 +55,7 @@ All notable changes to this project are documented here. The format follows
 
 - The web navigation calls the folder tree **Folders**. Existing links to the
   tree still work. The launcher uses the same dark palette as the web interface.
+- The Timeline tag menu stays within narrow screens when the toolbar wraps.
 
 ## [1.16.0] — 2026-11-15
 
