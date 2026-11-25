@@ -27,6 +27,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app
 import db_schema as schema
+import raw_pairs
 
 DISTRIBUTIONS = ("unrated", "bad", "great", "sparse", "large-day")
 
@@ -56,17 +57,17 @@ def synthetic(con, rows, distribution, seed):
                    taken.strftime("%Y-%m"), taken.day, taken.hour, taken.weekday(), "exif",
                    "Fixture", f"Camera {i % 3}", f"Lens {i % 4}", 50, 75, 100, 2.8,
                    "1/125", 0.008, 4000, 3000, mark, rating,
-                   "green", 0.8, 0.5, 0.1, 0.6, 12, 8)
+                   "green", 0.8, 0.5, 0.1, 0.6, 12, 8, raw_pairs.stem(f"Фото-{i}.jpg"))
     columns = ("path,folder,filename,ext,size,taken,year,month,ym,day,hour,weekday,date_src,"
                "brand,camera,lens,focal,focal35,iso,fnumber,shutter,exposure,width,height,"
-               "mark,rating,color,color_share,brightness,contrast,chroma,sharp_center,sharp_edge")
+               "mark,rating,color,color_share,brightness,contrast,chroma,sharp_center,sharp_edge,pair_stem")
     with con:
         con.executemany(f"INSERT INTO photos({columns}) VALUES ({','.join('?' for _ in columns.split(','))})",
                         records())
 
 
 def scenarios(con):
-    day = con.execute("SELECT date(taken) FROM photos WHERE date(taken) IS NOT NULL "
+    day = con.execute("SELECT date(taken) FROM visible_photos WHERE date(taken) IS NOT NULL "
                       "GROUP BY 1 ORDER BY COUNT(*) DESC, 1 LIMIT 1").fetchone()
     day = day[0] if day else "2020-01-01"
     return {
@@ -84,7 +85,7 @@ def scenarios(con):
 def plan(con):
     key = schema.rating_key()
     return [row[3] for row in con.execute(
-        f"EXPLAIN QUERY PLAN SELECT taken FROM photos WHERE taken >= ? AND taken < ? "
+        f"EXPLAIN QUERY PLAN SELECT taken FROM visible_photos WHERE taken >= ? AND taken < ? "
         f"AND date(taken) IS NOT NULL AND ({key} IS NULL OR {key} IN ('great','5','4')) "
         "ORDER BY taken DESC LIMIT 1", ("0001-01-01", "9999-12-32"))]
 
@@ -129,7 +130,9 @@ def measure(path, urls, warmups, repeats):
 
 
 def run(path, warmups, repeats, source, distribution, seed):
-    with closing(sqlite3.connect(path)) as con:
+    # Source catalogues may predate visible_photos. Migrate only the disposable
+    # copy before measuring requests; planner maintenance stays a separate step.
+    with closing(schema.open_database(path, maintenance=False)) as con:
         urls, _ = scenarios(con)
         rows = con.execute("SELECT COUNT(*) FROM photos").fetchone()[0]
         before_plan = plan(con)

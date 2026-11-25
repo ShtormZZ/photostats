@@ -29,6 +29,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = 8731
@@ -529,17 +531,17 @@ def tag_checks(db, photos):
           set(api("/api/photos", limit=1)["items"][0]["tags"].split(",")) ==
           {"kids", "море"})
 
-    # A row dropped from photos must take its tags with it, or the panel counts
-    # photos that can no longer be shown. The scanner deletes such rows itself;
-    # here one is made and removed outright, which is the same delete.
+    # A row dropped from photos must take its tags with it.
+    ghost_path = Path(photos) / "gone.jpg"
+    ghost_path.touch()
     con = sqlite3.connect(db, timeout=15)
-    con.execute("INSERT INTO photos (path, filename) VALUES (?, ?)",
-                (os.path.join(photos, "gone.jpg"), "gone.jpg"))
+    con.execute("INSERT INTO photos (path, filename) VALUES (?, ?)", (str(ghost_path), ghost_path.name))
     ghost = con.execute("SELECT id FROM photos WHERE filename = 'gone.jpg'"
                         ).fetchone()[0]
     con.commit()
     con.close()
     put(ghost, "ghost")
+    ghost_path.unlink()
     con = sqlite3.connect(db, timeout=15)
     con.execute("DELETE FROM photos WHERE id = ?", (ghost,))
     con.commit()
@@ -659,18 +661,19 @@ def directory_checks(db, photos):
         (base + "-copy", "red", 0.5, 15, 20),
         (os.path.join(photos, "ФотографииX100XYZ!", "child"), "red", 0.5, 15, 20),
     ]
-    # Exceed even the old flat folder endpoint's maximum, without creating files.
+    # Exceed even the old flat folder endpoint's maximum.
     specs.extend((os.path.join(photos, "many", f"folder-{i}"), None, None, None, None)
                  for i in range(2005))
-    if os.name == "nt":
-        specs.append((r"\\archive-server\photos\trip", "red", 0.5, 15, 20))
+    paths = [Path(folder) / f"directory-{i}.jpg" for i, (folder, *_metrics) in enumerate(specs)]
     try:
+        for path in paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
         con.executemany(
             "INSERT INTO photos (path, folder, filename, size, color, brightness,"
             " sharp_center, sharp_edge, sharp_v) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
-            [(os.path.join(folder, f"directory-{i}.jpg"), folder,
-              f"directory-{i}.jpg", 100 + i, color, light, center, edge)
-             for i, (folder, color, light, center, edge) in enumerate(specs)])
+            [(str(path), folder, path.name, 100 + i, color, light, center, edge)
+             for i, (path, (folder, color, light, center, edge)) in enumerate(zip(paths, specs))])
         con.commit()
         data = api("/api/directories")
         nodes = {item["path"]: item for item in data["items"]}
@@ -699,13 +702,12 @@ def directory_checks(db, photos):
         for root in roots:
             check("root directory can be selected: " + root["path"],
                   api("/api/photos", folder=root["path"])["total"] == root["n"])
-        if os.name == "nt":
-            check("UNC shares keep their own tree root",
-                  any(item["path"] == "\\\\archive-server\\photos\\" for item in roots))
     finally:
         con.execute("DELETE FROM photos WHERE id > ?", (last_id,))
         con.commit()
         con.close()
+        for path in paths:
+            path.unlink(missing_ok=True)
     check("tree refresh removes deleted scan records", api("/api/directories") == before)
 
     # Exercise the empty state with an isolated database; never empty the archive
@@ -725,6 +727,15 @@ def directory_checks(db, photos):
             empty_timeline = web_app.app.test_client().get("/api/timeline/photos").get_json()
             check("empty timeline ends without a cursor",
                   empty_timeline["days"] == [] and empty_timeline["next"] is None)
+            if os.name == "nt":
+                folder = r"\\archive-server\photos\trip"
+                with closing(sqlite3.connect(empty_db)) as unc, unc:
+                    unc.execute("INSERT INTO photos (path, folder) VALUES (?, ?)",
+                                (os.path.join(folder, "frame.jpg"), folder))
+                tree = web_app.app.test_client().get("/api/directories").get_json()
+                check("UNC shares keep their own tree root",
+                      any(item["path"] == "\\\\archive-server\\photos\\" and item["parent"] is None
+                          for item in tree["items"]))
         finally:
             web_app.DB_PATH = previous
 
@@ -762,13 +773,16 @@ def timeline_checks(db, photos):
     add("2010-01-08", 4, n=2, source="file")
     add("2010-02-30", 5)
     add(None, 5)
+    paths = [Path(photos) / f"timeline-{i}.jpg" for i in range(len(specs))]
     try:
+        for path in paths:
+            path.touch()
         con.executemany(
             "INSERT INTO photos (path, folder, filename, ext, size, taken, date_src, rating, mark)"
             " VALUES (?, ?, ?, 'jpg', 100000, ?, ?, ?, ?)",
-            [(os.path.join(photos, f"timeline-{i}.jpg"), photos, f"timeline-{i}.jpg",
+            [(str(path), photos, path.name,
               day + " 12:00:00" if day else None, source, rating, mark)
-             for i, (day, rating, mark, source) in enumerate(specs)])
+             for path, (day, rating, mark, source) in zip(paths, specs)])
         con.commit()
         first = api("/api/timeline/photos", dir="asc", limit=2, seed="smoke")
         check("timeline starts with oldest eligible days on request",
@@ -889,6 +903,8 @@ def timeline_checks(db, photos):
         con.execute("DELETE FROM photos WHERE id > ?", (last_id,))
         con.commit()
         con.close()
+        for path in paths:
+            path.unlink(missing_ok=True)
 
 
 def main():

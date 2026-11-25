@@ -52,19 +52,31 @@ def dup_key(alias="", by_sig=False):
     return name_key(alias)
 
 
-def sigs_complete(con):
+def available_where(con):
+    """Compatibility with catalogues read without running migrations."""
+    return ("missing = 0" if any(row[1] == "missing" for row in
+                                 con.execute("PRAGMA table_info(photos)")) else "1")
+
+
+def sigs_complete(con, visible_only=False):
     """Does every photo have a signature?
 
     A database from an earlier version does not know the sig column yet. That is
     not an error and no reason to fall over: it means the signature pass was never
     run, and the name stays the key.
+
+    The interface checks visible photos; folder checks include physical RAW
+    companions too. An unsigned hidden file must not change the JPG duplicate rule.
     """
+    table = "visible_photos" if visible_only else "photos"
     try:
-        miss, = con.execute(
-            "SELECT COUNT(*) FROM photos WHERE sig IS NULL").fetchone()
+        present = available_where(con)
+        any_files, unsigned = con.execute(
+            f"SELECT EXISTS (SELECT 1 FROM {table} WHERE {present}), "
+            f"EXISTS (SELECT 1 FROM {table} WHERE {present} AND sig IS NULL)").fetchone()
     except sqlite3.OperationalError:
         return False
-    return miss == 0
+    return bool(any_files and not unsigned)
 
 
 def rule_name(by_sig):

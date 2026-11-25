@@ -29,7 +29,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Compile
-        run: python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py db_schema.py tools
+        run: python -m compileall -q scan.py app.py launcher.py version.py dupkey.py raw_pairs.py rescan.py tags.py jobs.py db_schema.py tools
 
       - name: License file
         run: python tools/check_license.py
@@ -42,6 +42,12 @@ jobs:
 
       - name: Timeline API filters and paging
         run: python tools/test_timeline.py
+
+      - name: RAW and JPEG pairing
+        run: python tools/test_raw_pairs.py
+
+      - name: Folder reconciliation
+        run: python tools/test_rescan.py
 
       - name: Timeline browser
         run: |

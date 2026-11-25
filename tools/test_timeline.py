@@ -41,16 +41,18 @@ def make_fixture(path):
                       lens=None if number % 11 == 0 else f"Lens {number % 83:02d}",
                       focal=(None, 14.9, 15, 20.99, 21, 24.99, 25, 28.99, 29, 35.9,
                              36, 50.9, 51, 71, 106, 201, 601, 700)[number % 18],
+                      focal35=(None, 14.9, 15, 20.99, 21, 24.99, 25, 28.99, 29, 35.9,
+                               36, 50.9, 51, 71, 106, 201, 601, 700)[(number + 5) % 18],
                       aperture=(None, 1.4, 1.5, 2, 2.1, 2.8, 3, 4, 4.3, 5.6, 6, 8,
                                 8.5, 11, 12, 16, 17, 22, 24, 32)[number % 20])
         if number % 83 == 82 and record["lens"] is not None:
             record["lens"] = "Юпитер ' %_! 50 mm"
     with con:
-        con.executemany("INSERT INTO photos(id,path,filename,ext,size,taken,year,month,ym,rating,mark,camera,lens,focal,fnumber) "
-                        "VALUES (?,?,?,'jpg',100000,?,2020,1,'2020-01',?,?,?,?,?,?)",
+        con.executemany("INSERT INTO photos(id,path,filename,ext,size,taken,year,month,ym,rating,mark,camera,lens,focal,focal35,fnumber) "
+                        "VALUES (?,?,?,'jpg',100000,?,2020,1,'2020-01',?,?,?,?,?,?,?)",
                         [(r["id"], f"fixture/{r['id']}.jpg", f"fixture-{r['id']}.jpg",
                           r["day"] + " 12:00:00", r["rating"], r["mark"], r["camera"], r["lens"],
-                          r["focal"], r["aperture"]) for r in records])
+                          r["focal"], r["focal35"], r["aperture"]) for r in records])
         con.executemany("INSERT INTO photo_tags VALUES (?,?)",
                         [(r["id"], tag) for r in records for tag in sorted(r["tags"])])
     db_schema.maintain_statistics(con)
@@ -128,6 +130,20 @@ class TimelineTests(unittest.TestCase):
         b = self.get("/api/timeline/photos", tag="и\u0306", seed="fixed")
         self.assertEqual(a, b)
 
+    def test_portfolio_candidates_keep_highlight_priority_filters_and_bounds(self):
+        query = dict(day="2020-01-03", rating_mode="all", unrated=1, tag="kids", seed="portfolio")
+        expected = [r["id"] for r in self.expected(query["day"], "all", True, ["kids"], "portfolio")]
+        normal = self.get("/api/timeline/photos", **query)["days"][0]
+        self.assertNotIn("highlight_ids", normal)
+        for requested, count in ((1, 15), (37, 37), (10000, 500)):
+            result = self.get("/api/timeline/photos", **query, photo_limit=requested)["days"][0]
+            self.assertEqual(result["highlight_ids"], expected[:count])
+            self.assertEqual([it["id"] for it in result["items"]], expected[:count])
+            self.assertEqual(result["total"], len(expected))
+            details = self.get("/api/timeline/photos", **query, photo_limit=requested, details=1)["days"][0]
+            self.assertEqual(details["highlight_ids"], result["highlight_ids"])
+        self.assertEqual(self.client.get("/api/timeline/photos", query_string={**query, "photo_limit":"bad"}).status_code, 400)
+
     def test_date_cursors_skip_nonmatching_days_in_both_directions(self):
         for mode, unrated, selected in (("all", 0, ["море"]), ("good", 0, ["kids"]),
                                        ("great", 1, ["kids"]), ("good", 1, ["other"])):
@@ -187,11 +203,12 @@ class TimelineTests(unittest.TestCase):
                 query = dict(extra_type=field, extra_value=value, rating_mode="all", unrated=1,
                              tag=["kids", "море"], seed="extra", day="2020-01-03")
                 source = self.expected(query["day"], "all", True, query["tag"], "extra")
+                column = "focal35" if field == "focal" else field
                 if value == app.NONE_KEY:
-                    expected = [r["id"] for r in source if r[field] is None]
+                    expected = [r["id"] for r in source if r[column] is None]
                 elif field in ("focal", "aperture"):
                     lo, hi = map(float, value.split("-"))
-                    expected = [r["id"] for r in source if r[field] is not None and lo <= r[field] < hi]
+                    expected = [r["id"] for r in source if r[column] is not None and lo <= r[column] < hi]
                 else:
                     expected = [r["id"] for r in source if str(r[field]) == value]
                 result = self.get("/api/timeline/photos", **query)
@@ -213,6 +230,63 @@ class TimelineTests(unittest.TestCase):
                 if excluded:
                     self.assertEqual(self.client.get("/api/timeline/day", query_string={**query, "photo": excluded}).status_code, 404)
         self.assertEqual(self.get("/api/timeline/photos", extra_type="camera", extra_value="missing")["days"], [])
+
+    def test_focal_filter_uses_equivalent_values_in_lists_cards_and_bulk_tags(self):
+        # Equivalent and actual values deliberately disagree, including missing
+        # metadata on either side and both half-open range boundaries.
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("UPDATE photos SET focal35=NULL WHERE id <= 20")
+            con.executemany("UPDATE photos SET focal=?, focal35=? WHERE id=?",
+                            [(24, 36, 1), (50, 75, 2), (200, 50.999, 3), (50, None, 4),
+                             (None, 40, 5), (40, 51, 6), (100, 35.999, 7)])
+            con.executemany("INSERT INTO photo_tags VALUES (?,'focaltest')", [(pid,) for pid in range(1, 21)])
+        scope = dict(rating_mode="all", unrated=1, tag="focaltest", seed="equivalent")
+        options = self.get("/api/timeline/options", **scope, field="focal")
+        self.assertEqual({item["k"]: item["n"] for item in options["items"]},
+                         {"29-36": 1, "36-51": 3, "51-71": 1, "71-86": 1, app.NONE_KEY: 14})
+        self.assertEqual(options, self.get("/api/timeline/options", **scope, field="focal", eq=0))
+        self.assertEqual(options, self.get("/api/timeline/options", **scope, field="focal", eq=1))
+        query = dict(**scope, extra_type="focal", extra_value="36-51")
+        discovery = self.get("/api/timeline/photos", **query)
+        self.assertEqual([day["day"] for day in discovery["days"]], ["2020-01-01"])
+        day = discovery["days"][0]
+        self.assertEqual(day["total"], 3)
+        self.assertEqual(day["archive_total"], 20)
+        self.assertEqual({item["id"] for item in day["items"]}, {1, 3, 5})
+        self.assertTrue(all(36 <= item["focal35"] < 51 for item in day["items"]))
+        query["day"] = day["day"]
+        self.assertEqual(self.get("/api/timeline/photos", **query, eq=0),
+                         self.get("/api/timeline/photos", **query, eq=1))
+        result, offset = [], 0
+        while True:
+            page = self.get("/api/timeline/day", **query, limit=1, offset=offset)
+            result.extend(item["id"] for item in page["items"])
+            if page["next"] is None:
+                break
+            offset = page["next"]
+        self.assertEqual(set(result), {1, 3, 5})
+        self.assertEqual(len(result), 3)
+        card = self.get("/api/timeline/day", **query, photo=5)["items"][0]
+        self.assertIsNone(card["focal"])
+        self.assertEqual(card["focal35"], 40)
+        for excluded in (2, 4, 6, 7):
+            self.assertEqual(self.client.get("/api/timeline/day", query_string={**query, "photo": excluded}).status_code, 404)
+        missing = self.get("/api/timeline/day", **{**query, "extra_value": app.NONE_KEY})
+        self.assertEqual(missing["total"], 14)
+        self.assertIn(4, {item["id"] for item in missing["items"]})
+        self.assertNotIn(5, {item["id"] for item in missing["items"]})
+        for operation, field in (("add", "add_tag"), ("remove", "remove_tag")):
+            endpoint = "/api/timeline/day/tags"
+            preview = self.get(endpoint, **query, operation=operation, **{field: "selected"})
+            self.assertEqual(preview["matched"], 3)
+            self.assertEqual(preview["hidden"], 17)
+            self.assertEqual(preview["changed"], 3)
+            response = self.client.post(endpoint, query_string={**query, "operation": operation},
+                                        data={field: "selected", "revision": preview["revision"]})
+            self.assertEqual(response.status_code, 200, response.data)
+            with closing(sqlite3.connect(self.path)) as con:
+                actual = {pid for pid, in con.execute("SELECT photo_id FROM photo_tags WHERE tag='selected'")}
+            self.assertEqual(actual, {1, 3, 5} if operation == "add" else set())
 
     def test_extra_option_search_paging_and_single_selection(self):
         query = dict(field="camera", rating_mode="all", unrated=1, limit=7)
@@ -246,11 +320,12 @@ class TimelineTests(unittest.TestCase):
     def test_extra_ranges_match_statistics_and_years_sort_newest_first(self):
         for field, buckets in (("focal", app.FOCAL_BUCKETS), ("aperture", app.APERTURE_BUCKETS)):
             options = self.get("/api/timeline/options", field=field, rating_mode="all")["items"]
+            column = "focal35" if field == "focal" else field
             expected = [{"k": f"{lo}-{hi}", "l": label,
-                         "n": sum(1 for r in self.records if r[field] is not None and lo <= r[field] < hi)}
+                         "n": sum(1 for r in self.records if r[column] is not None and lo <= r[column] < hi)}
                         for lo, hi, label in buckets]
             expected = [item for item in expected if item["n"]]
-            missing = sum(1 for r in self.records if r[field] is None)
+            missing = sum(1 for r in self.records if r[column] is None)
             if missing:
                 expected.append({"k": app.NONE_KEY, "l": app.NONE_LABEL, "n": missing})
             self.assertEqual(options, expected)
@@ -285,20 +360,30 @@ class TimelineTests(unittest.TestCase):
 
     def test_thumbnail_metadata_in_highlights_and_day_pages(self):
         with closing(sqlite3.connect(self.path)) as con, con:
-            con.execute("UPDATE photos SET camera=?, lens=?, focal=50, fnumber=2.8, iso=800, "
-                        "shutter='1/125', comment=? WHERE id=1",
+            con.execute("UPDATE photos SET camera=?, lens=?, focal=50, fnumber=2.8, iso=800, width=4000, height=6000, "
+                        "shutter='1/125', comment=?, color_hex='#135a7c', sharp_center=55, sharp_edge=12 WHERE id=1",
                         ("Camera <model>", "Lens '50' & 85", "Заметка <b> & \"text\""))
+            con.execute("UPDATE photos SET sharp_center=54.9, sharp_edge=23 WHERE id=2")
+            con.execute("UPDATE photos SET sharp_center=60 WHERE id=9")
             con.executemany("INSERT INTO photo_tags VALUES (1,?)", [("море",), ("тест",)])
         query = dict(day="2020-01-01", seed="metadata", rating_mode="all", unrated=1)
         highlights = self.get("/api/timeline/photos", **query)["days"][0]["items"]
         page = self.get("/api/timeline/day", **query, limit=500)["items"]
         for records in (highlights, page):
             record = next(record for record in records if record["id"] == 1)
+            self.assertEqual((record["width"], record["height"]), (4000, 6000))
             self.assertEqual({key: record[key] for key in ("camera", "lens", "focal", "fnumber", "iso", "shutter", "tags", "comment")},
                              {"camera": "Camera <model>", "lens": "Lens '50' & 85", "focal": 50,
                               "fnumber": 2.8, "iso": 800, "shutter": "1/125", "tags": "море,тест",
                               "comment": "Заметка <b> & \"text\""})
-            self.assertTrue(all(key not in record for key in ("path", "folder", "lat", "lon", "sharp_center", "color")))
+            self.assertEqual(record["color_hex"], "#135a7c")
+            self.assertEqual((record["sharp_center_l"], record["sharp_edge_l"]), ("very sharp", "soft"))
+            by_id = {photo["id"]: photo for photo in records}
+            self.assertEqual((by_id[2]["sharp_center_l"], by_id[2]["sharp_edge_l"]), ("sharp", "medium"))
+            self.assertEqual((by_id[9]["sharp_center_l"], by_id[9]["sharp_edge_l"]), ("very sharp", None))
+            self.assertTrue(any(other["color_hex"] is None for other in records))
+            self.assertTrue(all(key not in record for key in
+                                ("path", "folder", "lat", "lon", "sharp_center", "sharp_edge", "color", "color_center_hex")))
         self.client.post("/api/tags/1")
         self.client.post("/api/comment/1", data={"text": ""})
         cleared = next(record for record in self.get("/api/timeline/photos", **query)["days"][0]["items"] if record["id"] == 1)

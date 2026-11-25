@@ -6,6 +6,56 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-11-25
+
+- Timeline adds **Portfolio**: a continuous full-width mosaic with ordinary-size
+  date tiles and no day headers, separators, day action buttons or Show all,
+  badge-free photos, and larger 5+/five-star images on a grid of ordinary
+  squares sized to match Timeline where four columns fit. Comments overlay
+  the bottom of the image. The client orders 5+,
+  five stars and all remaining photos as three capture-time groups, also used by
+  card navigation.
+  **15 per day** shows exactly 15 matching photos per day, excluding its date
+  tile; shorter days show all matches. Date tiles stay in date order. Each day
+  forms one connected area with a thin muted outline in the gutters, and
+  neighboring days pack into free space alongside large photos.
+  Resizing keeps the selection; disabling the limit automatically loads full
+  days with pagination and virtualization. View switches keep filters and position.
+  5+/five-star images span 3×4, 4×3 or 4×2 cells by aspect ratio. A very sharp
+  centre with soft or very soft edges takes 4×4 when both sharpness measurements
+  are available. Thumbnails fill their tiles with a centred crop. Blank,
+  ordinary-size squares fill the remaining gaps with a blend of nearby photo
+  colors or 50% gray. Day outlines and dates can be hidden independently.
+
+- **Rescan folders** previews new, changed, moved and missing files in selected
+  folders. Applying a match preserves the photo ID and annotations. Missing
+  records stay in the catalogue and are excluded from web results and exports.
+  The web server regularly checks indexed paths while the interface is open.
+  The EXIF pass no longer removes missing records and clears stale signatures
+  and image analysis when file size or modification time changes.
+
+- Photo information shows each linked RAW file's full path and a **Show RAW in
+  Explorer** button in Selection and Timeline. Multiple companions have separate
+  actions; photos without RAW show neither. Reveal uses the current catalogue
+  pair and retains local-only file action restrictions.
+
+- RAW and JPEG files with the same Unicode-normalised, case-insensitive filename
+  stem and EXIF capture time to the second are paired across all indexed folders.
+  The JPEG carries a RAW badge in Selection, Timeline and photo cards; paired RAW
+  files are excluded from lists, statistics, filters, maps, tag counts, bulk tag
+  edits and exports. Unpaired RAW files remain visible. Pairing follows catalogue
+  changes automatically and transfers no annotations. New RAW discovery still
+  requires including RAW in the scan. Migration preserves existing file rows.
+
+- Timeline's **Focal lengths** filter uses 35mm-equivalent values for option
+  counts, day selection, highlights, full-day pages, cards and bulk tag updates.
+  Client matching uses the same field, included in lightweight photo records.
+  Missing equivalents appear as **not specified**, without falling back to actual
+  focal length. Statistics' equivalent toggle remains independent.
+
+- The web navigation calls the folder tree **Folders**. Existing links to the
+  tree still work. The launcher uses the same dark palette as the web interface.
+
 ## [1.16.0] — 2026-11-15
 
 - Timeline adds **Remove tags** under each day. Its searchable checklist includes

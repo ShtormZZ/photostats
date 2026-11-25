@@ -38,6 +38,8 @@ from werkzeug.serving import WSGIRequestHandler
 import db_schema
 import dupkey
 import jobs
+import raw_pairs
+import rescan
 import tags
 
 try:
@@ -79,6 +81,7 @@ NONE_LABEL = "not specified"
 
 app = Flask(__name__, static_folder=None)
 DB_PATH = os.path.join(APP_DIR, "photos.db")
+FILE_CHECK = None
 
 # The timeline is built as an unbroken run of months, so one photo with a
 # broken date stretches the strip over decades of empty cells. Months outside
@@ -223,7 +226,7 @@ def sig_ready():
     """Is every file signed? Worked out once per request."""
     if not hasattr(g, "sig_ready"):
         with closing(db()) as con, con:
-            g.sig_ready = dupkey.sigs_complete(con)
+            g.sig_ready = dupkey.sigs_complete(con, visible_only=True)
     return g.sig_ready
 
 
@@ -237,7 +240,8 @@ def dup_key(alias=""):
 
 def dup_exists():
     k = dup_key()
-    return f"{k} IN (SELECT {k} FROM photos GROUP BY 1 HAVING COUNT(*) > 1)"
+    return (f"{k} IN (SELECT {k} FROM visible_photos AS photos "
+            "GROUP BY 1 HAVING COUNT(*) > 1)")
 
 
 # One rating, two columns behind it. `rating` is what the scanner read out of
@@ -353,11 +357,11 @@ def focus_label():
     return f"CASE WHEN sharp_center IS NULL OR sharp_edge IS NULL THEN NULL {case} END"
 
 
+SHARP_LABEL_COLS = (f"{band_label('sharp_center', SHARP_BUCKETS)} AS sharp_center_l,"
+                    f" {band_label('sharp_edge', SHARP_BUCKETS)} AS sharp_edge_l")
+
 # What a photo row carries about sharpness, for the list, the strip and the card.
-SHARP_COLS = (f"sharp_center, sharp_edge,"
-              f" {band_label('sharp_center', SHARP_BUCKETS)} AS sharp_center_l,"
-              f" {band_label('sharp_edge', SHARP_BUCKETS)} AS sharp_edge_l,"
-              f" {focus_label()} AS focus")
+SHARP_COLS = f"sharp_center, sharp_edge, {SHARP_LABEL_COLS}, {focus_label()} AS focus"
 
 
 def range_col(key):
@@ -379,6 +383,43 @@ def db():
     con = db_schema.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     return con
+
+
+class FileCheck:
+    """Share one filesystem check across the requests that fill a page."""
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.next_check = 0
+        self.missing = None
+        self.revision = None
+
+    def refresh(self, force=False):
+        with self.lock:
+            if not force and time.monotonic() < self.next_check:
+                return
+            try:
+                with closing(db_schema.connect(self.path)) as con:
+                    missing = rescan.refresh_missing(con)
+                if missing != self.missing:
+                    self.missing = missing
+                    self.revision = secrets.token_hex(8)
+            except sqlite3.OperationalError:
+                app.logger.warning("Could not refresh indexed file paths", exc_info=True)
+            finally:
+                self.next_check = time.monotonic() + 10
+
+
+@app.before_request
+def refresh_indexed_paths():
+    if FILE_CHECK is None:
+        return
+    if request.endpoint in ("index", "api_export", "api_export_paths"):
+        FILE_CHECK.refresh(force=True)
+    elif (request.path.startswith("/api/")
+          and request.endpoint not in (None, "api_thumb", "api_db_diagnostics")):
+        FILE_CHECK.refresh()
 
 
 SIMPLE_FILTERS = {
@@ -528,7 +569,7 @@ def build_where(skip=None):
 
 def counts(col, skip, labeller=None, order="cnt", limit=None):
     where, params = build_where(skip=skip)
-    sql = (f"SELECT {col} AS k, COUNT(*) AS cnt FROM photos {where} "
+    sql = (f"SELECT {col} AS k, COUNT(*) AS cnt FROM visible_photos AS photos {where} "
            f"GROUP BY {col} ORDER BY " +
            ("cnt DESC" if order == "cnt" else f"{col} ASC"))
     if limit:
@@ -575,13 +616,10 @@ def tag_counts():
     too short to compare. `tag=__none__` still selects them.
     """
     where, params = build_where(skip="tag")
-    # With nothing filtered the join is not needed, and it is what costs: over an
-    # archive of 105 000 photos with a third of them tagged, counting through the
-    # join took 317 ms against 9 for the same count straight off the index. That
-    # is the first screen every time the page is opened.
+    # Hidden RAW annotations stay on their files, but must not enter either
+    # filtered counts or the unfiltered tag vocabulary.
     counted = (f"SELECT t.tag AS k, COUNT(*) AS cnt FROM photo_tags t"
-               f" JOIN photos ON photos.id = t.photo_id {where}" if where else
-               "SELECT tag AS k, COUNT(*) AS cnt FROM photo_tags")
+               f" JOIN visible_photos AS photos ON photos.id = t.photo_id {where}")
     with closing(db()) as con, con:
         rows = con.execute(f"{counted} GROUP BY k ORDER BY cnt DESC, k",
                            params).fetchall()
@@ -597,7 +635,7 @@ def bucket_counts(key):
     expr = f"CASE {case} ELSE '{NONE_KEY}' END"
     where, params = build_where(skip=key)
     with closing(db()) as con, con:
-        got = dict(con.execute(f"SELECT {expr} AS k, COUNT(*) FROM photos {where} "
+        got = dict(con.execute(f"SELECT {expr} AS k, COUNT(*) FROM visible_photos AS photos {where} "
                                f"GROUP BY k", params).fetchall())
     out = [{"k": f"{lo}-{hi}", "l": lab, "v": got.get(f"{lo}-{hi}", 0)}
            for lo, hi, lab in buckets]
@@ -611,8 +649,8 @@ def derived_opts(key):
     """The duplicate rule depends on whether signatures have been computed, so it
     is assembled per request rather than once at startup."""
     if key == "dup":
-        return "filename", [("has duplicates", dup_exists()),
-                            ("no duplicates", "NOT " + dup_exists())]
+        exists = dup_exists()
+        return "filename", [("has duplicates", exists), ("no duplicates", "NOT " + exists)]
     return DERIVED_DIMS[key]
 
 
@@ -622,7 +660,7 @@ def derived_counts(key):
     expr = f"CASE WHEN {guard} IS NULL THEN NULL {case} END"
     where, params = build_where(skip=key)
     with closing(db()) as con, con:
-        got = dict(con.execute(f"SELECT {expr} AS k, COUNT(*) FROM photos {where} "
+        got = dict(con.execute(f"SELECT {expr} AS k, COUNT(*) FROM visible_photos AS photos {where} "
                                f"GROUP BY k", params).fetchall())
     got.pop(None, None)
     return [{"k": n, "l": n, "v": got[n]} for n, _ in opts if got.get(n)]
@@ -639,7 +677,7 @@ def color_expr(col="color"):
 def color_counts(col="color"):
     where, params = build_where(skip=col)
     with closing(db()) as con, con:
-        got = dict(con.execute(f"SELECT {color_expr(col)} AS k, COUNT(*) FROM photos "
+        got = dict(con.execute(f"SELECT {color_expr(col)} AS k, COUNT(*) FROM visible_photos AS photos "
                                f"{where} GROUP BY k", params).fetchall())
     got.pop(None, None)                    # NULL — the photo has not been analysed yet
     order = COLOR_ORDER + [COLOR_MIXED, COLOR_UNKNOWN]
@@ -656,19 +694,19 @@ def api_db_diagnostics():
 @app.get("/api/stats")
 def api_stats():
     with closing(db()) as con, con:
-        total_all, = con.execute("SELECT COUNT(*) FROM photos").fetchone()
+        total_all, = con.execute("SELECT COUNT(*) FROM visible_photos AS photos").fetchone()
         if not total_all:
             return jsonify({"empty": True})
         where, params = build_where()
-        total, = con.execute(f"SELECT COUNT(*) FROM photos {where}", params).fetchone()
+        total, = con.execute(f"SELECT COUNT(*) FROM visible_photos AS photos {where}", params).fetchone()
         dup_groups, = con.execute(
-            f"SELECT COUNT(*) FROM (SELECT {dup_key()} FROM photos "
+            f"SELECT COUNT(*) FROM (SELECT {dup_key()} FROM visible_photos AS photos "
             f"GROUP BY 1 HAVING COUNT(*) > 1)"
         ).fetchone()
         span = con.execute(
-            f"SELECT MIN(taken), MAX(taken), MIN(ym), MAX(ym) FROM photos {where}",
+            f"SELECT MIN(taken), MAX(taken), MIN(ym), MAX(ym) FROM visible_photos AS photos {where}",
             params).fetchone()
-        sized, = con.execute(f"SELECT COALESCE(SUM(size),0) FROM photos {where}",
+        sized, = con.execute(f"SELECT COALESCE(SUM(size),0) FROM visible_photos AS photos {where}",
                              params).fetchone()
 
     # timeline: an unbroken run of months with no gaps
@@ -767,17 +805,17 @@ def api_timeline():
     where_sel, params_sel = build_where(skip=("ym", "year"))
     with closing(db()) as con, con:
         per_month = {ym: c for ym, c in con.execute(
-            f"SELECT ym, COUNT(*) FROM photos {where_all} GROUP BY ym", params_all)
+            f"SELECT ym, COUNT(*) FROM visible_photos AS photos {where_all} GROUP BY ym", params_all)
             if good(ym)}
         raw = [(ym, k, c) for ym, k, c in con.execute(
-            f"SELECT ym, {dim} AS k, COUNT(*) FROM photos {where_sel} "
+            f"SELECT ym, {dim} AS k, COUNT(*) FROM visible_photos AS photos {where_sel} "
             f"GROUP BY ym, k", params_sel) if good(ym)]
         # exact dates of the first and last frame — by capture date, not by month
         dates = {(k or NONE_LABEL): (a, b) for k, a, b in con.execute(
-            f"SELECT {dim} AS k, MIN(taken), MAX(taken) FROM photos {where_sel} "
+            f"SELECT {dim} AS k, MIN(taken), MAX(taken) FROM visible_photos AS photos {where_sel} "
             f"WHERE year BETWEEN ? AND ? GROUP BY k"
             if not where_sel else
-            f"SELECT {dim} AS k, MIN(taken), MAX(taken) FROM photos {where_sel} "
+            f"SELECT {dim} AS k, MIN(taken), MAX(taken) FROM visible_photos AS photos {where_sel} "
             f"AND year BETWEEN ? AND ? GROUP BY k",
             params_sel + [lo_year, hi_year])}
 
@@ -855,17 +893,17 @@ def api_geo():
     cond = "lat IS NOT NULL AND lon IS NOT NULL"
     where = f"{where} AND {cond}" if where else f"WHERE {cond}"
     with closing(db()) as con, con:
-        total, = con.execute(f"SELECT COUNT(*) FROM photos {where}", params).fetchone()
+        total, = con.execute(f"SELECT COUNT(*) FROM visible_photos AS photos {where}", params).fetchone()
         rows = con.execute(
             f"SELECT CAST(lat / ? AS INT) AS gy, CAST(lon / ? AS INT) AS gx,"
             f" COUNT(*) AS c, AVG(lat), AVG(lon),"
             f" MIN(lat), MAX(lat), MIN(lon), MAX(lon),"
             f" MIN(taken), MAX(taken)"
-            f" FROM photos {where} GROUP BY gy, gx ORDER BY c DESC LIMIT ?",
+            f" FROM visible_photos AS photos {where} GROUP BY gy, gx ORDER BY c DESC LIMIT ?",
             [cell, cell] + params + [limit]).fetchall()
         with_geo, = con.execute(
-            "SELECT COUNT(*) FROM photos WHERE lat IS NOT NULL").fetchone()
-        all_photos, = con.execute("SELECT COUNT(*) FROM photos").fetchone()
+            "SELECT COUNT(*) FROM visible_photos AS photos WHERE lat IS NOT NULL").fetchone()
+        all_photos, = con.execute("SELECT COUNT(*) FROM visible_photos AS photos").fetchone()
 
     clusters = [{
         "n": r[2],
@@ -900,15 +938,26 @@ SORTS = {
 }
 
 
+def photo_records(con, rows, details=True):
+    items = [dict(row) for row in rows]
+    if details:
+        # Full cards opened from lists and Timeline get the same companions.
+        # One indexed batch avoids per-photo lookups and keeps paths off thumbnails.
+        companions = raw_pairs.files_for(con, [item["id"] for item in items if item["has_raw"]])
+        for item in items:
+            item["raw_files"] = companions.get(item["id"], [])
+    return items
+
+
 def timeline_columns(details=False):
     if not details:
         # Tooltips and annotation badges need no request per hovered thumbnail.
-        # Keep paths, coordinates and image-analysis fields in full cards only.
-        return ("id, filename, taken, ext, rating, mark, camera, lens, focal, fnumber,"
-                f" iso, shutter, comment, {TAG_COL}")
+        # Portfolio uses the whole-frame color and the same sharpness bands as Statistics.
+        return ("id, filename, taken, width, height, ext, has_raw, rating, mark, camera, lens, focal, focal35, fnumber,"
+                f" iso, shutter, comment, color_hex, {SHARP_LABEL_COLS}, {TAG_COL}")
     return (
         "id, path, filename, folder, taken, year, date_src, brand, camera, lens,"
-        " focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
+        " focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext, has_raw,"
         f" lat, lon, rating, mark, comment, {TAG_COL},"
         " color, color_hex, color_share, color_center, color_center_hex,"
         " color_center_share, brightness, contrast, chroma, clip_hi, clip_lo,"
@@ -917,7 +966,7 @@ def timeline_columns(details=False):
 
 TIMELINE_EXTRA_FILTERS = {
     "year": ("year", None), "camera": ("camera", None), "lens": ("lens", None),
-    "focal": ("focal", FOCAL_BUCKETS), "aperture": ("fnumber", APERTURE_BUCKETS),
+    "focal": ("focal35", FOCAL_BUCKETS), "aperture": ("fnumber", APERTURE_BUCKETS),
 }
 
 
@@ -987,7 +1036,7 @@ def timeline_filter(default_mode="good", include_extra=True):
         else:
             condition = f"{expression} = ?"
             params.append(int(value) if field == "year" else value)
-        predicate += (" AND EXISTS (SELECT 1 FROM photos AS timeline_extra "
+        predicate += (" AND EXISTS (SELECT 1 FROM visible_photos AS timeline_extra "
                       f"WHERE timeline_extra.id = photos.id AND {condition})")
     return predicate, params
 
@@ -1020,7 +1069,7 @@ def api_timeline_options():
             case = " ".join(f"WHEN {column} >= {lo} AND {column} < {hi} THEN '{lo}-{hi}'"
                             for lo, hi, _ in buckets)
             expression = f"CASE WHEN {column} IS NULL THEN '{NONE_KEY}' {case} END"
-            counts = dict(con.execute(f"SELECT {expression} AS k, COUNT(*) FROM photos "
+            counts = dict(con.execute(f"SELECT {expression} AS k, COUNT(*) FROM visible_photos AS photos "
                                       f"WHERE {predicate} GROUP BY k", params))
             choices = [(f"{lo}-{hi}", label) for lo, hi, label in buckets] + [(NONE_KEY, NONE_LABEL)]
             matches = [{"k": key, "l": label, "n": counts[key]} for key, label in choices
@@ -1042,7 +1091,7 @@ def api_timeline_options():
             # its random row lookups cost more than a scan under tag filters.
             group = column if field == "year" else f"CASE WHEN {column} IS NULL THEN NULL ELSE {column} END"
             rows = con.execute(f"WITH choices AS MATERIALIZED (SELECT {column} AS value, COUNT(*) AS n "
-                               f"FROM photos WHERE {predicate} GROUP BY {group}) "
+                               f"FROM visible_photos AS photos WHERE {predicate} GROUP BY {group}) "
                                f"SELECT value, n FROM choices {search} "
                                f"ORDER BY value IS NULL, {order} LIMIT ? OFFSET ?",
                                [*params, limit + 1, offset]).fetchall()
@@ -1088,25 +1137,26 @@ def api_timeline_day():
         order = timeline_order(con, seed)
         where = f"taken >= ? AND taken < ? AND {predicate}"
         values = [lo, hi, *params]
-        total = con.execute(f"SELECT COUNT(*) FROM photos WHERE {where}", values).fetchone()[0]
+        total = con.execute(f"SELECT COUNT(*) FROM visible_photos AS photos WHERE {where}", values).fetchone()[0]
         columns = timeline_columns(details=photo is not None)
         if photo is not None:
-            rows = con.execute(f"SELECT {columns} FROM photos"
+            rows = con.execute(f"SELECT {columns} FROM visible_photos AS photos"
                                f" WHERE {where} AND id = ?", [*values, photo]).fetchall()
             if not rows:
                 abort(404, description="No photo for this day")
         else:
-            rows = con.execute(f"SELECT {columns} FROM photos"
+            rows = con.execute(f"SELECT {columns} FROM visible_photos AS photos"
                                f" WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?",
                                [*values, limit, offset]).fetchall()
+        items = photo_records(con, rows, details=photo is not None)
     following = offset + len(rows)
-    return jsonify({"day": day, "total": total, "items": [dict(row) for row in rows],
+    return jsonify({"day": day, "total": total, "items": items,
                     "next": following if photo is None and rows and following < total else None})
 
 
 @app.get("/api/timeline/photos")
 def api_timeline_photos():
-    """A day cursor over the whole archive, with up to 15 highlights per day.
+    """A day cursor with bounded highlight candidates (15 by default).
 
     Discover days through ix_taken rather than grouping the remaining archive
     on every scroll. A seed gives unrated files a stable random order when a day
@@ -1117,6 +1167,7 @@ def api_timeline_photos():
         abort(400, description="Unknown date order")
     try:
         limit = max(1, min(int(request.args.get("limit", 8)), 20))
+        photo_limit = max(15, min(int(request.args.get("photo_limit", 15)), 500))
     except ValueError:
         abort(400, description="Invalid day limit")
     seed = timeline_seed()
@@ -1143,7 +1194,7 @@ def api_timeline_photos():
         dates = []
         while len(dates) <= (1 if single else limit):
             row = con.execute(
-                f"SELECT taken FROM photos WHERE taken >= ? AND taken < ?"
+                f"SELECT taken FROM visible_photos AS photos WHERE taken >= ? AND taken < ?"
                 f" AND date(taken) IS NOT NULL AND {eligible}"
                 f" ORDER BY taken {order} LIMIT 1", [lower, upper, *filter_params]).fetchone()
             if not row:
@@ -1172,16 +1223,22 @@ def api_timeline_photos():
             lo, hi = day_bounds(day)
             total, count = con.execute(
                 f"SELECT COUNT(*), COALESCE(SUM(CASE WHEN {eligible} THEN 1"
-                " ELSE 0 END), 0) FROM photos WHERE taken >= ? AND taken < ?",
+                " ELSE 0 END), 0) FROM visible_photos AS photos WHERE taken >= ? AND taken < ?",
                 [*filter_params, lo, hi]).fetchone()
             ids = [r[0] for r in con.execute(
-                f"SELECT id FROM photos WHERE taken >= ? AND taken < ? AND {eligible}"
-                f" ORDER BY {photo_order} LIMIT 15", [lo, hi, *filter_params])]
-            columns = timeline_columns(details=request.args.get("details") == "1")
-            records = {r["id"]: dict(r) for r in con.execute(
-                f"SELECT {columns} FROM photos WHERE id IN ({','.join('?' for _ in ids)})", ids)}
+                f"SELECT id FROM visible_photos AS photos WHERE taken >= ? AND taken < ? AND {eligible}"
+                f" ORDER BY {photo_order} LIMIT ?", [lo, hi, *filter_params, photo_limit])]
+            details = request.args.get("details") == "1"
+            columns = timeline_columns(details=details)
+            rows = con.execute(
+                f"SELECT {columns} FROM visible_photos AS photos WHERE id IN ({','.join('?' for _ in ids)})", ids).fetchall()
+            records = {item["id"]: item for item in photo_records(con, rows, details=details)}
             days.append({"day": day, "total": count, "archive_total": total, "eligible": count,
                          "items": [records[pid] for pid in ids]})
+            if "photo_limit" in request.args:
+                # Selection priority is separate from the client's capture-time
+                # display order, including when it fills a row beyond 15 photos.
+                days[-1]["highlight_ids"] = ids
     return jsonify({"days": days, "next": days[-1]["day"] if more else None,
                     "seed": seed, "dir": direction, "files": files_here(), "version": VERSION})
 
@@ -1219,11 +1276,11 @@ def api_timeline_day_tags():
     with closing(db()) as con, con:
         con.execute("BEGIN IMMEDIATE" if request.method == "POST" else "BEGIN")
         revision = con.execute("SELECT revision FROM db_state WHERE id=1").fetchone()[0]
-        total = con.execute("SELECT COUNT(*) FROM photos WHERE taken >= ? AND taken < ?", (lo, hi)).fetchone()[0]
+        total = con.execute("SELECT COUNT(*) FROM visible_photos AS photos WHERE taken >= ? AND taken < ?", (lo, hi)).fetchone()[0]
         # Freeze membership before editing: removing a filter tag must not
         # shrink the set halfway through a multi-tag removal.
         con.execute("CREATE TEMP TABLE timeline_tag_targets (photo_id INTEGER PRIMARY KEY)")
-        con.execute("INSERT INTO timeline_tag_targets SELECT id FROM photos "
+        con.execute("INSERT INTO timeline_tag_targets SELECT id FROM visible_photos AS photos "
                     f"WHERE taken >= ? AND taken < ? AND {predicate}", [lo, hi, *params])
         con.execute("CREATE TEMP TABLE timeline_tag_selection (tag TEXT PRIMARY KEY)")
         con.executemany("INSERT INTO timeline_tag_selection VALUES (?)", [(tag,) for tag in wanted])
@@ -1287,7 +1344,7 @@ def api_directories():
             " SUM(CASE WHEN color IS NOT NULL AND color != ?"
             " AND brightness IS NOT NULL AND sharp_center IS NOT NULL"
             " AND sharp_edge IS NOT NULL THEN 1 ELSE 0 END) AS analyzed"
-            " FROM photos GROUP BY folder", (COLOR_UNKNOWN,)).fetchall()
+            " FROM visible_photos AS photos GROUP BY folder", (COLOR_UNKNOWN,)).fetchall()
     nodes = {}
     total = {"n": 0, "analyzed": 0, "bytes": 0}
     for row in rows:
@@ -1299,7 +1356,7 @@ def api_directories():
             parent = parent if parent and parent != path else None
             node = nodes.setdefault(path, {
                 "path": path, "parent": parent,
-                "name": os.path.basename(path) or path or "Unknown directory",
+                "name": os.path.basename(path) or path or "Unknown folder",
                 "n": 0, "analyzed": 0, "bytes": 0,
             })
             for key in total:
@@ -1318,11 +1375,11 @@ def api_folders():
     limit = max(1, min(int(request.args.get("limit", 300)), 2000))
     with closing(db()) as con, con:
         rows = con.execute(
-            f"SELECT folder, COUNT(*) AS n, MIN(taken), MAX(taken) FROM photos"
+            f"SELECT folder, COUNT(*) AS n, MIN(taken), MAX(taken) FROM visible_photos AS photos"
             f" {where} GROUP BY folder ORDER BY n DESC, folder LIMIT ?",
             params + [limit]).fetchall()
         total, = con.execute(
-            f"SELECT COUNT(DISTINCT folder) FROM photos {where}", params).fetchone()
+            f"SELECT COUNT(DISTINCT folder) FROM visible_photos AS photos {where}", params).fetchone()
     return jsonify({"total": total, "items": [
         {"folder": r[0] or "", "n": r[1], "first": r[2], "last": r[3]}
         for r in rows]})
@@ -1344,22 +1401,24 @@ def api_photos():
     limit = min(int(request.args.get("limit", 120)), 500)
     offset = int(request.args.get("offset", 0))
     with closing(db()) as con, con:
-        total, = con.execute(f"SELECT COUNT(*) FROM photos {where}", params).fetchone()
+        con.execute("BEGIN")
+        total, = con.execute(f"SELECT COUNT(*) FROM visible_photos AS photos {where}", params).fetchone()
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera, lens,"
-            f" focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext,"
+            f" focal, focal35, iso, fnumber, shutter, exposure, width, height, size, ext, has_raw,"
             f" lat, lon, rating, mark, comment, {TAG_COL},"
-            f" (SELECT COUNT(*) FROM photos d"
+            f" (SELECT COUNT(*) FROM visible_photos AS d"
             f"  WHERE {dup_key('d')} = {dup_key('photos')}) AS dup_n,"
             f" color, color_hex, color_share, color_center, color_center_hex,"
             f" color_center_share, brightness, contrast, chroma,"
             f" clip_hi, clip_lo, {SHARP_COLS}"
-            f" FROM photos {where} "
+            f" FROM visible_photos AS photos {where} "
             f"ORDER BY {', '.join(c + ' ' + order for c in SORTS[field])},"
             f" id LIMIT ? OFFSET ?",
             params + [limit, offset]).fetchall()
+        items = photo_records(con, rows)
     return jsonify({"total": total, "offset": offset,
-                    "items": [dict(r) for r in rows]})
+                    "items": items})
 
 
 @app.get("/api/random")
@@ -1368,15 +1427,17 @@ def api_random():
     where, params = build_where()
     n = max(1, min(int(request.args.get("n", 10)), 30))
     with closing(db()) as con, con:
+        con.execute("BEGIN")
         rows = con.execute(
             f"SELECT id, path, filename, folder, taken, date_src, brand, camera,"
             f" lens, focal, focal35, iso, fnumber, shutter, exposure, width, height,"
-            f" size, ext, lat, lon, rating, mark, comment, {TAG_COL},"
+            f" size, ext, has_raw, lat, lon, rating, mark, comment, {TAG_COL},"
             f" color, color_hex, color_share, color_center,"
             f" color_center_hex, color_center_share, brightness, contrast,"
             f" chroma, clip_hi, clip_lo, {SHARP_COLS}"
-            f" FROM photos {where} ORDER BY RANDOM() LIMIT ?", params + [n]).fetchall()
-    return jsonify({"items": [dict(r) for r in rows]})
+            f" FROM visible_photos AS photos {where} ORDER BY RANDOM() LIMIT ?", params + [n]).fetchall()
+        items = photo_records(con, rows)
+    return jsonify({"items": items})
 
 
 @app.get("/api/thumb/<int:pid>")
@@ -1386,16 +1447,17 @@ def api_thumb(pid):
     # visibly soft once the picture fills a 2560-pixel screen.
     size = max(64, min(int(request.args.get("s", 260)), 2800))
     with closing(db()) as con, con:
-        row = con.execute("SELECT path, mtime FROM photos WHERE id=?", (pid,)).fetchone()
+        row = con.execute("SELECT path, mtime FROM visible_photos AS photos "
+                          "WHERE id=?", (pid,)).fetchone()
     if not row:
         abort(404)
     path = row["path"]
+    if not os.path.isfile(path):
+        abort(404)
     tag = md5(f"{path}|{row['mtime']}|{size}".encode("utf-8")).hexdigest()
     cached = os.path.join(CACHE_DIR, tag[:2], tag + ".jpg")
     if os.path.exists(cached):
-        return send_file(cached, mimetype="image/jpeg", max_age=86400)
-    if not os.path.exists(path):
-        abort(404)
+        return send_file(cached, mimetype="image/jpeg")
 
     data = None
     try:
@@ -1463,12 +1525,13 @@ def api_mark(pid):
     if value and value not in MARKS:
         return jsonify({"ok": False, "error": "Unknown rating"}), 400
     with closing(db()) as con, con:
-        changed = con.execute("UPDATE photos SET mark = ? WHERE id = ?",
+        changed = con.execute("UPDATE photos SET mark = ? WHERE id = ? AND EXISTS "
+                              "(SELECT 1 FROM visible_photos AS v WHERE v.id = photos.id)",
                               (value or None, pid)).rowcount
         con.commit()
         if not changed:
             return jsonify({"ok": False, "error": "No such photo"}), 404
-        row = con.execute("SELECT rating, mark FROM photos WHERE id = ?",
+        row = con.execute("SELECT rating, mark FROM visible_photos AS photos WHERE id = ?",
                           (pid,)).fetchone()
     return jsonify({"ok": True, "rating": row["rating"], "mark": row["mark"]})
 
@@ -1506,7 +1569,8 @@ def api_comment(pid):
         return jsonify({"ok": False, "error": f"A comment is at most "
                         f"{COMMENT_MAX} characters; this one is {len(text)}"}), 400
     with closing(db()) as con, con:
-        changed = con.execute("UPDATE photos SET comment = ? WHERE id = ?",
+        changed = con.execute("UPDATE photos SET comment = ? WHERE id = ? AND EXISTS "
+                              "(SELECT 1 FROM visible_photos AS v WHERE v.id = photos.id)",
                               (text, pid)).rowcount
         con.commit()
     if not changed:
@@ -1535,7 +1599,7 @@ def api_set_tags(pid):
         return jsonify({"ok": False,
                         "error": f"Up to {tags.MAX_TAGS} tags per photo."}), 400
     with closing(db()) as con, con:
-        if not con.execute("SELECT 1 FROM photos WHERE id = ?", (pid,)).fetchone():
+        if not con.execute("SELECT 1 FROM visible_photos AS photos WHERE id = ?", (pid,)).fetchone():
             return jsonify({"ok": False, "error": "No such photo"}), 404
         con.execute("DELETE FROM photo_tags WHERE photo_id = ?", (pid,))
         con.executemany("INSERT INTO photo_tags (photo_id, tag) VALUES (?, ?)",
@@ -1558,7 +1622,7 @@ def api_job():
             job = jobs.latest(con)
         except sqlite3.OperationalError:     # the table is not there yet
             job = None
-    return jsonify({"job": job})
+    return jsonify({"job": job, "file_revision": FILE_CHECK.revision if FILE_CHECK else None})
 
 
 @app.get("/api/tags")
@@ -1574,7 +1638,8 @@ def api_tags():
     limit = max(1, min(int(request.args.get("limit", 20)), 100))
     with closing(db()) as con, con:
         rows = con.execute(
-            "SELECT tag, COUNT(*) AS n FROM photo_tags WHERE tag LIKE ?"
+            "SELECT tag, COUNT(*) AS n FROM photo_tags "
+            "JOIN visible_photos AS photos ON photos.id = photo_tags.photo_id WHERE tag LIKE ?"
             " GROUP BY tag ORDER BY (tag LIKE ?) DESC, n DESC, tag LIMIT ?",
             (f"%{q}%", f"{q}%", limit)).fetchall()
     return jsonify({"items": [{"tag": r["tag"], "n": r["n"]} for r in rows],
@@ -1587,10 +1652,25 @@ def api_reveal(pid):
     if not files_here():
         return jsonify({"ok": False, "error": FILES_REFUSED}), 403
     with closing(db()) as con, con:
-        row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
-    if not row or not os.path.exists(row["path"]):
+        row = con.execute("SELECT path FROM visible_photos AS photos WHERE id=?", (pid,)).fetchone()
+    return reveal_file(row["path"] if row else None)
+
+
+@app.post("/api/reveal-raw/<int:pid>/<int:raw_id>")
+def api_reveal_raw(pid, raw_id):
+    """Resolve the RAW through its JPEG, never through a path from the client."""
+    if not files_here():
+        return jsonify({"ok": False, "error": FILES_REFUSED}), 403
+    with closing(db()) as con:
+        companions = raw_pairs.files_for(con, [pid]).get(pid, [])
+    path = next((item["path"] for item in companions if item["id"] == raw_id), None)
+    return reveal_file(path)
+
+
+def reveal_file(path):
+    if not path or not os.path.isfile(path):
         return jsonify({"ok": False, "error": "File not found on disk"}), 404
-    path = os.path.normpath(row["path"])
+    path = os.path.normpath(path)
     try:
         if sys.platform == "win32":
             subprocess.Popen(["explorer", "/select,", path])
@@ -1609,8 +1689,8 @@ def api_open(pid):
     if not files_here():
         return jsonify({"ok": False, "error": FILES_REFUSED}), 403
     with closing(db()) as con, con:
-        row = con.execute("SELECT path FROM photos WHERE id=?", (pid,)).fetchone()
-    if not row or not os.path.exists(row["path"]):
+        row = con.execute("SELECT path FROM visible_photos AS photos WHERE id=?", (pid,)).fetchone()
+    if not row or not os.path.isfile(row["path"]):
         return jsonify({"ok": False, "error": "File not found on disk"}), 404
     try:
         if sys.platform == "win32":
@@ -1634,7 +1714,7 @@ def api_export():
             f"SELECT taken, brand, camera, lens, focal, focal35, iso, fnumber,"
             f" shutter, {TAG_COL}, color, color_hex, color_center, color_center_hex,"
             f" brightness, contrast, chroma, sharp_center, sharp_edge, lat, lon,"
-            f" width, height, size, comment, path FROM photos {where}"
+            f" width, height, size, comment, path FROM visible_photos AS photos {where}"
             f" ORDER BY taken", params).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
@@ -1673,7 +1753,7 @@ def api_export_paths():
     import csv
     where, params = build_where()
     with closing(db()) as con, con:
-        rows = con.execute(f"SELECT path FROM photos {where} ORDER BY path",
+        rows = con.execute(f"SELECT path FROM visible_photos AS photos {where} ORDER BY path",
                            params).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -1726,7 +1806,7 @@ def initialize_database(path):
 
 
 def main():
-    global DB_PATH, MIN_YEAR, LOOPBACK_ONLY
+    global DB_PATH, FILE_CHECK, MIN_YEAR, LOOPBACK_ONLY
     ap = argparse.ArgumentParser(description="Photo archive statistics")
     ap.add_argument("--db", default=DB_PATH)
     ap.add_argument("--port", type=int, default=5577)
@@ -1746,6 +1826,7 @@ def main():
         sys.exit(1)
     os.makedirs(CACHE_DIR, exist_ok=True)
     initialize_database(DB_PATH)
+    FILE_CHECK = FileCheck(DB_PATH)
     if not WEB_DIR:
         print("WARNING: index.html not found — neither in " + APP_DIR +
               ",\n         nor in " + os.path.join(APP_DIR, "web") +

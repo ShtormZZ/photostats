@@ -20,8 +20,10 @@ For development, use the venv directly — `.venv/Scripts/python.exe` on Windows
 ```bash
 python tools/smoke_test.py          # the whole test suite
 python tools/test_database.py       # migrations, concurrency and planner policy
+python tools/test_raw_pairs.py      # RAW/JPEG pairing, scanner lifecycle and visibility
+python tools/test_rescan.py         # folder reconciliation, preview and atomic apply
 python tools/check_license.py       # LICENSE must be the canonical AGPL text
-python -m compileall -q scan.py app.py launcher.py version.py dupkey.py tags.py jobs.py db_schema.py tools
+python -m compileall -q scan.py app.py launcher.py version.py dupkey.py raw_pairs.py rescan.py tags.py jobs.py db_schema.py tools
 python tools/make_icon.py           # redraw the icon files (they are committed)
 ```
 
@@ -115,16 +117,96 @@ caches and mounted nodes after saves; comment edits need no day reload.
 One optional extra dimension/value (year, camera, lens, focal or aperture range)
 lives in the same state and predicate. `/api/timeline/options` returns bounded
 searchable choices under tag/rating filters, excluding its own current selection.
-Reuse Statistics' bucket constants; focal lengths are actual mm. Keep scalar
+Reuse Statistics' bucket constants; Timeline focal ranges always use `focal35`,
+independent of Statistics' equivalent toggle. Missing equivalents stay unspecified;
+do not fall back to actual focal length. Include `focal35` in lightweight records
+so client matching agrees with server filters and bulk-tag scope. Keep scalar
 metadata checks correlated too, to retain date-ordered scans for broad ranges.
 Analyse day always opens the whole date in Statistics. Run
 `tools/test_timeline.py` and `tools/timeline_browser_test.py` for changes here.
+Portfolio is an alternate Timeline view, with one continuous photo mosaic.
+Dates are ordinary-size, noninteractive time tiles. Day areas have outlines in
+the gutters. No day headers, day action buttons or Show all are mounted in
+Portfolio. Its client sort groups great, five stars and every other rating
+separately, then `(taken, id)`. Pack on a grid of integer cells and convert
+to pixel positions with gutters after packing. Use the normal Timeline tile
+size to choose the nearest whole column count (at least four), then size
+the squares to fill the stage width with the standard gutters.
+Ordinary tiles take one cell. Great/five-star tiles take 3×4
+cells for portraits, 4×2 for horizontal photos at 16:9 or wider, and 4×3
+otherwise. A very sharp centre with soft or very soft edges takes 4×4 and
+requires both Statistics measurements. Use the rotated thumbnail's aspect
+ratio when available. All images use a centred crop. Only great and
+five-star photos show captions. Pack each day's photos in stream
+order and keep its date and photos connected through shared sides across a
+normal gutter. An ordinary strip can join the rest of its day anywhere along
+its edge. Place its photos left to right. Date tiles follow the selected day
+order. Tiles of one day can extend below another day's date. Try compact and
+full-width placements for short days, and consider shifting a connected strip
+right if it opens space in the last row. Score two neighboring short days
+together. Minimize height, then empty cells above the last row, then the
+largest side-connected empty area above that row. Repack below the previous
+days if existing tiles prevent a connected region. When the resulting mosaic
+has interior gaps, also try both ends of each opening using the individual
+footprints of the date and first photo. Ordinary photos may fill both sides of
+a tall obstacle if the completed day connects around it. Compare the two completed mosaics
+by the same criteria and keep the original on a tie. Keep ordinary tiles
+at their standard size. Overlay captions on the bottom of the image.
+With Hide dates, pack photos without date tiles. If the layout has interior
+gaps, also try corner adjacency and a wider search of two neighboring short
+days. Keep each day connected and prefer side connections on a density tie.
+Trace each day's outline along its gutter edges, cancelling shared edges within
+the day. Derive a muted color from the date. Draw only the viewport-sized portion
+of the outlines and keep them out of the photo stream.
+Fill remaining whole-square gaps in nearby mosaic rows with noninteractive tiles.
+Their colors blend up to three nearby photos' whole-frame colors by edge
+distance, using `#808080` when none are available. Show a random available fact
+from a touching photo, with an arrow toward it. Prefer side neighbors, then
+corners. Omit camera, lens or focal/exposure facts when filtered on that field.
+Keep fillers outside the
+photo stream and daily limit.
+Photo badges are omitted. Lightweight records include width, height,
+the Statistics sharpness bands and whole-frame `color_hex` for Portfolio. The daily
+limit is exactly 15 matching photos, or all matches in shorter days, excluding
+the date tile. Resize never changes selection. Portfolio enforces the limit even
+when switching from a manually expanded Timeline day. Without the limit, load
+full days in metadata batches, pausing when their tiles leave the mounted area.
+Do not auto-page more dates while visible full-day metadata is incomplete;
+paused offscreen days must not block loading later dates at the footer.
+The stream holds explicit global indices and per-day/local-photo mappings.
+Anchor relayouts to a photo or date tile.
+Read edited annotations from the day cache when remounting a tile. Comments
+preserve the mosaic's geometry. View switches retain filters, expansions and day.
 
 ## Invariants that span files
 
-**The duplicate rule lives in `dupkey.py`.** `app.py` (the duplicates panel) and
-`scan.py --check-dups` both import it. The rule is a signature when every row has
-one, otherwise name + exact size + capture time. Two traps:
+**RAW/JPEG pairs share one visible photo.** `raw_pairs.py` owns extensions, the
+Unicode-normalised casefolded filename stem and the `visible_photos` view.
+`scan.py:COLUMNS` includes `pair_stem`; migration 5 backfills it without re-reading
+files. Triggers maintain `has_raw` and `raw_hidden` atomically for affected groups;
+these derived flags stay out of scanner COLUMNS. Matching uses the indexed stem
+and exact `taken`, with `date_src='exif'`
+on both rows, across all folders. Only paired RAW rows are hidden; every matching
+JPEG exposes `has_raw`. App queries read `visible_photos AS photos` (including
+tag counts, bulk tag targets, duplicate groups and exports); writes still target
+the physical table. Do not make visibility depend on active filters. Duplicate
+signature readiness in the interface uses visible files; folder checks use all
+physical files. Scanner EXIF and signature passes keep physical file rows; image
+analysis uses visible photos. No annotations move
+between pair members. Discovering new RAW requires explicitly including its
+format; switching the option off does not remove previously indexed files.
+Chart indexes are partial over `raw_hidden=0` so their scans remain covering.
+`ix_sig`, `ix_dupkey` and `ix_raw_pair` cover all physical files; separate partial
+signature and duplicate indexes serve interface queries.
+Full photo records include `raw_files` (ID/path pairs), fetched in one indexed
+batch through `raw_pairs.files_for()`; lightweight Timeline records omit them.
+The information panel renders all companions as plain text, with local-only
+Show RAW in Explorer buttons. `/api/reveal-raw/<jpeg id>/<raw id>` resolves the
+current pair on the server and uses the same `files_here()` gate as JPEG actions.
+
+**The duplicate rule lives in `dupkey.py`.** The duplicates panel, folder check
+and folder rescan all use it. The rule is a signature when every available file
+has one, otherwise name + exact size + capture time. Two traps:
 
 - `name_key()` is also the text of the `ix_dupkey` index built in `db_schema.py` at
   startup. Changing the expression without rebuilding the index makes duplicate
@@ -151,14 +233,13 @@ to know:
 
 - `db_schema.py` owns the tag table, index and cleanup trigger. The compatibility
   `tags.ensure_schema()` entry point delegates to its versioned migrations.
-- The trigger is what keeps the table honest — the scanner deletes rows for files
-  that are gone, and without it their tags stay behind and are counted. A foreign
-  key would not do: `PRAGMA foreign_keys` is off by default and per connection.
+- The trigger clears tags when a photo row is explicitly deleted. Rescan instead
+  retains the row and its tags with a missing status, or updates its path on a
+  unique move. Ordinary EXIF scanning never removes a record for a missing file.
 - Fold case in Python (`casefold`, and NFC before it), never in SQL — the same
   trap as `dupkey`, from the other side. Because the stored form is already
-  folded, every comparison is a plain `=`. `app.py:tag_counts()` skips the join
-  entirely when nothing is filtered: measured on 105k photos, the join cost
-  317 ms against 9 for the same count straight off `ix_tag`.
+  folded, every comparison is a plain `=`. Tag counts and suggestions join
+  `visible_photos` even without filters, so hidden RAW annotations never appear.
 
 **The schema has one owner.** `db_schema.py` creates tables, backfills legacy
 columns, translates old colour names and reconciles index expressions. The app,

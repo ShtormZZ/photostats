@@ -55,13 +55,23 @@ you never have to work out which button is the right one.
 Add your photo folders once and they are remembered. Then:
 
 - **Read EXIF** — fast, and all the interface needs to be useful. Tick *include
-  RAW and DNG* first if you want them; JPEG only by default, because RAW usually
-  sits next to a JPEG of the same frame and would count twice.
+  RAW and DNG* first if you want them; JPEG only by default. RAW files matching
+  a JPEG's filename without the extension (case-insensitive) and EXIF capture
+  time (to the second) are linked across the whole catalogue, including different
+  folders. Only the JPEG appears and counts, with a **RAW** badge in Selection,
+  Timeline and the photo card. Unpaired RAW files appear on their own.
+  The photo information includes each companion's full path and a **Show RAW in
+  Explorer** button. File actions are available locally with network access off.
+  No ratings, tags or comments are transferred. Pairing uses indexed files only: discovering
+  new RAW files requires this checkbox, `--raw`, `--all` or an explicit `--ext`.
 - **Analyse images** — colour, brightness, contrast, clipping. Much slower: it
   decodes every file.
 - **Sign files** — content signatures for exact duplicate matching.
 - **Check a folder** — pick a folder you have *not* scanned and it says how much
   of it you already have. See below.
+- **Rescan folders** — see what was added, changed, moved or lost from the
+  selected folders before applying the changes to the catalogue. With no
+  selection it checks all configured folders.
 - **Open interface** — starts the server and opens the browser.
 
 **Passes and the server run at the same time.** You can watch the statistics
@@ -223,11 +233,10 @@ tags shows the photos carrying **any** of them, the way every other panel here
 works. Tags come out in the CSV export as one column.
 
 **Tags go into the database and nowhere else.** No file is ever written to.
-They live in a table of their own that no scanning pass touches, so re-reading
-metadata cannot wipe them; a photo deleted from disk takes its tags with it when
-the scanner drops the row. Moving a file to another folder is a new path and
-therefore a new photo to the database, which loses its tags — as it loses its
-rating, for the same reason.
+They live in the catalogue, so re-reading metadata preserves them. Use
+**Rescan folders** after moving files to keep the existing IDs, tags, ratings
+and comments. Missing files keep their records and annotations. The web interface
+counts and exports only photos whose indexed paths are present.
 
 ### Comments
 
@@ -245,7 +254,26 @@ the CSV export as one column.
 The limit is in characters as you read them, so 256 letters of Cyrillic or 256
 emoji fit as well as 256 of Latin. A comment is one line — a line break pasted
 in becomes a space. Like the rating and the tags it lives in the database only,
-no scan can overwrite it, and moving a file loses it.
+and Rescan folders keeps it when a move is matched.
+
+### Rescan folders
+
+Select the folders to check in the launcher and click **Rescan folders**.
+Review the old and new paths and press **Apply changes**. A match uses the same
+rule as **Check a folder**. A new copy gets its own record if the original remains
+at its old path. Ambiguous matches and unreadable folders are listed in the
+report. Conflicts are left for another rescan. The optional **Apply changes
+automatically after rescan** checkbox applies the actions listed in the report.
+The web server periodically checks indexed paths while the interface is open.
+A file disappears from the results when its path is gone and returns when the
+file is back. Use **Rescan folders** to match a file moved to a new path.
+
+For the command line, save the preview outside the folders being checked:
+
+```sh
+python scan.py --rescan-plan preview.json "D:\Photos"
+python scan.py --apply-rescan preview.json
+```
 
 ### Duplicates
 
@@ -417,6 +445,40 @@ unrated photos. Each group is ordered by capture time, earliest first, with phot
 ID breaking ties. Date order changes the order of days only. Days without
 matching dated photos are skipped.
 
+**View → Portfolio** gives photos the full page width in one continuous mosaic.
+Each day is marked by a plain date tile the size of an ordinary photo, without
+buttons. The date tiles follow the selected day order. Each date tile and its
+photos form one connected area. Neighboring days share space around large
+photos, so part of one day can continue below the start of the next. A thin,
+muted outline in the gaps traces each day's area. Its color is stable for the
+same date.
+The browser sorts three separate groups within each day in the order **5+**,
+**five stars**, then all remaining photos (including bad and unrated), each by
+capture time and photo ID. All tiles align to a grid of standard squares.
+The first two groups use **3×4** cells for portraits, **4×3** for other
+frames, and **4×2** for horizontal photos at 16:9 or wider. **4×4** takes
+priority when the centre is **very sharp** and the edges are **soft** or
+**very soft**, based on the Statistics sharpness bands. Aspect ratio
+determines the size when a sharpness measurement is missing. All thumbnails
+fill their tiles with a centred crop. Portfolio uses the Timeline tile size
+to choose how many columns fit, then adjusts the squares to fill the available
+width. Narrow windows show at least four columns. Only 5+ and five-star images show comments over
+the bottom of the image. No RAW, rating or annotation
+badges appear on Portfolio photos; the usual photo card and hover information remain available.
+Within a day, ordinary squares follow the photo order along rows and continue
+beside or below the tiles already placed for that day. The overlay keeps the
+mosaic at the same height when a comment is added.
+Portfolio fills remaining gaps, including the end of the final row, with blank
+squares the size of an ordinary photo. Each square blends stored colors from
+nearby photos or uses 50% gray (`#808080`) when no nearby color is available.
+With **15 per day** enabled, Portfolio shows exactly 15 highlights per matching
+day, or every match in a shorter day. The date tile sits outside that limit. There is no
+**Show all** button or day action in Portfolio. Turn the limit off to load all
+matching photos automatically. Resizing changes placement, not the selection.
+Switching views keeps the filters and scroll anchor. Timeline retains its day
+actions and Show all control; an expanded Timeline day still respects the limit
+when switching to Portfolio. The view resets on reload.
+
 **Filter** chooses one additional dimension: **Year**, **Camera models**,
 **Lenses**, **Focal lengths** or **Aperture**. The second list selects one option.
 It loads 30 choices at a time; type part of a name or range to search, or use
@@ -424,8 +486,10 @@ It loads 30 choices at a time; type part of a name or range to search, or use
 Choices and counts follow the current tag/rating/unrated filters. The selected
 option stays visible; choosing another dimension clears it. **Clear option**
 removes just the value, and **No extra filter** removes the dimension too.
-Focal length and aperture ranges match Statistics; focal lengths use actual mm,
-independent of Statistics' 35mm-equivalent switch. Missing metadata is offered as
+Focal length and aperture ranges match Statistics; Timeline always uses
+35mm-equivalent focal lengths, independent of Statistics' switch. Photos without
+an equivalent value appear under **not specified**, even if actual focal length
+is recorded. Other missing metadata is also offered as
 **not specified** when present. The extra condition also applies to days, counts,
 Show all and cards, before the 15-per-day limit.
 
@@ -669,8 +733,11 @@ timeline offers to show them.
 **No colours for RAW.** Pillow cannot read RAW pixels; install ExifTool and the
 embedded preview is used instead.
 
-**Twice as many frames as expected.** The archive was scanned with `--raw` and
-shot as RAW+JPEG. Filter by format, or rebuild with `--full` without `--raw`.
+**A RAW+JPEG frame still appears twice.** Pairing requires the same filename
+without the extension and matching EXIF capture times to the second on both
+files. File modification times do not qualify. Check these fields and rescan
+with RAW enabled. Previously indexed RAW files stay in the catalogue when RAW
+is switched off; `--full` re-reads metadata rather than rebuilding the database.
 
 ## Development
 

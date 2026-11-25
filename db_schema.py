@@ -21,9 +21,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import dupkey
+import raw_pairs
 
 BUSY_MS = 15000
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 7
 
 
 PHOTOS_SQL = """CREATE TABLE IF NOT EXISTS photos (
@@ -79,7 +80,11 @@ PHOTOS_SQL = """CREATE TABLE IF NOT EXISTS photos (
     -- Laplacian at 1500 px, in the sharpest tenth of the tiles (see sharpness()).
     sharp_center REAL,
     sharp_edge   REAL,
-    sharp_v      INTEGER   -- the SHARP_VERSION it was measured under; NULL = never
+    sharp_v      INTEGER,  -- the SHARP_VERSION it was measured under; NULL = never
+    pair_stem    TEXT,     -- Unicode-normalised filename without its extension
+    has_raw      INTEGER NOT NULL DEFAULT 0,
+    raw_hidden   INTEGER NOT NULL DEFAULT 0,
+    missing      INTEGER NOT NULL DEFAULT 0
 );"""
 
 PHOTO_COLUMNS = (
@@ -98,7 +103,9 @@ PHOTO_COLUMNS = (
     ('color_center_hex', 'TEXT'), ('color_center_share', 'REAL'), ('brightness', 'REAL'),
     ('contrast', 'REAL'), ('chroma', 'REAL'), ('clip_hi', 'REAL'),
     ('clip_lo', 'REAL'), ('sharp_center', 'REAL'), ('sharp_edge', 'REAL'),
-    ('sharp_v', 'INTEGER'),
+    ('sharp_v', 'INTEGER'), ('pair_stem', 'TEXT'),
+    ('has_raw', 'INTEGER NOT NULL DEFAULT 0'), ('raw_hidden', 'INTEGER NOT NULL DEFAULT 0'),
+    ('missing', 'INTEGER NOT NULL DEFAULT 0'),
 )
 
 JOBS_SQL = """CREATE TABLE IF NOT EXISTS jobs (
@@ -214,8 +221,13 @@ def managed_indexes():
                "brightness", "contrast", "chroma", "sharp_center", "sharp_edge")
     expressions = {f"ix_{column}": column for column in columns}
     expressions.update(ix_geo="lat, lon", ix_dupkey=dupkey.name_key(),
-                       ix_rating=rating_key())
-    return {name: f"CREATE INDEX {name} ON photos({expression})"
+                       ix_rating=rating_key(), ix_raw_pair="pair_stem, taken, date_src, ext")
+    expressions.update(ix_visible_sig="sig", ix_visible_dupkey=dupkey.name_key(), ix_size="size")
+    # Chart scans must keep covering indexes after the catalogue also contains
+    # hidden RAW rows. Physical signature and pairing passes still need all files.
+    physical = {"ix_sig", "ix_dupkey", "ix_raw_pair"}
+    return {name: f"CREATE INDEX {name} ON photos({expression})" +
+                  ("" if name in physical else " WHERE raw_hidden = 0 AND missing = 0")
             for name, expression in expressions.items()}
 
 
@@ -235,11 +247,17 @@ def _index_changes(con):
 
 def _indexes(con):
     changed, obsolete = _index_changes(con)
+    expected = managed_indexes()
+    columns = {row[1] for row in con.execute("PRAGMA table_info(photos)")}
     if obsolete:
         con.execute("DROP INDEX ix_dup")
     for name in changed:
+        if name == "ix_raw_pair" and "pair_stem" not in columns:
+            continue  # Upgrades from v1/v2 reach the new column in migration 5.
+        if "WHERE raw_hidden" in expected[name] and not {"raw_hidden", "missing"} <= columns:
+            continue
         con.execute(f"DROP INDEX IF EXISTS {name}")
-        con.execute(managed_indexes()[name])
+        con.execute(expected[name])
     if changed or obsolete:
         _set(con, "planner_pending", "indexes")
         _set(con, "schema_indexes_changed_at", utc_now())
@@ -253,7 +271,7 @@ def _revision(con):
     for table in ("photos", "photo_tags"):
         for event in ("INSERT", "UPDATE", "DELETE"):
             # Count real changes: an idempotent rescan must not invalidate caches.
-            names = ([name for name, _ in PHOTO_COLUMNS] if table == "photos"
+            names = ([row[1] for row in con.execute("PRAGMA table_info(photos)")] if table == "photos"
                      else ["photo_id", "tag"])
             when = (" WHEN " + " OR ".join(f"OLD.{n} IS NOT NEW.{n}" for n in names)
                     if event == "UPDATE" else "")
@@ -278,10 +296,53 @@ def _colors(con):
             con.execute(f"UPDATE photos SET {column} = ? WHERE {column} = ?", (dst, src))
 
 
+def _raw_pairs(con):
+    columns = {row[1] for row in con.execute("PRAGMA table_info(photos)")}
+    for name, kind in PHOTO_COLUMNS:
+        if name in ("pair_stem", "has_raw", "raw_hidden") and name not in columns:
+            con.execute(f"ALTER TABLE photos ADD COLUMN {name} {kind}")
+            columns.add(name)
+    _indexes(con)
+    _refresh_photo_revision(con)
+    cursor = con.execute("SELECT id, filename FROM photos")
+    while rows := cursor.fetchmany(1000):
+        con.executemany("UPDATE photos SET pair_stem = ? WHERE id = ?",
+                        [(raw_pairs.stem(filename), pid) for pid, filename in rows])
+    raw_pairs.install(con)
+
+
+def _refresh_photo_revision(con):
+    con.execute("DROP TRIGGER revision_photos_update")
+    columns = {row[1] for row in con.execute("PRAGMA table_info(photos)")}
+    condition = " OR ".join(f"OLD.{name} IS NOT NEW.{name}"
+                            for name, _ in PHOTO_COLUMNS if name in columns)
+    con.execute(f"CREATE TRIGGER revision_photos_update AFTER UPDATE ON photos "
+                f"WHEN {condition} BEGIN UPDATE db_state SET revision = revision + 1, "
+                "photo_changes = photo_changes + 1 WHERE id = 1; END")
+
+
+def _missing_files(con):
+    if "missing" not in {row[1] for row in con.execute("PRAGMA table_info(photos)")}:
+        con.execute("ALTER TABLE photos ADD COLUMN missing INTEGER NOT NULL DEFAULT 0")
+    _refresh_photo_revision(con)
+    con.execute("DROP VIEW visible_photos")
+    for event in ("insert", "delete", "update"):
+        con.execute(f"DROP TRIGGER raw_pairs_{event}")
+    raw_pairs.install(con, track_missing=True)
+
+
+def _hide_missing_files(con):
+    con.execute("DROP VIEW visible_photos")
+    con.execute("CREATE VIEW visible_photos AS SELECT * FROM photos WHERE raw_hidden = 0 AND missing = 0")
+
+
 MIGRATIONS = ((1, "adopt legacy tables and backfill exposure", _tables),
               (2, "canonical indexes", _indexes),
               (3, "transactional data revision", _revision),
-              (4, "normalise legacy colour names", _colors))
+              (4, "normalise legacy colour names", _colors),
+              (5, "pair RAW and JPEG across the catalogue", _raw_pairs),
+              (6, "retain missing photo records", _missing_files),
+              (7, "exclude missing files from the visible archive", _hide_missing_files))
 
 
 def migration_backup(con):

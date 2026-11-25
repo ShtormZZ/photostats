@@ -29,6 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import app
+import raw_pairs
 from tools.test_timeline import make_fixture
 from flask import Response, request
 from PIL import Image
@@ -46,7 +47,8 @@ SCRIPT = r"""
     throw new Error("Timed out: " + name);
   };
   const settled = () => wait(() => photoTimeline.started && !photoTimeline.loading &&
-    !photoTimeline.error && !photoTimeline.updating.size && !photoTimeline.days.some(d => d.allLoading), "Timeline settled");
+    !photoTimeline.error && !photoTimeline.updating.size && !photoTimeline.layoutFrame &&
+    !photoTimeline.days.some(d => d.allLoading), "Timeline settled");
   const change = (id, value) => {
     const input = $(id);
     if (input.type === "checkbox") input.checked = value; else input.value = value;
@@ -90,6 +92,55 @@ SCRIPT = r"""
     check("Show all is hidden without a daily limit", [...document.querySelectorAll(".timeline-toggle-all")].every(b => b.hidden));
     check("No horizontal overflow", document.documentElement.scrollWidth <= innerWidth + 1);
 
+    const selection = await fetch("/api/photos?limit=30").then(r => r.json());
+    check("Selection returns JPGs with RAW companions and no paired RAW rows",
+      selection.items.some(it => it.has_raw) && selection.items.every(it => it.ext === "jpg"));
+    renderStrip(selection.items); renderList(selection, false);
+    check("Selection strip and list show RAW badges only for paired JPGs",
+      [...$("strip").querySelectorAll(".raw-badge")].every((badge, i) => badge.hidden === !selection.items[i].has_raw) &&
+      [...$("list").querySelectorAll(".raw-badge")].every((badge, i) => badge.hidden === !selection.items[i].has_raw));
+    const pairedSelection = selection.items.find(it => it.has_raw);
+    openDetail(pairedSelection, selection.items);
+    check("Photo card shows a RAW badge", !$("detail").querySelector("h3 .raw-badge").hidden);
+    const rawPaths = () => [...$("detail").querySelectorAll(".raw-path")].map(node => node.textContent);
+    check("Selection card shows companion paths and a reveal button per RAW",
+      pairedSelection.raw_files.length > 0 &&
+      JSON.stringify(rawPaths()) === JSON.stringify(pairedSelection.raw_files.map(file => file.path)) &&
+      $("detail").querySelectorAll(".raw-reveal").length === pairedSelection.raw_files.length &&
+      $("detail").querySelector(".raw-reveal").textContent === "Show RAW in Explorer");
+    const rawFetch = window.fetch.bind(window);
+    let rawRequest;
+    window.fetch = (url, options) => {
+      if (String(url).startsWith("/api/reveal-raw/")){
+        rawRequest = {url:String(url), method:options?.method};
+        return Promise.resolve(new Response(JSON.stringify({ok:true}), {headers:{"Content-Type":"application/json"}}));
+      }
+      return rawFetch(url, options);
+    };
+    $("detail").querySelector(".raw-reveal").click();
+    await wait(() => rawRequest, "RAW reveal request"); window.fetch = rawFetch;
+    check("Show RAW in Explorer sends the JPEG and RAW IDs",
+      rawRequest.url === "/api/reveal-raw/" + pairedSelection.id + "/" + pairedSelection.raw_files[0].id &&
+      rawRequest.method === "POST");
+    const filesAllowed = state.files;
+    state.files = false; openDetail(pairedSelection, selection.items);
+    check("Network mode keeps RAW paths and hides file actions", rawPaths().length > 0 &&
+      !$("detail").querySelector(".raw-reveal"));
+    state.files = filesAllowed;
+    const unpairedSelection = selection.items.find(it => !it.has_raw);
+    openDetail(unpairedSelection, selection.items);
+    check("Cards without RAW omit both the path block and reveal button", !$("detail").querySelector(".raw-files"));
+    openDetail({...pairedSelection, raw_files:[{...pairedSelection.raw_files[0],
+      path:"C:/Archive/Съёмка & <b>literal</b>/" + "long-path-".repeat(20) + ".nef"}]}, selection.items);
+    const rawPath = $("detail").querySelector(".raw-path");
+    check("RAW paths render as plain text and wrap inside the card", rawPath.textContent.includes("<b>literal</b>") &&
+      !rawPath.querySelector("b") && rawPath.scrollWidth <= rawPath.clientWidth + 1);
+    closeDetail();
+    const pairedRow = [...$("list").querySelectorAll(".lrow")][selection.items.indexOf(pairedSelection)];
+    pairedRow.click();
+    check("Expanded Selection information also shows RAW paths and actions", pairedRow.nextElementSibling.querySelectorAll(".raw-path").length ===
+      pairedSelection.raw_files.length && pairedRow.nextElementSibling.querySelector(".raw-reveal"));
+
     change("timelineUnrated", false); await settled();
     check("Rated-only also expands automatically without a limit", photoTimeline.days.every(day => day.expanded));
     change("timelineLimit", true); await settled();
@@ -105,12 +156,17 @@ SCRIPT = r"""
     const previewPhoto = large.items[0];
     const previewButton = [...row.photoNodes.values()].find(button => button.dataset.pid === String(previewPhoto.id));
     check("Highlight tooltip has shooting metadata and only present annotation rows",
-      previewButton.title.split("\n").length === 4 + Number(!!previewPhoto.lens) + Number(tagsOf(previewPhoto).length > 0) + Number(!!previewPhoto.comment) &&
+      previewButton.title.split("\n").length === 4 + Number(!!previewPhoto.has_raw) + Number(!!previewPhoto.lens) + Number(tagsOf(previewPhoto).length > 0) + Number(!!previewPhoto.comment) &&
       previewButton.title.includes("Camera model: ") && previewButton.title.includes("\nLens: ") === !!previewPhoto.lens &&
       previewButton.title.includes("Focal length: ") && previewButton.title.includes(" · Aperture: ") &&
       previewButton.title.includes(" · ISO: ") && previewButton.title.includes(" · Shutter speed: ") &&
       previewButton.title.includes("\nTags: ") === (tagsOf(previewPhoto).length > 0) &&
       previewButton.title.includes("\nComment: ") === !!previewPhoto.comment);
+    check("Timeline badges and tooltips report RAW companions", [...row.photoNodes.values()].every(button => {
+      const photo = large.items.find(it => String(it.id) === button.dataset.pid);
+      return button.querySelector(".raw-badge").hidden === !photo.has_raw &&
+        button.title.includes("RAW file available") === !!photo.has_raw;
+    }));
     check("Rated-only offers Show all", !row.querySelector(".timeline-toggle-all").hidden);
     row.querySelector(".timeline-toggle-all").click(); await settled();
     if (large.allItems.length <= 15){
@@ -133,6 +189,12 @@ SCRIPT = r"""
       await wait(() => state.shown.id === following.id, "chronological next photo");
     }
     check("Card navigation follows displayed capture order", inCaptureOrder(state.deck));
+    closeDetail();
+    const pairedTimeline = large.allItems.find(it => it.has_raw);
+    await openTimelinePhoto(large, pairedTimeline.id);
+    check("Timeline cards show RAW paths and actions", state.shown.raw_files.length > 0 &&
+      JSON.stringify(rawPaths()) === JSON.stringify(state.shown.raw_files.map(file => file.path)) &&
+      $("detail").querySelectorAll(".raw-reveal").length === state.shown.raw_files.length);
     closeDetail();
 
     change("timelineRating", "all"); change("timelineUnrated", true); await settled();
@@ -215,7 +277,7 @@ SCRIPT = r"""
       await wait(() => (card.comment || "") === text && (text
         ? thumb().title.endsWith("Comment: " + text) : !thumb().title.includes("\nComment: ")), "comment saved");
     };
-    const lines = thumb().title.split("\n");
+    const lines = thumb().title.split("\n").filter(line => line !== "RAW file available");
     check("Tooltip shows real metadata values with settings on one line", lines[0] === card.filename && lines[1] === card.taken &&
       lines[2] === "Camera model: " + card.camera && lines[3] === "Lens: " + card.lens &&
       lines[4] === "Focal length: " + card.focal + " mm · Aperture: f/" + card.fnumber +
@@ -232,7 +294,8 @@ SCRIPT = r"""
     await writeTags([]); await writeComment("");
     check("Both annotation badges are hidden without tags or comment", thumb().querySelector(".timeline-tags-badge").hidden &&
       thumb().querySelector(".timeline-comment-badge").hidden && thumb().querySelector(".timeline-annotations").hidden &&
-      !thumb().title.includes("\nTags: ") && !thumb().title.includes("\nComment: ") && thumb().title.split("\n").length === 5);
+      !thumb().title.includes("\nTags: ") && !thumb().title.includes("\nComment: ") &&
+      thumb().title.split("\n").length === 5 + Number(!!card.has_raw));
     await writeTags(["kids"]);
     check("Tags alone show only the tag badge and update the tooltip", !thumb().querySelector(".timeline-tags-badge").hidden &&
       thumb().querySelector(".timeline-comment-badge").hidden &&
@@ -395,6 +458,16 @@ SCRIPT = r"""
     check("Show all retains the extra option", yearDay.allItems.length === yearDay.total && timelineParams().get("extra_value") === "2020");
     await field("focal");
     await searchOptions("36-50", "36-51"); await chooseOption("36-51");
+    const equivalentPhotos = photoTimeline.days.flatMap(day => day.items);
+    check("Focal filter and client matching use 35mm equivalents", equivalentPhotos.length > 0 &&
+      equivalentPhotos.every(it => it.focal35 >= 36 && it.focal35 < 51 && matchesTimelinePhoto(it)));
+    check("Equivalent ranges include photos outside the actual focal range", equivalentPhotos.some(it =>
+      it.focal === null || it.focal < 36 || it.focal >= 51));
+    await field("focal"); await chooseOption(NONE);
+    const missingEquivalentPhotos = photoTimeline.days.flatMap(day => day.items);
+    check("Missing equivalents stay unspecified in server and client filters", missingEquivalentPhotos.length > 0 &&
+      missingEquivalentPhotos.every(it => it.focal35 === null && matchesTimelinePhoto(it)) &&
+      missingEquivalentPhotos.some(it => it.focal !== null));
     await field("aperture");
     await searchOptions("2.8", "2.1-3.0"); await chooseOption("2.1-3.0");
     check("Aperture and focal use separate range selections", photoTimeline.extraType === "aperture" &&
@@ -594,6 +667,536 @@ SCRIPT = r"""
       $("timelineBulkStatus").textContent === "No tags on matching photos." && $("timelineBulkOK").disabled);
     $("timelineBulkCancel").click();
 
+    change("timelineRating", "all"); change("timelineUnrated", true); await settled();
+    const portfolioDay = photoTimeline.days.find(day => day.day === "2020-01-03");
+    row = await revealDay(portfolioDay);
+    await wait(() => !thumbBusy && !thumbQ.length, "Timeline thumbnail queue idle before switching views");
+    const timelineTileWidth = row.querySelector(".timeline-photo[data-pid]").getBoundingClientRect().width;
+    const portfolioOptions = () => ["portfolioHideBorders", "portfolioHideDates"].map($);
+    check("The Portfolio toggles are hidden in Timeline", portfolioOptions().every(input => !input.getClientRects().length));
+    change("timelineView", "portfolio"); await settled();
+    row = await revealDay(portfolioDay);
+    await wait(() => !thumbBusy && !thumbQ.length && !photoTimeline.layoutFrame, "Portfolio thumbnails finished loading");
+    const portfolioThumbnails = [...$("timelineStage").querySelectorAll(".timeline-photo[data-pid]")];
+    check("Portfolio loads its thumbnails when switching views with an idle queue", portfolioThumbnails.length > 0 &&
+      portfolioThumbnails.every(button => button.style.backgroundImage && getComputedStyle(button.querySelector(".noimg")).display === "none"));
+    const portfolioOrder = items => [items.filter(it => effRating(it) === "great"),
+      items.filter(it => effRating(it) === "5"),
+      items.filter(it => !["great", "5"].includes(effRating(it)))].flatMap(byTime);
+    const inPortfolioOrder = items => JSON.stringify(ids(items)) === JSON.stringify(ids(portfolioOrder(items)));
+    const spanOverlap = (a, sizeA, b, sizeB) => Math.min(a + sizeA, b + sizeB) - Math.max(a, b);
+    const tileNeighbors = (a, b, gap) =>
+      ((Math.abs(a.left + a.width + gap - b.left) < .01 || Math.abs(b.left + b.width + gap - a.left) < .01) &&
+        spanOverlap(a.top, a.height, b.top, b.height) > .001) ||
+      ((Math.abs(a.top + a.height + gap - b.top) < .01 || Math.abs(b.top + b.height + gap - a.top) < .01) &&
+        spanOverlap(a.left, a.width, b.left, b.width) > .001);
+    const connectedTiles = (boxes, gap, allowCorners = false) => {
+      if (!boxes.length) return true;
+      const axisTouches = (startA, endA, startB, endB) =>
+        Math.abs(startA - endB - gap) < .01 || Math.abs(startB - endA - gap) < .01;
+      const cornerNeighbors = (a, b) => axisTouches(a.left, a.left + a.width, b.left, b.left + b.width) &&
+        axisTouches(a.top, a.top + a.height, b.top, b.top + b.height);
+      const reached = new Set([boxes[0]]);
+      for (const box of reached){
+        for (const other of boxes){
+          if (!reached.has(other) && (tileNeighbors(box, other, gap) || (allowCorners && cornerNeighbors(box, other))))
+            reached.add(other);
+        }
+      }
+      return reached.size === boxes.length;
+    };
+    const mosaicHasConnectedDays = (layout, entries, showDates = true) => {
+      let previous;
+      for (let start = 0; start < entries.length;){
+        const first = layout.boxes[start], day = entries[start].portfolioDay;
+        if (!!entries[start].portfolioDate !== showDates || !first || (previous && (first.top < previous.top - .01 ||
+            (Math.abs(first.top - previous.top) < .01 && first.left <= previous.left)))) return false;
+        let end = start + 1;
+        while (entries[end]?.portfolioDay === day) end++;
+        const tiles = layout.boxes.slice(start, end);
+        if (!connectedTiles(tiles, layout.gap, !showDates) || (showDates && tiles[1] && !tileNeighbors(first, tiles[1], layout.gap)) ||
+            !tiles.every((b, i) => !i || b.top > tiles[i-1].top ||
+              (b.top === tiles[i-1].top && b.left > tiles[i-1].left))) return false;
+        previous = first; start = end;
+      }
+      return true;
+    };
+    check("Portfolio switches in place and retains filters", photoTimeline.view === "portfolio" &&
+      photoTimeline.mounted.has(portfolioDay.day) && photoTimeline.ratingMode === "all" && photoTimeline.includeUnrated);
+    check("Portfolio sorts three distinct groups on the client", inPortfolioOrder(portfolioDay.allItems) &&
+      portfolioDay.allItems.some(it => effRating(it) === "5") && portfolioDay.allItems.some(it => effRating(it) === "bad"));
+    check("Portfolio uses date tiles without day headers or actions", $("timelineStage").clientWidth >= innerWidth - 40 &&
+      row.querySelector(".portfolio-date-tile") && !$("timelineStage").querySelector(".timeline-date,.timeline-actions,button.tool"));
+    check("Portfolio shows both toggles with dates and borders enabled by default",
+      portfolioOptions().every(input => input.getClientRects().length && !input.checked));
+    const ratedDays = Array.from({length:5}, (_, i) => {
+      const day = {day:"2020-01-0" + (5 - i)};
+      return [{portfolioDate:day.day, portfolioDay:day}, ...Array.from({length:i + 2}, (_, j) => ({
+        portfolioDay:day, mark:j === 0 ? "great" : "5", width:j % 2 ? 4000 : 6000, height:j % 2 ? 6000 : 4000}))];
+    }).flat();
+    check("Multiple days with mostly large images each form a connected region", [109, 360, 1280, 3840].every(width =>
+      mosaicHasConnectedDays(portfolioMosaic(ratedDays, width), ratedDays)));
+    const markerlessDays = ratedDays.filter(entry => !entry.portfolioDate);
+    check("Portfolio packs markerless days as separate connected regions across widths", [109, 360, 1280, 3840].every(width =>
+      mosaicHasConnectedDays(portfolioMosaic(markerlessDays, width, true), markerlessDays, false)));
+    const plainDay = {day:"2020-01-01"}, plainPhotos = Array.from({length:4}, () => ({portfolioDay:plainDay}));
+    const withDate = portfolioMosaic([{portfolioDate:plainDay.day, portfolioDay:plainDay}, ...plainPhotos], 360);
+    const withoutDate = portfolioMosaic(plainPhotos, 360);
+    check("Removing a date frees its cell for the first photo and can shorten the mosaic",
+      JSON.stringify(withDate.boxes[0]) === JSON.stringify(withoutDate.boxes[0]) && withDate.height > withoutDate.height);
+    check("Portfolio has no photo badges", !row.querySelector(".raw-badge,.timeline-badge,.timeline-annotations"));
+    const portfolioLayout = photoTimeline.portfolioStream;
+    const fittedColumns = Math.max(4, Math.round((portfolioLayout.width + portfolioLayout.gap) /
+      (timelineTileWidth + portfolioLayout.gap)));
+    const ordinaryTile = portfolioLayout.entries.findIndex(entry => entry.portfolioIndex >= 0 && !portfolioFeatured(entry));
+    check("Portfolio fits whole columns across the stage at the Timeline scale", ordinaryTile >= 0 &&
+      Math.abs(fittedColumns * (portfolioLayout.base + portfolioLayout.gap) - portfolioLayout.gap - portfolioLayout.width) < .01 &&
+      Math.abs(portfolioLayout.boxes[ordinaryTile].width - portfolioLayout.base) < .01);
+    const rightEdgeFilled = () => {
+      const stage = $("timelineStage"), right = stage.getBoundingClientRect().right;
+      return [...stage.querySelectorAll(".portfolio-tile,.portfolio-date-tile,.portfolio-filler")]
+        .some(tile => Math.abs(tile.getBoundingClientRect().right - right) < .05);
+    };
+    check("Mounted Portfolio tiles reach the right edge", rightEdgeFilled());
+    const alignedToGrid = (layout, box) => {
+      const pitch = layout.base + layout.gap;
+      return [box.left, box.top, box.width + layout.gap, box.height + layout.gap].every(value =>
+        Math.abs(value / pitch - Math.round(value / pitch)) < .001);
+    };
+    const tileSpans = (layout, box, columns, rows) => {
+      const pitch = layout.base + layout.gap;
+      return Math.abs(box.width + layout.gap - columns * pitch) < .01 &&
+        Math.abs(box.height + layout.gap - rows * pitch) < .01;
+    };
+    check("Portfolio mosaic stays within the width without overlapping images or captions", portfolioLayout.rows.every(line => {
+      const boxes = line.indices.map(i => portfolioLayout.boxes[i]);
+      return boxes.every((box, i) => alignedToGrid(portfolioLayout, box) && box.left >= 0 && box.left + box.width <= portfolioLayout.width + .01 &&
+        boxes.slice(i + 1).every(other => box.left + box.width <= other.left + .01 ||
+          other.left + other.width <= box.left + .01 || box.top + box.height <= other.top + .01 ||
+          other.top + other.height <= box.top + .01));
+    }));
+    check("All mounted photos belong to their connected day and have unique nodes", mosaicHasConnectedDays(portfolioLayout, portfolioLayout.entries) &&
+      new Set(portfolioThumbnails.map(button => button.dataset.pid)).size === portfolioThumbnails.length);
+    check("All Portfolio thumbnails cover their tile with a centred crop", portfolioThumbnails.every(button => {
+      const style = getComputedStyle(button);
+      return style.backgroundSize === "cover" && style.backgroundPosition === "50% 50%";
+    }));
+    const outline = portfolioDayOutline([{left:0, top:0, width:40, height:40}, {left:46, top:0, width:86, height:86}], 6);
+    check("An outline traces the outside through the gutter and cancels the common edge", outline.some(edge =>
+      edge[0] === 43 && edge[1] === 43 && edge[2] === 43 && edge[3] === 89) &&
+      !outline.some(edge => edge[0] === 43 && edge[2] === 43 && edge[1] < 43));
+    const outlineCanvas = $("portfolioOutlines");
+    check("Portfolio paints a viewport-sized, noninteractive day outline layer", outlineCanvas?.getAttribute("aria-hidden") === "true" &&
+      getComputedStyle(outlineCanvas).pointerEvents === "none" && parseFloat(outlineCanvas.style.height) <= innerHeight + 1 &&
+      outlineCanvas.getContext("2d").getImageData(0, 0, outlineCanvas.width, outlineCanvas.height).data.some((value, i) => i % 4 === 3 && value));
+    check("Portfolio colors the full gutter between days and beside fillers", (() => {
+      const boxes = [{left:0, top:0, width:40, height:40}, {left:46, top:0, width:40, height:86}];
+      const regions = new Map([["A", {start:0, end:1, color:"#ff0000"}], ["B", {start:1, end:2, color:"#0000ff"}]]);
+      renderPortfolioOutlines($("timelineStage"), {width:86, height:86, gap:6, boxes, regions}, 0, new Map([["A",[0]], ["B",[1]]]));
+      const ctx = outlineCanvas.getContext("2d"), scale = ctx.getTransform().a;
+      const pixel = (x, y) => [...ctx.getImageData(Math.floor((x + 3) * scale), Math.floor(y * scale), 1, 1).data].join();
+      const samples = Array.from({length:6}, (_, i) => i + 40.5);
+      const ok = samples.every(x => pixel(x, 20) === (x < 43 ? "255,0,0,255" : "0,0,255,255")) &&
+        samples.every(y => pixel(20, y) === "255,0,0,255") && pixel(20, 20) === "0,0,0,0";
+      renderPortfolioStream();
+      return ok;
+    })());
+    check("Portfolio gives diagonally connected days a continuous colored gutter at the corner", (() => {
+      const boxes = [[0,0], [46,46], [46,0], [0,46]].map(([left, top]) => ({left, top, width:40, height:40}));
+      const regions = new Map([["A", {start:0, end:2, color:"#ff0000"}], ["B", {start:2, end:4, color:"#0000ff"}]]);
+      renderPortfolioOutlines($("timelineStage"), {width:86, height:86, gap:6, boxes, regions}, 0, new Map([["A",[0,1]], ["B",[2,3]]]));
+      const ctx = outlineCanvas.getContext("2d"), scale = ctx.getTransform().a;
+      const pixel = (x, y) => [...ctx.getImageData(Math.floor((x + 3) * scale), Math.floor(y * scale), 1, 1).data].join();
+      const ok = pixel(42.5, 42.5) === "255,0,0,255" && pixel(43.5, 43.5) === "255,0,0,255" &&
+        pixel(43.5, 42.5) === "0,0,255,255" && pixel(42.5, 43.5) === "0,0,255,255";
+      renderPortfolioStream();
+      return ok;
+    })());
+    const stage = $("timelineStage");
+    const hasDateTiles = () => !!stage.querySelector(".portfolio-date-tile");
+    const datePhoto = portfolioDay.allItems[0];
+    const photoButton = () => photoTimeline.mounted.get(portfolioDay.day)?.photoNodes.get(0);
+    const dateInTitle = () => photoButton()?.title.split("\n").includes(datePhoto.taken);
+    change("portfolioHideBorders", true);
+    check("Hiding day borders keeps the date tiles and photo dates visible",
+      !$("portfolioOutlines") && hasDateTiles() && dateInTitle() && photoTimeline.portfolioStream === portfolioLayout);
+    change("portfolioHideDates", true);
+    const markerless = photoTimeline.portfolioStream;
+    renderPortfolioStream();
+    check("Hiding dates repacks the same photos with no date boxes", markerless !== portfolioLayout &&
+      markerless.entries.length === portfolioLayout.entries.length - portfolioLayout.dayStarts.size &&
+      [...markerless.photos.keys()].join() === [...portfolioLayout.photos.keys()].join() &&
+      mosaicHasConnectedDays(markerless, markerless.entries, false));
+    check("Both switches apply to mounted tiles and subsequent renders",
+      !hasDateTiles() && !$("portfolioOutlines") && photoButton() && !dateInTitle() &&
+      !photoButton().getAttribute("aria-label").split("\n").includes(datePhoto.taken) && !row.hasAttribute("aria-label"));
+    change("portfolioHideBorders", false);
+    check("Restoring borders leaves dates hidden and keeps the same photo positions",
+      !!$("portfolioOutlines") && !hasDateTiles() && !dateInTitle() &&
+      photoTimeline.portfolioStream === markerless);
+    await openTimelinePhoto(portfolioDay, datePhoto.id);
+    const dateMetadata = () => [...$("detail").querySelectorAll(".capture-date")].some(node => node.getClientRects().length);
+    check("Photo details also hide the capture date", $("veil").classList.contains("on") && !dateMetadata());
+    change("portfolioHideDates", false);
+    check("Restoring dates brings back the date tiles, tooltips and visible photo metadata",
+      hasDateTiles() && dateInTitle() && dateMetadata() && !!$("portfolioOutlines"));
+    closeDetail();
+    const fillerFixture = {base:40, gap:6, width:461, rows:[{top:0, height:132, indices:[0, 1, 2, 3]}],
+      entries:[{color_hex:"#FF0000", camera:"Test camera"}, {color_hex:"#0000FF"}, {portfolioDate:"2020-01-01"}, {color_hex:null, iso:400}],
+      boxes:[{left:0, top:0, width:132, height:132}, {left:184, top:0, width:132, height:132},
+        {left:322, top:0, width:40, height:40}, {left:368, top:0, width:40, height:40}]};
+    const fillerSquares = portfolioFillers(fillerFixture, 0);
+    const squareAt = (left, top) => fillerSquares.find(tile => tile.left === left && tile.top === top);
+    check("Portfolio facts point to an adjoining photo with data, including large or uncolored photos",
+      [0, 46, 92].every(top => squareAt(138, top)?.fact?.text === "Camera: Test camera" &&
+        squareAt(138, top).fact.x === -1 && squareAt(138, top).fact.y === 0) &&
+      squareAt(414, 0)?.fact?.text === "ISO 400" && !squareAt(414, 92)?.fact);
+    const metadata = {tags:"trees,summer", rating:5, mark:"great", camera:"C", lens:"L", focal:35, shutter:"1/125", iso:200};
+    check("Portfolio fact choices respect the active filter and effective rating",
+      ["Tags: trees, summer", "Rating: 5+", "Camera: C", "Lens: L", "35 mm · 1/125", "ISO 200"]
+        .every(fact => portfolioPhotoFacts(metadata, "").includes(fact)) &&
+      [["camera","Camera: C"], ["lens","Lens: L"], ["focal","35 mm · 1/125"]].every(([field, fact]) =>
+        !portfolioPhotoFacts(metadata, field).includes(fact)) && !portfolioPhotoFacts({}, "").length);
+    check("Portfolio mixes equally close red and blue photos in every row of an interior gap", [0, 46, 92].every(top =>
+      squareAt(138, top)?.color === "rgb(128,0,128)"));
+    check("Portfolio fills the right of the final band with gray squares beyond the colored neighbors", [0, 46, 92].every(top =>
+      squareAt(414, top)?.color === "#808080") && fillerSquares.length === 10 && fillerSquares.every(tile =>
+        tile.width === 40 && tile.height === 40 && tile.left + tile.width <= fillerFixture.width));
+    // The initial viewport can be packed completely, especially on narrow screens.
+    const coloredRow = portfolioLayout.rows.find((line, i) =>
+      (line.fillers ?? portfolioFillers(portfolioLayout, i)).some(tile => tile.color !== "#808080"));
+    check("Stored photo colors reach the Portfolio mosaic", !!coloredRow);
+    scrollTo(0, scrollY + $("timelineStage").getBoundingClientRect().top + coloredRow.top); schedulePhotoTimeline();
+    const mountedFillers = () => [...$("timelineStage").querySelectorAll(".portfolio-filler")];
+    await wait(() => mountedFillers().some(tile => tile.style.backgroundColor !== "rgb(128, 128, 128)"), "colored fillers mounted");
+    const fillerLayer = $("portfolioFillers");
+    check("Portfolio renders noninteractive square cards with arrows for displayed facts", !fillerLayer.hasAttribute("aria-hidden") &&
+      getComputedStyle(fillerLayer).pointerEvents === "none" && mountedFillers().every(tile => {
+        const box = Object.fromEntries(["left", "top", "width", "height"].map(key => [key, parseFloat(tile.style[key])]));
+        const orange = "rgb(227, 155, 51)";
+        return (!tile.textContent || [".arrow", ".fact"].every(selector => {
+          const element = tile.querySelector(selector);
+          return element?.textContent && getComputedStyle(element).color === orange;
+        })) &&
+          tileSpans(portfolioLayout, box, 1, 1) && alignedToGrid(portfolioLayout, box);
+      }));
+    row = await revealDay(portfolioDay);
+    check("Stored sharpness bands select square tiles for 5+ and five-star photos", [25, 26].every(id => {
+      const index = portfolioDay.allItems.findIndex(item => item.id === id);
+      return index >= 0 && tileSpans(portfolioLayout, portfolioDay.portfolioLayout.boxes[index], 4, 4);
+    }));
+    const rotatedPhoto = {id:-1, mark:"great", width:6000, height:4000};
+    portfolioThumbnailLoaded(rotatedPhoto, {naturalWidth:400, naturalHeight:600});
+    check("Transposed thumbnails select the portrait grid size", portfolioTileSize(rotatedPhoto).width === 3 &&
+      portfolioTileSize(rotatedPhoto).height === 4);
+    const unspecifiedPhoto = {id:-2, mark:"5"};
+    portfolioThumbnailLoaded(unspecifiedPhoto, {naturalWidth:800, naturalHeight:450});
+    check("Loaded thumbnails supply missing widescreen dimensions", portfolioTileSize(unspecifiedPhoto).width === 4 &&
+      portfolioTileSize(unspecifiedPhoto).height === 2);
+    photoTimeline.sourceRatios.delete(-1); photoTimeline.sourceRatios.delete(-2);
+    const normalSize = portfolioLayout.base;
+    const sharpCentre = {sharp_center_l:"very sharp", sharp_edge_l:"soft"};
+    const sizes = [
+      [{mark:"great", width:4000, height:6000}, 3, 4],
+      [{mark:"5", width:6000, height:4000}, 4, 3],
+      [{rating:5, width:1600, height:900}, 4, 2],
+      [{mark:"5", width:2000, height:900}, 4, 2],
+      [{mark:"great", width:1600, height:900, ...sharpCentre}, 4, 4],
+      [{mark:"5", width:900, height:1600, ...sharpCentre, sharp_edge_l:"very soft"}, 4, 4],
+      [{mark:"5", width:1600, height:900, ...sharpCentre, sharp_edge_l:null}, 4, 2],
+      [{mark:"great", width:4000, height:6000, sharp_center_l:null, sharp_edge_l:"soft"}, 3, 4],
+      [{mark:"5", width:1600, height:900, ...sharpCentre, sharp_edge_l:"medium"}, 4, 2],
+      [{mark:"5", width:800, height:800, ...sharpCentre, sharp_center_l:"sharp"}, 4, 3],
+      [{mark:"4", width:1600, height:900, ...sharpCentre}, 1, 1],
+      [{width:6000, height:4000, ...sharpCentre}, 1, 1]
+    ];
+    check("Large grid sizes follow rating, aspect ratio and complete sharpness bands", [109, 360, 1280, 2560, 3840].every(width => {
+      const layout = portfolioMosaic(sizes.map(([item]) => item), width);
+      return sizes.every(([, columns, rows], i) => tileSpans(layout, layout.boxes[i], columns, rows) &&
+        alignedToGrid(layout, layout.boxes[i]) && layout.boxes[i].left + layout.boxes[i].width <= width + .01);
+    }));
+    check("Ordinary tiles pack against landscape and portrait heroes through their standard gutter", [360, 1280, 2560, 3840].every(width => {
+      return [[6000, 4000], [4000, 6000]].every(([imageWidth, imageHeight]) => {
+        const items = [{mark:"great", width:imageWidth, height:imageHeight}, ...Array.from({length:149}, () => ({mark:"4"}))];
+        const layout = portfolioMosaic(items, width), [hero, first] = layout.boxes;
+        if (hero.width + layout.gap + first.width > width + .01)
+          return first.top >= hero.top + hero.height + layout.gap - .01;
+        const beside = layout.boxes.filter(box => box.left >= hero.left + hero.width + layout.gap - .01 &&
+          box.top < hero.top + hero.height && tileNeighbors(hero, box, layout.gap));
+        return new Set(beside.map(box => box.top)).size > 1 && first.top === hero.top &&
+          Math.abs(first.left - hero.width - layout.gap) < .01 &&
+          connectedTiles(layout.boxes, layout.gap);
+      });
+    }));
+    check("Date tiles use ordinary slots and consecutive days share rows", [360, 1280, 2560, 3840].every(width => {
+      const a = {}, b = {}, entries = [
+        {portfolioDate:"2020-01-01", portfolioDay:a}, {portfolioDay:a},
+        {portfolioDate:"2020-01-02", portfolioDay:b}, {portfolioDay:b}, {portfolioDay:b}];
+      const layout = portfolioMosaic(entries, width), first = layout.boxes[0], second = layout.boxes[2];
+      return Math.abs(first.width - layout.base) < .01 && Math.abs(first.height - layout.base) < .01 &&
+        Math.abs(second.width - layout.base) < .01 && Math.abs(first.top - second.top) < .01 &&
+        Math.abs(second.left - 2 * (layout.base + 6)) < .01;
+    }));
+    const columnsAt = width => {
+      const {base, gap} = portfolioMosaic([], width);
+      return Math.floor((width + gap + .001) / (base + gap));
+    };
+    check("A nearly tile-wide remainder becomes a seventeenth photo column", (() => {
+      const width = 2639, photos = Array.from({length:18}, () => ({}));
+      const layout = portfolioMosaic(photos, width), last = layout.boxes[16], next = layout.boxes[17];
+      return last.top === 0 && Math.abs(last.left + last.width - width) < .01 &&
+        next.left === 0 && Math.abs(next.top - layout.base - layout.gap) < .01;
+    })());
+    check("A date at a tight row edge stays connected to its first photo", [360, 1280, 3840].every(width => {
+      const a = {}, b = {}, columns = columnsAt(width);
+      const entries = [{portfolioDate:"2020-01-01", portfolioDay:a},
+        ...Array.from({length:columns - 2}, () => ({portfolioDay:a})),
+        {portfolioDate:"2020-01-02", portfolioDay:b}, {portfolioDay:b}];
+      const layout = portfolioMosaic(entries, width), date = layout.boxes.at(-2), photo = layout.boxes.at(-1);
+      return tileNeighbors(date, photo, layout.gap) && mosaicHasConnectedDays(layout, entries);
+    }));
+    check("October 13 fills the last partial row after a long October 15", [8, 24].every(fullRows => {
+      const width = 3840, columns = columnsAt(width);
+      const counts = {"15":fullRows * columns + 4, "13":9, "11":10, "09":5, "01":79};
+      const days = ["15", "13", "11", "09", "01"].map(date => {
+        const day = {day:"2023-10-" + date};
+        return [{portfolioDate:day.day, portfolioDay:day},
+          ...Array.from({length:counts[date]}, () => ({portfolioDay:day}))];
+      });
+      const entries = days.flat(), layout = portfolioMosaic(entries, width);
+      const start = days[0].length, tail = layout.boxes[start - 1];
+      const october13 = layout.boxes.slice(start, start + days[1].length);
+      return Math.abs(october13[0].left - tail.left - tail.width - layout.gap) < .01 &&
+        october13.every(box => Math.abs(box.top - tail.top) < .01) && mosaicHasConnectedDays(layout, entries);
+    }));
+    check("A long ordinary day starting on the right uses the whole next row", (() => {
+      const width = 3840, columns = columnsAt(width);
+      const entries = [79, 5, 10, 9, 132].flatMap((count, i) => {
+        const day = {day:"2023-10-" + ["01", "09", "11", "13", "15"][i]};
+        return [{portfolioDate:day.day, portfolioDay:day}, ...Array.from({length:count}, () => ({portfolioDay:day}))];
+      });
+      const layout = portfolioMosaic(entries, width), pitch = layout.base + layout.gap;
+      const positions = layout.boxes.map(b => Math.round(b.top / pitch) * columns + Math.round(b.left / pitch));
+      return columns === 16 && positions.length === 240 && new Set(positions).size === 240 &&
+        Math.round((layout.height + layout.gap) / pitch) === 15 && mosaicHasConnectedDays(layout, entries);
+    })());
+    const portfolioShape = lines => ({bottom:lines.length, boxes:lines.flatMap((line, top) =>
+      [...line].flatMap((cell, left) => cell === "#" ? [{left, top, width:1, height:1}] : []))});
+    check("A date beside a 4x3 photo fits at either edge with occupied cells under the date", (() => {
+      const group = {date:true, sizes:[portfolioTileSizes.ordinary, portfolioTileSizes.landscape]};
+      const prior = portfolioShape(["#.........", "##........", "##........"]);
+      const options = portfolioDayOptions(group, prior.boxes, prior.boxes[0], prior.bottom, 10, true, true);
+      return [1, 5].every(x => options.some(({boxes:[date, photo]}) =>
+        date.left === x && date.top === 0 && photo.left === x + 1 && photo.top === 0));
+    })());
+    check("A long ordinary day can fill both sides of the July portrait and join below it", (() => {
+      const cell = portfolioTileSizes.ordinary, hero = portfolioTileSizes.landscape;
+      const groups = [Array(25).fill(cell), [cell, hero, cell, cell], Array(69).fill(cell)]
+        .map(sizes => ({date:true, sizes}));
+      const layout = portfolioPacking(groups, 17);
+      return layout.bottom === 7 && layout.gaps <= 4;
+    })());
+    check("A date fits a one-cell opening above its first large photo", (() => {
+      const group = {date:true, sizes:[portfolioTileSizes.ordinary, portfolioTileSizes.landscape]};
+      const prior = portfolioShape(["######", "#.####", "#.....", "#.....", "#....."]);
+      const options = portfolioDayOptions(group, prior.boxes, prior.boxes[0], prior.bottom, 6, true, true);
+      return options.some(({boxes:[date, photo]}) =>
+        date.left === 1 && date.top === 1 && photo.left === 1 && photo.top === 2) &&
+        options.every(({boxes}) => boxes.every(b => prior.boxes.every(p =>
+          b.left + b.width <= p.left || p.left + p.width <= b.left ||
+          b.top + b.height <= p.top || p.top + p.height <= b.top)));
+    })());
+    check("Portfolio keeps the shorter complete layout for mixed days", (() => {
+      // The first fixture improves with exact footprints. The second is better with the original placements.
+      return [
+        {days:[[9, 16, 9], [2, 4, 3]], rows:3},
+        {days:[[12, 4, 3], [4, 3, 4], [2, 4, 3]], rows:4}
+      ].every(({days, rows}) => {
+        const entries = days.flatMap(([count, width, height], i) => {
+          const day = {day:"2023-05-0" + (i + 1)};
+          return [{portfolioDate:day.day, portfolioDay:day}, {portfolioDay:day, mark:"5", width, height},
+            ...Array.from({length:count - 1}, () => ({portfolioDay:day}))];
+        });
+        const layout = portfolioMosaic(entries, 3840);
+        return Math.round((layout.height + layout.gap) / (layout.base + layout.gap)) === rows &&
+          mosaicHasConnectedDays(layout, entries);
+      });
+    })());
+    check("Equal-height Portfolio candidates favor empty cells at the end, then smaller interior gaps", (() => {
+      const joined = portfolioShape(["##..##", "##..##", "######"]);
+      const split = portfolioShape(["##.##.", "##.##.", "######"]);
+      const atEnd = portfolioShape(["######", "######", "##...."]);
+      const prefix = {top:0, edge:Array(6).fill(null), largest:0};
+      const choose = options => choosePortfolioPlacement(options, [], 0, 6, null, prefix);
+      return choose([joined, split]) === split && choose([split, atEnd]) === atEnd;
+    })());
+    check("Hide dates can use a corner connection when it leaves smaller interior gaps", (() => {
+      const {ordinary, portrait} = portfolioTileSizes;
+      const groups = [[portrait, ordinary], [ordinary], Array(6).fill(ordinary), [ordinary]]
+        .map(sizes => ({date:false, sizes}));
+      const baseline = portfolioPacking(groups, 16), packed = portfolioPacking(groups, 16, true);
+      return portfolioCornerDays(baseline, groups, 16) === 0 && portfolioCornerDays(packed, groups, 16) > 0 &&
+        packed.bottom === baseline.bottom && comparePortfolioLayouts(packed, baseline, 16) < 0;
+    })());
+    check("Repacking adjacent days in Hide dates can remove a row and fill interior gaps", (() => {
+      const {ordinary, portrait, wide, square} = portfolioTileSizes;
+      const groups = [[wide, portrait, 3], [wide, 13], [wide, wide, 7], [square, square, 5]]
+        .map(description => ({date:false, sizes:[...description.slice(0, -1), ...Array(description.at(-1)).fill(ordinary)]}));
+      const baseline = portfolioPacking(groups, 16), packed = portfolioPacking(groups, 16, true);
+      const cornersOnly = [false, true].map(exact => packPortfolioDays(groups, 16, exact, {corners:true}));
+      return baseline.bottom === 8 && packed.bottom === 7 && packed.gaps === 3 &&
+        cornersOnly.every(candidate => comparePortfolioLayouts(packed, candidate, 16) < 0);
+    })());
+    check("A gap crossing a fixed row boundary is measured independently for each candidate", (() => {
+      const {boxes} = portfolioShape(["#.##.#", "#.##.#", "#....#", "##..##"]);
+      const prefix = portfolioGapFrontier(boxes, 6, {top:0, edge:Array(6).fill(null), largest:0}, 2);
+      const joined = portfolioGapFrontier(boxes, 6, prefix, 4);
+      const other = portfolioShape(["######", "######", "#.##.#", "######"]);
+      return joined.largest === 10 && portfolioGapFrontier(other.boxes, 6, prefix, 4).largest === 3;
+    })());
+    check("July 29 shifts its last row right to let July 30 use the open cells", [0, 4].every(fullRows => {
+      const width = 3840, columns = columnsAt(width);
+      const dates = ["07-27", "07-29", "07-30", "08-20", "08-21"];
+      const counts = [fullRows * columns + 5, 15, 15, 15, 10];
+      const days = dates.map((date, i) => {
+        const day = {day:"2023-" + date};
+        return [{portfolioDate:day.day, portfolioDay:day},
+          ...Array.from({length:counts[i]}, (_, j) => i === 4 && !j
+            ? {portfolioDay:day, mark:"5", width:1600, height:900} : {portfolioDay:day})];
+      });
+      const entries = days.flat(), layout = portfolioMosaic(entries, width), pitch = layout.base + layout.gap;
+      const july29 = layout.boxes.slice(days[0].length, days[0].length + days[1].length);
+      const july30 = layout.boxes.slice(days[0].length + days[1].length, days[0].length + days[1].length + days[2].length);
+      const sharedTop = july29.at(-1).top;
+      const tail = july29.filter(box => box.top === sharedTop), start = july30.filter(box => box.top === sharedTop);
+      return tail.length === 6 && start.length === columns - tail.length &&
+        Math.abs(tail[0].left - start.length * pitch) < .01 && Math.abs(start[0].left) < .01 &&
+        Math.abs(layout.height + layout.gap - (fullRows + 5) * pitch) < .01 &&
+        mosaicHasConnectedDays(layout, entries);
+    }));
+    check("Days with 15 photos fill space beside each other's large photos", [2639, 3840].every(width => {
+      const days = Array.from({length:5}, (_, i) => {
+        const day = {day:"2023-05-0" + (i + 4)};
+        return [{portfolioDate:day.day, portfolioDay:day}, {portfolioDay:day, mark:"5", width:i % 3 ? 4500 : 4000, height:3000},
+          ...Array.from({length:14}, () => ({portfolioDay:day}))];
+      });
+      const entries = days.flat(), layout = portfolioMosaic(entries, width);
+      const separateHeight = days.reduce((sum, day) => sum + portfolioMosaic(day, width).height, 0);
+      const nextStart = layout.boxes[days[0].length];
+      return layout.height < .75 * separateHeight && nextStart.top < layout.boxes[1].top + layout.boxes[1].height &&
+        mosaicHasConnectedDays(layout, entries);
+    }));
+    check("Short days around a large portrait stay connected in either date order", ["asc", "desc"].every(order => {
+      const dates = ["11-01", "11-04", "11-08", "11-14", "11-18", "11-19", "11-28", "12-07", "12-09", "12-16", "12-24"];
+      const days = [13, 3, 2, 14, 4, 14, 1, 2, 1, 10, 15].map((count, i) => ({day:"2009-" + dates[i], count, large:i === 3}));
+      if (order === "desc") days.reverse();
+      const entries = days.flatMap(day => [{portfolioDate:day.day, portfolioDay:day},
+        ...Array.from({length:day.count}, (_, i) => day.large && !i
+          ? {portfolioDay:day, mark:"great", width:3000, height:4000} : {portfolioDay:day})]);
+      return [360, 1280, 2639, 3840].every(width => mosaicHasConnectedDays(portfolioMosaic(entries, width), entries));
+    }));
+    check("Every loaded day has one square date marker", photoTimeline.days.every(day => {
+      const date = photoTimeline.portfolioStream.dayStarts.get(day.day);
+      return date && Math.abs(date.width - normalSize) < .01 && Math.abs(date.height - normalSize) < .01;
+    }));
+    check("Portfolio virtualizes a large day's photo nodes", row.photoNodes.size < portfolioDay.total / 2);
+    const featured = portfolioDay.allItems[0];
+    await openTimelinePhoto(portfolioDay, featured.id);
+    check("Portfolio card navigation follows its three-group order", inPortfolioOrder(state.deck));
+    const mosaicHeight = $("timelineStage").style.height;
+    const note = ('Portfolio <b> & "text" ' + "A long caption wraps over the image. ".repeat(5)).trim();
+    saveComment(state.shown, note);
+    await wait(() => featured.comment === note, "Portfolio comment saved");
+    await settled(); closeDetail(); row = await revealDay(portfolioDay);
+    const featuredTile = row.portfolioNodes.get(0), caption = featuredTile.querySelector(".portfolio-caption");
+    const imageRect = featuredTile.firstElementChild.getBoundingClientRect(), captionRect = caption.getBoundingClientRect();
+    check("Featured comments overlay the image bottom as plain text without extending the mosaic", caption.textContent === note &&
+      !caption.querySelector("b") && captionRect.height > 0 && captionRect.top >= imageRect.top - 1 &&
+      Math.abs(captionRect.bottom - imageRect.bottom) < 1 && caption.scrollHeight <= caption.clientHeight + 1 &&
+      Math.abs(featuredTile.getBoundingClientRect().height - imageRect.height) < 1 && $("timelineStage").style.height === mosaicHeight);
+    scrollTo(0, document.documentElement.scrollHeight); schedulePhotoTimeline();
+    await wait(() => !featuredTile.isConnected, "featured tile scrolled out of range");
+    await revealDay(portfolioDay);
+    await wait(() => photoTimeline.mounted.get(portfolioDay.day)?.portfolioNodes.get(0)?.querySelector(".portfolio-caption").textContent === note,
+      "saved caption on remounted featured tile");
+    const ordinaryPhoto = portfolioDay.allItems.find(it => !portfolioFeatured(it));
+    await openTimelinePhoto(portfolioDay, ordinaryPhoto.id); saveComment(state.shown, "Hidden ordinary comment");
+    await wait(() => ordinaryPhoto.comment === "Hidden ordinary comment", "ordinary comment saved"); closeDetail();
+    const ordinaryIndex = portfolioDay.allItems.indexOf(ordinaryPhoto);
+    const stageTop = $("timelineStage").getBoundingClientRect().top + scrollY;
+    scrollTo(0, stageTop + portfolioDay.portfolioLayout.boxes[ordinaryIndex].top);
+    schedulePhotoTimeline();
+    await wait(() => photoTimeline.mounted.get(portfolioDay.day)?.portfolioNodes.has(ordinaryIndex), "ordinary Portfolio tile mounted");
+    row = photoTimeline.mounted.get(portfolioDay.day);
+    check("Other photos never display comment captions", row.portfolioNodes.get(ordinaryIndex).querySelector(".portfolio-caption").hidden);
+    await openTimelinePhoto(portfolioDay, ordinaryPhoto.id);
+    $("detail").querySelector(".rate .great").click();
+    await wait(() => state.shown.mark === "great" && !photoTimeline.updating.size, "Portfolio promotion"); await settled();
+    check("Rating edits update Portfolio size, grouping and navigation", inPortfolioOrder(portfolioDay.allItems) &&
+      portfolioFeatured(portfolioDay.allItems.find(it => it.id === ordinaryPhoto.id)) && inPortfolioOrder(state.deck));
+    closeDetail();
+
+    change("timelineLimit", true); await settled();
+    const portfolioPreview = photoTimeline.days.find(day => day.day === "2020-01-03");
+    row = await revealDay(portfolioPreview); await settled();
+    check("Portfolio shows exactly fifteen photos plus a separate date tile", portfolioPreview.items.length === 15 &&
+      portfolioPreview.portfolioLayout.boxes.length === 15 &&
+      photoTimeline.portfolioStream.entries.filter(it => it.portfolioDay === portfolioPreview).length === 16 &&
+      $("timelineLimitLabel").textContent === "15 per day");
+    const originalFifteen = portfolioPreview.candidates.slice(0, 15).map(it => it.id);
+    check("The exact fifteen retain highlight priority and client order", originalFifteen.every(id => portfolioPreview.items.some(it => it.id === id)) &&
+      inPortfolioOrder(portfolioPreview.items));
+    await openTimelinePhoto(portfolioPreview, portfolioPreview.items[0].id);
+    const previewStage = $("timelineStage"), previousWidth = previewStage.clientWidth;
+    const outlineColor = photoTimeline.portfolioStream.regions.get(portfolioPreview).color;
+    previewStage.style.width = Math.floor(previousWidth * .7) + "px"; layoutPhotoTimeline(); await settled();
+    check("The resized Portfolio still reaches the right edge", rightEdgeFilled());
+    check("Resizing recalculates the shared mosaic and keeps exactly fifteen", photoTimeline.portfolioStream.width < previousWidth &&
+      portfolioPreview.items.length === 15 && photoTimeline.portfolioStream.rows.every(line => {
+        return line.indices.every(i => {
+          const box = photoTimeline.portfolioStream.boxes[i];
+          return box.left + box.width <= previewStage.clientWidth + .01;
+        });
+      }) && originalFifteen.every(id => portfolioPreview.items.some(it => it.id === id)) &&
+      photoTimeline.portfolioStream.regions.get(portfolioPreview).color === outlineColor);
+    check("Resizing also updates the open photo's navigation selection", state.deck === portfolioPreview.items && inPortfolioOrder(state.deck));
+    previewStage.style.width = ""; layoutPhotoTimeline(); await settled();
+    closeDetail();
+    const smallDay = photoTimeline.days.find(day => day.total < 15);
+    check("Short days show every available photo", smallDay && smallDay.items.length === smallDay.total);
+    check("Portfolio contains no Show all, Analyse day or tag buttons", !$("timelineStage").querySelector(
+      ".timeline-toggle-all,.timeline-add-tags,.timeline-remove-tags,.timeline-date,.timeline-actions"));
+    change("timelineLimit", false); await settled();
+    const unlimitedPortfolio = photoTimeline.days.find(day => day.day === "2020-01-03");
+    await revealDay(unlimitedPortfolio); await settled();
+    check("Disabling the limit automatically loads every Portfolio photo", unlimitedPortfolio.allNext === null &&
+      unlimitedPortfolio.allItems.length === unlimitedPortfolio.total && inPortfolioOrder(unlimitedPortfolio.allItems));
+    change("timelineRating", "good"); change("timelineUnrated", false); await settled();
+    for (const day of photoTimeline.days){
+      await revealDay(day);
+      await wait(() => day.allNext === null, "full rated Portfolio day");
+    }
+    await settled();
+    const ratedStream = photoTimeline.portfolioStream;
+    check("Good only without unrated keeps days and their date tiles in visual order", photoTimeline.days.length > 1 &&
+      ratedStream.entries.every(it => it.portfolioDate || ["great", "5", "4"].includes(effRating(it))) &&
+      mosaicHasConnectedDays(ratedStream, ratedStream.entries) && photoTimeline.days.every((day, i, days) =>
+        inPortfolioOrder(day.allItems) && (!i || day.day < days[i - 1].day)));
+    change("timelineLimit", true); await settled();
+    const restoredPreview = photoTimeline.days.find(day => day.day === "2020-01-03");
+    change("timelineView", "timeline"); await settled();
+    row = await revealDay(restoredPreview);
+    check("Switching back restores Timeline sorting, badges, day controls and exact limit", restoredPreview.items.length === 15 &&
+      inCaptureOrder(restoredPreview.items) && row.querySelector(".timeline-badge") && row.querySelector(".timeline-toggle-all") &&
+      row.querySelector(".timeline-add-tags") && !row.querySelector(".portfolio-tile") && !$("portfolioFillers") && !$("portfolioOutlines"));
+    row.querySelector(".timeline-toggle-all").click(); await settled();
+    change("timelineView", "portfolio"); await settled();
+    check("Portfolio's limit overrides a manually expanded Timeline day", !restoredPreview.expanded &&
+      timelineItems(restoredPreview).length === 15 && !$("timelineStage").querySelector(".timeline-toggle-all"));
+    change("timelineView", "timeline"); await settled();
+    check("Returning to Timeline restores its previous expansion", restoredPreview.expanded);
+    check("Portfolio introduced no horizontal overflow", document.documentElement.scrollWidth <= innerWidth + 1);
+
     $("timelineTagsClear").click(); change("timelineRating", "great"); change("timelineUnrated", false);
     change("timelineLimit", true); await settled();
     selectTimelineTag("kids", true); await settled();
@@ -720,18 +1323,32 @@ def main():
                         "CASE WHEN id % 5 = 0 THEN '12:00:00' ELSE "
                         "printf('%02d:%02d:%02d', (id*137/3600)%24, (id*137/60)%60, (id*137)%60) END")
             con.execute("UPDATE photos SET iso=400, shutter='1/125'")
+            con.execute("UPDATE photos SET color_hex=CASE WHEN id%2=0 THEN '#68765b' ELSE '#836147' END WHERE id <= 1030")
+            con.execute("UPDATE photos SET width=CASE WHEN id%3=0 THEN 800 ELSE 1200 END, "
+                        "height=CASE WHEN id%3=1 THEN 1800 ELSE 800 END")
+            con.execute("UPDATE photos SET sharp_center=55, sharp_edge=12 WHERE id IN (25, 26)")
             con.executemany("INSERT INTO photos(id,path,filename,ext,size,taken,year,month,ym,mark,camera,lens) "
                             "VALUES (?,?,?,'jpg',1000,?,2019,1,'2019-01',?,'Camera 00','Lens 00')",
                             [(3001+i, f"bulk/{i}.jpg", f"bulk-{i}.jpg", f"2019-01-01 12:00:{i:02d}",
                               "great" if i < 24 else "bad" if i < 32 else None) for i in range(40)])
             con.executemany("INSERT INTO photo_tags VALUES (?,'base')", [(3001+i,) for i in range(40)])
-        picture = io.BytesIO()
-        Image.new("RGB", (8, 8), (104, 118, 91)).save(picture, "JPEG")
+            con.executemany("UPDATE photos SET pair_stem=?, date_src='exif' WHERE id=?",
+                            [(raw_pairs.stem(filename), pid) for pid, filename in
+                             con.execute("SELECT id, filename FROM photos").fetchall()])
+            con.execute("INSERT INTO photos(path,filename,ext,pair_stem,taken,date_src,year,month,ym,mark,camera) "
+                        "SELECT path || '.nef', pair_stem || '.NEF', 'nef', pair_stem, taken, 'exif', "
+                        "year, month, ym, 'bad', 'Hidden RAW camera' FROM photos WHERE ext='jpg' AND id%3=0")
+        pictures = []
+        for size in ((80, 80), (80, 120), (120, 80)):
+            picture = io.BytesIO()
+            Image.new("RGB", size, (104, 118, 91)).save(picture, "JPEG")
+            pictures.append(picture.getvalue())
 
         @app.app.before_request
         def thumbnail():
             if request.path.startswith("/api/thumb/"):
-                return Response(picture.getvalue(), mimetype="image/jpeg")
+                pid = int(request.path.rsplit("/", 1)[1])
+                return Response(pictures[pid % 3], mimetype="image/jpeg")
 
         @app.app.after_request
         def unordered_timeline(response):

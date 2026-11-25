@@ -37,7 +37,7 @@ STALE = 20
 KEEP = 50            # rows kept; this is a status line, not a log
 
 KINDS = {"exif": "Reading EXIF", "images": "Analysing images",
-         "sign": "Signing files"}
+         "sign": "Signing files", "rescan": "Applying folder rescan"}
 
 
 def ensure_schema(con):

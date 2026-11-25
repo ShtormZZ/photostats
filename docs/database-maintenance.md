@@ -1,4 +1,5 @@
 # Database migration and recovery
+# Database migration and recovery
 
 `db_schema.py` is the schema owner for `app.py`, `scan.py`, `jobs.py` and the
 compatibility entry points in `tags.py`. It serialises startup with

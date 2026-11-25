@@ -6,7 +6,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Photo archive — statistics</title>
+<title>photostats — statistics</title>
 <!-- The tab gets the ico, not the vector, although the vector is right here:
      browsers prefer svg and then draw it at 16 pixels, where the viewfinder
      corners run together with the bars. In the ico those same 16 and 24 are
@@ -57,13 +57,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .job .bar i{display:block;height:100%;background:var(--safelight)}
 .job button{color:var(--muted);font-size:11px;padding:0 2px;flex:none}
 .job button:hover{color:var(--safelight)}
-.brand{font-family:var(--display);font-size:19px;letter-spacing:.14em;text-transform:uppercase;
+.brand{font-family:var(--display);font-size:19px;letter-spacing:.14em;
   font-weight:600;display:flex;align-items:center}
 .brand span{color:var(--safelight)}
 /* The mark is the same icon as the window and the tab carry, only without its
    tile: the tile fill matches the header colour, and all that would be left of it
    is a frame round the mark. The spacing is set on the mark itself rather than
-   with gap: in a flex row "Photo" and <span> are two separate items, and gap
+   with gap: in a flex row "photo" and <span> are two separate items, and gap
    would push the halves of the name apart as well. */
 .brand .mark{margin-right:11px;flex:none}
 .tally{font-family:var(--data);font-size:13px;color:var(--muted);white-space:nowrap}
@@ -192,6 +192,11 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .timeline-photo{position:relative;width:100%;aspect-ratio:1;padding:0;overflow:hidden;
   border:1px solid var(--line);border-radius:3px;background:var(--panel) center/cover no-repeat}
 .timeline-photo:hover{border-color:var(--safelight)}
+.raw-badge{display:inline-block;flex:none;border-radius:2px;padding:2px 4px;
+  background:#16151AE6;color:var(--safelight);font:600 10px var(--data);line-height:1.2;
+  white-space:nowrap;vertical-align:middle}
+.raw-badge[hidden]{display:none}
+.timeline-photo > .raw-badge{position:absolute;left:3px;top:3px}
 .timeline-photo .noimg{font:11px var(--data);color:var(--muted)}
 .timeline-photo.in .noimg{display:none}
 .timeline-badge{position:absolute;left:3px;bottom:3px;border-radius:2px;padding:2px 4px;
@@ -211,6 +216,28 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .timeline-actions .progress{font:11px var(--body);color:var(--muted);line-height:1.4}
 .timeline-date .timeline-actions{position:static;margin-top:10px}
 .timeline-day.narrow{grid-template-columns:var(--timeline-rail) minmax(0,1fr)}
+.photo-timeline.portfolio{padding-left:8px;padding-right:8px}
+.photo-timeline:not(.portfolio) .portfolio-option{display:none}
+.portfolio .timeline-stage{margin-left:0;border-left:0}
+.portfolio .timeline-help{display:none}
+.portfolio-group{display:contents}
+.portfolio-fillers{position:absolute;inset:0;pointer-events:none}
+.portfolio-outlines{position:absolute;pointer-events:none}
+.portfolio-filler{position:absolute;display:grid;place-items:center;box-sizing:border-box;overflow:hidden;
+  padding:16px;text-align:center;font:600 12px/1.25 var(--body);overflow-wrap:anywhere;color:var(--safelight);
+  text-shadow:0 0 2px #21170b,0 1px 2px #21170b,0 -1px 2px #21170b}
+.portfolio-filler .fact{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.portfolio-filler .arrow{position:absolute;transform:translate(-50%,-50%);font:16px/1 sans-serif}
+.portfolio-date-tile{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;background:var(--panel);color:var(--paper);font:700 17px var(--display)}
+.portfolio-date-tile .year{color:var(--safelight);font:14px var(--data)}
+.portfolio-tile{position:absolute;min-width:0}
+.portfolio .timeline-photo{display:block;aspect-ratio:auto;border:0;border-radius:0;background-size:cover}
+.portfolio-caption{position:absolute;inset:auto 0 0;max-height:100%;overflow:hidden;pointer-events:none;
+  font:12px/18px var(--body);white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;
+  color:#fff;text-shadow:0 1px 2px #000;background:linear-gradient(transparent,rgba(0,0,0,.8) 18px);
+  padding:18px 10px 7px}
+.portfolio-loading{padding:10px;overflow:hidden;color:var(--muted);font-size:12px}
 .timeline-footer{padding:20px 0;min-height:68px;text-align:center;color:var(--muted);font-size:13px}
 #timelineRetry{margin-left:10px}
 
@@ -494,6 +521,8 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
   font-size:9px;background:linear-gradient(transparent,rgba(10,9,13,.92));color:var(--paper);
   text-align:left;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden}
 .cellwrap .cell:hover .cap{opacity:1}
+.cellwrap .cell > .raw-badge{position:absolute;left:4px;bottom:4px}
+.cellwrap .cell.has-raw .cap{bottom:24px}
 /* The comment is only a mark over the picture: the text needs the card, and a
    caption over a 120-pixel thumbnail would cover the thing being captioned. It
    stays visible without hovering, like a rating that has been set. */
@@ -543,6 +572,7 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .lrow .c-name{display:flex;align-items:baseline;min-width:0}
 .lrow .c-name .nm{flex:0 1 auto;min-width:0}
 .lrow .c-name .note{flex:none}
+.lrow .c-name .raw-badge,.meta h3 .raw-badge{margin-left:6px}
 .note{display:inline-block;width:11px;height:11px;color:var(--safelight);
   vertical-align:-1px;margin-left:5px;filter:drop-shadow(0 1px 1px rgba(10,9,13,.9))}
 .note svg{display:block;width:100%;height:100%}
@@ -579,6 +609,7 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .veil.on{display:flex}
 .detail{background:var(--panel);border:1px solid var(--line);border-radius:4px;max-width:1000px;
   width:100%;max-height:92vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.5fr) 300px}
+.detail.hide-capture-date .capture-date{display:none}
 /* The picture sits in a frame of its own so the arrows have something to be
    positioned against: over the photograph itself, not over the card. */
 .detail .frame{position:relative;min-width:0;background:#0E0D11}
@@ -617,6 +648,11 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 .meta dd{margin:0;font-family:var(--data);word-break:break-word}
 .meta .path{font-family:var(--data);font-size:11px;color:var(--muted);word-break:break-all;
   line-height:1.5}
+.raw-files{display:flex;flex-direction:column;gap:10px;min-width:0}
+.raw-file{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.raw-file-label{font-size:11px;color:var(--muted)}
+.raw-path{font-family:var(--data);font-size:11px;color:var(--muted);line-height:1.5;
+  white-space:normal;overflow-wrap:anywhere;max-width:100%;user-select:text}
 /* The large view is where a photo actually gets judged, so the control is full
    size here and carries its label. It sits above the buttons, which stay pinned
    to the bottom — rating is something you do to the picture, not an action on
@@ -692,11 +728,11 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 
 <div class="topbar">
 <header class="top">
-  <div class="brand"><img class="mark" src="mark.svg" alt="" width="30" height="30">Photo<span>archive</span></div>
+  <div class="brand"><img class="mark" src="mark.svg" alt="" width="30" height="30">photo<span>stats</span></div>
   <div class="ver" id="ver"></div>
   <nav class="pages" aria-label="Pages">
     <a class="tool" id="pageStats" href="#statistics" aria-current="page">Statistics</a>
-    <a class="tool" id="pageDirectories" href="#directories">Directories</a>
+    <a class="tool" id="pageDirectories" href="#directories">Folders</a>
     <a class="tool" id="pageTimeline" href="#timeline">Timeline</a>
   </nav>
   <div class="tally" id="tally">loading…</div>
@@ -714,6 +750,13 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 <main class="photo-timeline" id="photoTimeline" hidden>
   <div class="timeline-tools" id="timelineTools">
     <h1>Timeline</h1>
+    <span class="timeline-option"><label for="timelineView">View</label>
+    <select id="timelineView" autocomplete="off">
+      <option value="timeline">Timeline</option>
+      <option value="portfolio">Portfolio</option>
+    </select></span>
+    <label class="timeline-option portfolio-option"><input id="portfolioHideBorders" type="checkbox" autocomplete="off">Hide day borders</label>
+    <label class="timeline-option portfolio-option"><input id="portfolioHideDates" type="checkbox" autocomplete="off">Hide dates</label>
     <div class="grow"></div>
     <details class="timeline-tags" id="timelineTags">
       <summary id="timelineTagsSummary">Tags: all</summary>
@@ -731,7 +774,7 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
       <option value="great">5+ only</option>
     </select></span>
     <label class="timeline-option"><input id="timelineUnrated" type="checkbox" autocomplete="off" checked>Include unrated</label>
-    <label class="timeline-option"><input id="timelineLimit" type="checkbox" autocomplete="off">15 per day</label>
+    <label class="timeline-option"><input id="timelineLimit" type="checkbox" autocomplete="off"><span id="timelineLimitLabel">15 per day</span></label>
     <span class="timeline-option"><label for="timelineOrder">Date order</label>
     <select id="timelineOrder">
       <option value="desc">Newest first</option>
@@ -766,7 +809,11 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
     Within each day, 5+ photos come first, other photos follow, and bad photos come last, after unrated.
     Each group is ordered from earliest to latest. 15 per day limits the results after all filters;
     Show all reveals every remaining match. Turn the limit off to show all matches automatically.
-    Choose at most one extra filter and one option; search to find more options. Focal lengths use actual mm.
+    Portfolio uses the full width, showing 5+ first, then five stars, then all other photos, each group by capture time.
+    5+ and five-star photos preserve their proportions and show comments at the bottom of the image. Their shorter side spans three ordinary tiles plus two gaps,
+    including in short days. Ordinary photos fill the space beside them in aligned columns. Days share one mosaic with date tiles,
+    no day buttons or Show all. The daily limit shows exactly 15 photos, excluding the date tile; shorter days show all matches.
+    Choose at most one extra filter and one option; search to find more options. Focal lengths use 35mm-equivalent values.
     Analyse day always opens the whole day in Statistics. These filters reset when the page is reloaded.</p>
   <div class="timeline-stage" id="timelineStage" aria-label="Photos by day"></div>
   <div class="timeline-footer" id="timelineFooter">
@@ -799,29 +846,29 @@ button.directory-toggle:not(:disabled):hover{background:var(--frame)}
 </dialog>
 <main class="directories" id="directories" hidden>
   <div class="directory-tools">
-    <h1>Scanned directories</h1>
+    <h1>Scanned folders</h1>
     <div class="grow"></div>
-    <input class="search" id="directorySearch" type="search" placeholder="search directory path"
-           aria-label="Search directory path">
+    <input class="search" id="directorySearch" type="search" placeholder="search folder path"
+           aria-label="Search folder path">
     <button class="tool" id="directoryRefresh">Refresh</button>
   </div>
   <div id="directorySummary" class="tally"></div>
-  <p class="directory-note">Counts and sizes include all subdirectories and only files stored in the database.
-    Colour + sharpness counts files with both measurements available. Empty directories are not recorded.
-    Analyse opens Statistics for the directory and its subdirectories, keeping your other filters.
+  <p class="directory-note">Counts and sizes include indexed photos on disk in each folder and its subfolders.
+    Colour + sharpness counts files with both measurements available. Empty folders are not recorded.
+    Analyse opens Statistics for the folder and its subfolders, keeping your other filters.
     Use Refresh to see new scan results.</p>
   <p id="directoryStatus" role="status" aria-live="polite"></p>
   <div class="directory-table" id="directoryTable" aria-busy="false">
-    <table aria-label="Scanned directories and totals including subdirectories">
-      <thead><tr><th scope="col">Directory</th><th scope="col">Scanned files</th>
+    <table aria-label="Scanned folders and totals including subfolders">
+      <thead><tr><th scope="col">Folder</th><th scope="col">Scanned files</th>
         <th scope="col">Colour + sharpness</th><th scope="col">Size</th><th scope="col">Analysis</th></tr></thead>
       <tbody id="directoryRows"></tbody>
     </table>
     <div id="directoryEmpty" hidden></div>
   </div>
 </main>
-<div class="empty" id="archiveEmpty" hidden style="padding:40px 24px">The database is still empty.
-  Run this in the program folder:<br><code>python scan.py "D:\Photos"</code></div>
+<div class="empty" id="archiveEmpty" hidden style="padding:40px 24px">No photos to show.
+  To add photos, run this in the program folder:<br><code>python scan.py "D:\Photos"</code></div>
 <div class="wrap">
   <main class="left">
   <div class="group" id="g-time">
@@ -2232,8 +2279,8 @@ let thumbBusy = false;
    server, and a parallel batch of pictures would block clicks on the charts.
    Changing the selection raises the generation number, and anything still
    loading is cancelled. */
-function queueThumb(el, id, size, valid = null){
-  thumbQ.push({el, id, size, gen: thumbGen, valid});
+function queueThumb(el, id, size, valid = null, loaded = null){
+  thumbQ.push({el, id, size, gen: thumbGen, valid, loaded});
   pumpThumbs();
 }
 
@@ -2250,6 +2297,7 @@ async function pumpThumbs(){
         if (wanted()){
           job.el.style.backgroundImage = "url(" + img.src + ")";
           job.el.classList.add("in");
+          if (job.loaded) job.loaded(img);
         }
         done();
       };
@@ -2262,6 +2310,16 @@ async function pumpThumbs(){
 
 let stripItems = [];
 
+function rawBadge(it){
+  const badge = document.createElement("span");
+  badge.className = "raw-badge";
+  badge.textContent = "RAW";
+  badge.title = "RAW file available";
+  badge.setAttribute("aria-label", "RAW file available");
+  badge.hidden = !it.has_raw;
+  return badge;
+}
+
 function renderStrip(items){
   stripItems = items;
   const box = $("strip");
@@ -2272,12 +2330,14 @@ function renderStrip(items){
     wrap.className = "cellwrap";
     const b = document.createElement("button");
     b.className = "cell";
+    b.classList.toggle("has-raw", !!it.has_raw);
     b.innerHTML = '<span class="noimg"></span><span class="cap"></span>';
-    b.querySelector(".noimg").textContent = it.ext.toUpperCase();
+    b.querySelector(".noimg").textContent = (it.ext || "").toUpperCase();
     b.querySelector(".cap").textContent = (it.taken || "").slice(0, 10);
-    b.title = it.filename + "\n" + (it.taken || "");
+    b.title = it.filename + "\n" + (it.taken || "") + (it.has_raw ? "\nRAW file available" : "");
     b.onclick = () => openDetail(it, items);
     b.appendChild(noteIcon(it));
+    b.appendChild(rawBadge(it));
     wrap.appendChild(b);
     wrap.appendChild(ratingControl(it));
     box.appendChild(wrap);
@@ -2293,6 +2353,28 @@ function act(action, id){
     .then(r => r.json())
     .then(r => { if (!r.ok) toast(r.error || "Did not work"); })
     .catch(() => toast("Could not open the file"));
+}
+
+function rawFileInfo(it, buttonClass = "act"){
+  const files = it.has_raw ? it.raw_files || [] : [];
+  if (!files.length) return null;
+  const box = document.createElement("div"); box.className = "raw-files";
+  files.forEach(file => {
+    const row = document.createElement("div"); row.className = "raw-file";
+    const label = document.createElement("span"); label.className = "raw-file-label";
+    label.textContent = "RAW file";
+    const path = document.createElement("div"); path.className = "raw-path";
+    path.textContent = file.path; path.title = file.path;
+    row.append(label, path);
+    if (state.files){
+      const button = document.createElement("button"); button.className = buttonClass + " raw-reveal";
+      button.textContent = "Show RAW in Explorer";
+      button.onclick = () => act("reveal-raw/" + it.id, file.id);
+      row.appendChild(button);
+    }
+    box.appendChild(row);
+  });
+  return box;
 }
 
 /* The band names come from the server with the photo, so the card and the
@@ -2327,6 +2409,8 @@ function expandRow(row, it){
   const path = box.querySelector(".path");
   path.textContent = it.path;
   path.title = it.path;
+  const rawInfo = rawFileInfo(it, "act2");
+  if (rawInfo) path.after(rawInfo);
 
   const facts = box.querySelector(".facts");
   const line = (text, hex) => {
@@ -2344,6 +2428,7 @@ function expandRow(row, it){
 
   const fl = state.eq ? it.focal35 : it.focal;
   line(it.taken + (it.date_src === "file" ? "  (file date)" : ""));
+  if (it.has_raw) line("RAW file available");
   line([it.camera, it.lens].filter(Boolean).join("  ·  ") || "camera not specified");
   line([fl ? Math.round(fl) + " mm" : null,
         it.fnumber ? "f/" + it.fnumber : null,
@@ -2464,8 +2549,8 @@ function renderList(data, append){
     const nm = document.createElement("span");
     nm.className = "nm";
     nm.textContent = name;
-    b.querySelector(".c-name").title = name;
-    b.querySelector(".c-name").append(nm, noteIcon(it));
+    b.querySelector(".c-name").title = name + (it.has_raw ? " · RAW file available" : "");
+    b.querySelector(".c-name").append(nm, rawBadge(it), noteIcon(it));
     // read-only here: the row is a button, and the editor belongs where there is
     // room for it — open the row or the card to change them
     b.querySelector(".c-tags").dataset.pid = it.id;
@@ -2511,6 +2596,7 @@ function openDetail(it, deck, timelineDay = null){
   state.deck = deck || listItems;
   state.shown = it;
   const d = $("detail");
+  d.classList.toggle("hide-capture-date", !!timelineDay && photoTimeline.view === "portfolio" && photoTimeline.hideDates);
   const rows = [
     ["Taken", it.taken + (it.date_src === "file" ? " (from file date)" : "")],
     ["Camera", it.camera || "—"],
@@ -2565,11 +2651,15 @@ function openDetail(it, deck, timelineDay = null){
     '<button class="act" data-a="close">Close</button></div></div>';
   d.querySelector("img").src = "/api/thumb/" + it.id + "?s=1400";
   d.querySelector("h3").textContent = it.filename;
+  d.querySelector("h3").appendChild(rawBadge(it));
   d.querySelector(".path").textContent = it.path;
+  const rawInfo = rawFileInfo(it);
+  if (rawInfo) d.querySelector(".path").after(rawInfo);
   const dl = d.querySelector("dl");
   rows.forEach(([k,v]) => {
     const dt = document.createElement("dt"); dt.textContent = k;
     const dd = document.createElement("dd");
+    if (k === "Taken"){ dt.className = "capture-date"; dd.className = "capture-date"; }
     const hex = k === "Colour" ? it.color_hex
               : k === "Centre" ? it.color_center_hex : null;
     if (hex){
@@ -2595,7 +2685,7 @@ function openDetail(it, deck, timelineDay = null){
     if (e.target.closest(".nav")) return;
     if (full() || e.target.tagName === "IMG") toggleFull(it);
   };
-  d.querySelectorAll(".act").forEach(b => b.onclick = () => {
+  d.querySelectorAll(".acts .act").forEach(b => b.onclick = () => {
     const a = b.dataset.a;
     if (a === "close") return closeDetail();
     if (a === "folder"){
@@ -2664,9 +2754,9 @@ function step(by){
    soft once it fills the window. The bigger one is fetched on the way in and
    swapped only when it has arrived, so the view never blinks white in between. */
 function toggleFull(it){
-  const on = $("veil").classList.toggle("full");
   const img = $("detail").querySelector("img");
   if (!img) return;
+  const on = $("veil").classList.toggle("full");
   img.title = on ? "Double-click to come back" : "Double-click for the whole window";
   if (on) sharpen(it);
 }
@@ -2807,7 +2897,7 @@ function renderDirectories(){
   }
   $("directoryRows").replaceChildren(fragment);
   $("directoryEmpty").hidden = count > 0;
-  $("directoryEmpty").textContent = query ? "No matching directories." : "No scanned directories yet.";
+  $("directoryEmpty").textContent = query ? "No matching folders." : "No scanned folders yet.";
   const total = directoryData.total;
   $("directorySummary").textContent = nf(total.n) + " scanned files · " + nf(total.analyzed) +
     " with colour + sharpness · " + directorySize(total.bytes);
@@ -2817,7 +2907,7 @@ function loadDirectories(){
   if (directoryLoading) return directoryLoading;
   $("directoryRefresh").disabled = true;
   $("directoryTable").setAttribute("aria-busy", "true");
-  $("directoryStatus").textContent = "Loading directories…";
+  $("directoryStatus").textContent = "Loading folders…";
   directoryLoading = ask("directories", "/api/directories").then(data => {
     const nodes = new Map(data.items.map(node => [node.path, node]));
     directoryData = data;
@@ -2834,7 +2924,7 @@ function loadDirectories(){
     $("directoryStatus").textContent = "Updated " + new Date().toLocaleTimeString();
   }).catch(e => {
     if (e.name !== "AbortError") $("directoryStatus").textContent =
-      "Could not load directories. Try Refresh. " + (directoryData ? "Previous results are still shown." : "");
+      "Could not load folders. Try Refresh. " + (directoryData ? "Previous results are still shown." : "");
   }).finally(() => {
     directoryLoading = null;
     $("directoryRefresh").disabled = false;
@@ -2852,13 +2942,16 @@ function savedTimelineOrder(){
 }
 const photoTimeline = {days:[], next:null, started:false, loading:false, ended:false, error:false,
   seed:timelineSeed(), order:savedTimelineOrder(), epoch:0, offsets:[0], mounted:new Map(),
-  ratingMode:"good", includeUnrated:true, limitDaily:false, tags:[],
+  view:"timeline", ratingMode:"good", includeUnrated:true, limitDaily:false, tags:[],
+  hideDayBorders:false, hideDates:false,
   extraType:"", extraValue:"", extraLabel:"",
   scrollY:0, frame:0, dirty:new Set(), updating:new Map()};
 $("timelineOrder").value = photoTimeline.order;
 $("timelineRating").value = photoTimeline.ratingMode;
 $("timelineUnrated").checked = photoTimeline.includeUnrated;
 $("timelineLimit").checked = photoTimeline.limitDaily;
+$("portfolioHideBorders").checked = photoTimeline.hideDayBorders;
+$("portfolioHideDates").checked = photoTimeline.hideDates;
 $("timelineFilter").value = photoTimeline.extraType;
 const timelineOptions = {epoch:0, items:[], next:null, loading:false};
 
@@ -2903,8 +2996,8 @@ function drawTimelineBulk(){
   $("timelineBulkAdd").disabled = b.selected.length >= TAG_MAX || !$("timelineBulkSearch").value.trim();
   $("timelineBulkSearch").disabled = !removing && b.selected.length >= TAG_MAX;
   $("timelineBulkScope").textContent = preview ? nf(preview.matched) + " of " + nf(preview.total) +
-    " photos in this day match the current filters." + (b.limited && preview.matched > 15
-      ? " Includes " + nf(preview.matched - 15) + " photos hidden by the 15-photo limit." : "") : "Checking photos…";
+    " photos in this day match the current filters." + (b.limited && preview.matched > b.visible
+      ? " Includes " + nf(preview.matched - b.visible) + " photos hidden by the " + b.limitLabel + "." : "") : "Checking photos…";
   $("timelineBulkWarning").hidden = !preview?.hidden;
   $("timelineBulkWarning").textContent = preview?.hidden
     ? (removing ? "Tags will not be removed from every photo: filters exclude " : "Not all photos will be tagged: filters exclude ") +
@@ -3014,7 +3107,9 @@ function openTimelineBulk(day, mode = "add"){
   if (timelineBulk.busy) return;
   closeDetail();
   Object.assign(timelineBulk, {session:timelineBulk.session + 1, query:timelineParams({day:day.day, operation:mode}),
-    day:day.day, mode, epoch:photoTimeline.epoch, limited:photoTimeline.limitDaily, selected:[], preview:null, available:null});
+    day:day.day, mode, epoch:photoTimeline.epoch, limited:photoTimeline.limitDaily,
+    visible:timelinePhotoCount(day), limitLabel:photoTimeline.view === "portfolio" ? "daily preview" : "15-photo limit",
+    selected:[], preview:null, available:null});
   const removing = mode === "remove", label = removing ? "Tags to remove" : "Tags to add";
   $("timelineBulkTitle").textContent = (removing ? "Remove tags · " : "Add tags · ") + day.day;
   $("timelineBulkLabel").textContent = label;
@@ -3208,6 +3303,7 @@ const timelinePhotoCount = day => day.expanded ? day.total : day.items.length;
 
 function timelinePhotoGroup(it){
   const rating = effRating(it);
+  if (photoTimeline.view === "portfolio") return rating === "great" ? 0 : rating === "5" ? 1 : 2;
   return rating === "great" ? 0 : rating === "bad" ? 2 : 1;
 }
 
@@ -3221,10 +3317,645 @@ function timelinePhotoOrder(a, b){
 }
 
 function prepareTimelineDay(data, expanded = !photoTimeline.limitDaily){
+  const byId = new Map(data.items.map(it => [it.id, it]));
+  const candidates = data.highlight_ids ? data.highlight_ids.map(id => byId.get(id)).filter(Boolean) : data.items.slice();
   const items = data.items.slice().sort(timelinePhotoOrder);
   const allItems = items.map(it => ({...it}));
-  return {...data, items, expanded, details:null, allItems, allById:new Map(allItems.map(it => [it.id, it])),
+  return {...data, candidates, items, expanded, details:null, allItems, allById:new Map(allItems.map(it => [it.id, it])),
     serial:0, allNext:allItems.length >= data.total ? null : 0, allLoading:false, allError:false, allTask:null};
+}
+
+function portfolioFeatured(it){ return ["great", "5"].includes(effRating(it)); }
+
+const portfolioTileSizes = {
+  ordinary:{width:1, height:1}, portrait:{width:3, height:4}, landscape:{width:4, height:3},
+  wide:{width:4, height:2}, square:{width:4, height:4}
+};
+
+function portfolioTileSize(it){
+  if (!portfolioFeatured(it)) return portfolioTileSizes.ordinary;
+  if (it.sharp_center_l === "very sharp" && ["soft", "very soft"].includes(it.sharp_edge_l))
+    return portfolioTileSizes.square;
+  const ratio = photoTimeline.sourceRatios?.get(it.id) ?? (it.width > 0 && it.height > 0 ? it.width / it.height : 1);
+  // Allow for rounding when the thumbnail is resized.
+  if (ratio >= 16 / 9 * .995) return portfolioTileSizes.wide;
+  return ratio < 1 ? portfolioTileSizes.portrait : portfolioTileSizes.landscape;
+}
+
+function portfolioThumbnailLoaded(it, image){
+  if (!portfolioFeatured(it) || !image.naturalWidth || !image.naturalHeight) return;
+  // EXIF dimensions may describe the unrotated sensor image. The thumbnail has
+  // already been transposed, and also supplies proportions for missing EXIF.
+  const t = photoTimeline, previous = portfolioTileSize(it);
+  if (!t.sourceRatios) t.sourceRatios = new Map();
+  t.sourceRatios.set(it.id, image.naturalWidth / image.naturalHeight);
+  if (portfolioTileSize(it) === previous) return;
+  if (!t.layoutFrame) t.layoutFrame = requestAnimationFrame(() => { t.layoutFrame = 0; layoutPhotoTimeline(); });
+}
+
+const portfolioEpsilon = .001;
+
+// Layout uses whole cells. Gutters and pixel sizes are applied after packing.
+function portfolioFreeIntervals(boxes, top, height, left, right){
+  const blocked = boxes.filter(box => box.top + box.height > top && box.top < top + height &&
+    box.left + box.width > left && box.left < right).sort((a, b) => a.left - b.left);
+  const intervals = [];
+  let clearsAt = Infinity;
+  for (const box of blocked){
+    if (box.left > left) intervals.push([left, box.left]);
+    left = Math.max(left, box.left + box.width);
+    clearsAt = Math.min(clearsAt, box.top + box.height);
+  }
+  if (left < right) intervals.push([left, right]);
+  return {intervals, clearsAt};
+}
+
+function portfolioConnectedLeft(anchors, top, size, left, right, count = 1, allowCorners = false){
+  const width = size.width * count;
+  const corner = Number(allowCorners);
+  let best = Infinity;
+  for (const box of anchors){
+    const rightOfBox = box.left + box.width, leftOfBox = box.left - width;
+    if (Math.min(top + size.height, box.top + box.height) > Math.max(top, box.top)){
+      if (rightOfBox >= left && rightOfBox <= right) best = Math.min(best, rightOfBox);
+      if (leftOfBox >= left && leftOfBox <= right) best = Math.min(best, leftOfBox);
+    }
+    if (top !== box.top + box.height) continue;
+    // Any cell of a horizontal strip can join the row above.
+    const x = Math.max(left, Math.min(right, box.left - (count - 1) - corner));
+    if (Math.min(x + width, rightOfBox) + corner > Math.max(x, box.left)) best = Math.min(best, x);
+  }
+  return best;
+}
+
+function portfolioDayIsConnected(boxes, columns, allowCorners = false){
+  const stride = columns + 2, unseen = new Set();
+  const steps = [-1, 1, -stride, stride];
+  if (allowCorners) steps.push(-stride - 1, -stride + 1, stride - 1, stride + 1);
+  for (const box of boxes){
+    for (let y = box.top; y < box.top + box.height; y++)
+      for (let x = box.left; x < box.left + box.width; x++) unseen.add(y * stride + x);
+  }
+  const pending = [boxes[0].top * stride + boxes[0].left];
+  unseen.delete(pending[0]);
+  while (pending.length){
+    const p = pending.pop();
+    for (const step of steps)
+      if (unseen.delete(p + step)) pending.push(p + step);
+  }
+  return !unseen.size;
+}
+
+function placePortfolioDay(group, start, prior, bounds, allowBridge = false, allowCorners = false){
+  const [first, second] = group.sizes;
+  const placed = [{left:start.left, top:start.top, ...first}];
+  if (group.date && second){
+    const {left, top} = placed[0];
+    placed.push({left:start.below ? left : left + first.width,
+      top:start.below ? top + first.height : top, ...second});
+  }
+  let anchors = placed.slice(), obstacles = prior;
+  let bottom = Math.max(...placed.map(box => box.top + box.height));
+  let runEnd = placed.length, needsBridge = false;
+  for (let i = placed.length; i < group.sizes.length;){
+    const size = group.sizes[i], previous = placed.at(-1);
+    if (i === runEnd){
+      runEnd = i + 1;
+      if (size === portfolioTileSizes.ordinary){
+        while (group.sizes[runEnd] === size) runEnd++;
+      }
+    }
+    const [left, right] = bounds;
+    if (size.width > right - left) return null;
+    anchors = anchors.filter(box => box.top + box.height >= previous.top);
+    obstacles = obstacles.filter(box => box.top + box.height > previous.top);
+    const blocking = obstacles.concat(anchors);
+    let position;
+    for (let top = previous.top; top <= bottom;){
+      const firstOnRow = top === previous.top ? previous.left + previous.width : left;
+      const free = portfolioFreeIntervals(blocking, top, size.height, firstOnRow, right);
+      for (const [from, to] of free.intervals){
+        if (to - from < size.width) continue;
+        const count = Math.min(runEnd - i, Math.floor((to - from) / size.width));
+        let x = portfolioConnectedLeft(anchors, top, size, from, to - count * size.width, count, allowCorners);
+        // The ordinary tail may reach the far side of a tall photo by joining below it.
+        if (allowBridge && size === portfolioTileSizes.ordinary && runEnd === group.sizes.length && x > from){
+          x = from; needsBridge = true;
+        }
+        if (Number.isFinite(x)){ position = {left:x, top, count}; break; }
+      }
+      if (position) break;
+      let next = free.clearsAt;
+      if (top === previous.top) next = Math.min(next, top + 1);
+      for (const box of anchors){
+        const nextRow = box.top + box.height;
+        if (nextRow > top) next = Math.min(nextRow, next);
+      }
+      top = next;
+    }
+    if (!position) return null;
+    for (let j = 0; j < position.count; j++){
+      const box = {left:position.left + j * size.width, top:position.top, ...size};
+      placed.push(box); anchors.push(box);
+    }
+    i += position.count;
+    bottom = Math.max(bottom, position.top + size.height);
+  }
+  if (needsBridge && !portfolioDayIsConnected(placed, bounds[1], allowCorners))
+    return placePortfolioDay(group, start, prior, bounds, false, allowCorners);
+  return {boxes:placed, bottom};
+}
+
+// Each obstacle rules out a range of integer origins for each part of the seed.
+// Positions between these ranges can hold the date and first photo together.
+function portfolioSeedOpenings(parts, active, top, left, last){
+  const blocked = new Uint8Array(last + 1);
+  let clearsAt = Infinity;
+  for (const part of parts){
+    const y = top + part.top;
+    for (const box of active){
+      if (box.top >= y + part.height || box.top + box.height <= y) continue;
+      const from = Math.max(left, box.left - part.left - part.width + 1);
+      const to = Math.min(last + 1, box.left + box.width - part.left);
+      if (from >= to) continue;
+      blocked.fill(1, from, to);
+      clearsAt = Math.min(clearsAt, box.top + box.height - part.top);
+    }
+  }
+  const intervals = [];
+  for (let x = left; x <= last;){
+    if (blocked[x]){ x++; continue; }
+    const first = x++;
+    while (x <= last && !blocked[x]) x++;
+    intervals.push([first, x - 1]);
+  }
+  return {intervals, clearsAt};
+}
+
+function portfolioDayOptions(group, prior, after, bottom, columns, compact, exactFit, {corners = false, pairs = false} = {}){
+  const [first, second] = group.sizes, paired = group.date && second;
+  const inlineWidth = paired ? first.width + second.width : first.width;
+  const inline = {width:inlineWidth, height:paired ? Math.max(first.height, second.height) : first.height, below:false};
+  const starts = inline.width <= columns ? [inline] : [];
+  if (paired && (compact || !starts.length)) starts.push({width:Math.max(first.width, second.width),
+    height:first.height + second.height, below:true});
+  const area = group.sizes.reduce((sum, box) => sum + box.width * box.height, 0);
+  const widest = group.sizes.reduce((max, box) => Math.max(max, box.width), 0);
+  const target = Math.ceil(Math.sqrt(area * 1.35));
+  const options = [];
+  const openingLimit = compact ? (pairs ? 3 : 2) : 1;
+  const floor = after?.top || 0;
+  const byTop = prior.slice().sort((a, b) => a.top - b.top);
+  for (const seed of starts){
+    const parts = exactFit && paired
+      ? [{left:0, top:0, ...first}, {left:seed.below ? 0 : first.width, top:seed.below ? first.height : 0, ...second}]
+      : [{left:0, top:0, width:seed.width, height:seed.height}];
+    const last = Math.min(columns - seed.width, group.date ? columns - 2 : columns - 1);
+    const tryAt = (left, top, active) => {
+      // Keep the date with the horizontal strip when the whole ordinary day fits here.
+      if (seed.below && area === group.sizes.length && left + area <= columns &&
+          !active.some(box => box.top <= top && box.left < left + area && box.left + box.width > left)) return;
+      const start = {left, top, below:seed.below};
+      const compactWidth = Math.max(seed.width, widest, target);
+      let small;
+      if (compact && group.sizes.length > (paired ? 2 : 1) && compactWidth < columns - left){
+        small = placePortfolioDay(group, start, prior, [left, left + compactWidth], false, corners);
+        if (small) options.push(small);
+      }
+      const fit = placePortfolioDay(group, start, prior, [0, columns], exactFit, corners);
+      if (fit && (!small || fit.boxes.some((b, i) => b.left !== small.boxes[i].left || b.top !== small.boxes[i].top)))
+        options.push(fit);
+    };
+    let top = floor, found = 0, nextBox = 0, active = [];
+    // Sweep past occupied rows while keeping only boxes that can block this seed.
+    while (found < openingLimit && top <= bottom){
+      const bottomOfSeed = top + seed.height;
+      active = active.filter(box => box.top + box.height > top);
+      while (nextBox < byTop.length && byTop[nextBox].top < bottomOfSeed){
+        const box = byTop[nextBox++];
+        if (box.top + box.height > top) active.push(box);
+      }
+      const left = after && top === floor ? after.left + after.width : 0;
+      const free = portfolioSeedOpenings(parts, active, top, left, last);
+      for (const [from, to] of free.intervals){
+        const previousCount = options.length;
+        tryAt(from, top, active);
+        if (exactFit && to !== from) tryAt(to, top, active);
+        if (options.length > previousCount) found++;
+        if (found >= openingLimit) break;
+      }
+      let nextTop = free.clearsAt;
+      // The next row can also use space to the left of the previous day's start.
+      if (left){
+        if (exactFit) nextTop = Math.min(nextTop, top + 1);
+        else {
+          for (const box of active) nextTop = Math.min(nextTop, box.top + box.height);
+        }
+      }
+      if (pairs && free.intervals.length) nextTop = Math.min(nextTop, top + 1);
+      top = nextTop;
+    }
+  }
+  if (!options.length){
+    // Below the previous days, the next tile can always touch the day from below.
+    const seed = starts[0];
+    options.push(placePortfolioDay(group, {left:0, top:bottom, below:seed.below}, [], [0, columns], false, corners));
+  }
+  return options;
+}
+
+function portfolioRightAlignedTail(option, prior, columns, {date, corners}){
+  const boxes = option.boxes, top = boxes.at(-1).top;
+  if (top === boxes[0].top) return null;
+  let start = boxes.length;
+  while (start > 1){
+    const box = boxes[start - 1], next = boxes[start];
+    if (box.top !== top || box.width !== 1 || box.height !== 1 || (next && next.left !== box.left + 1)) break;
+    start--;
+  }
+  if (start === boxes.length) return null;
+  const head = boxes.slice(0, start), tail = boxes.slice(start), first = tail[0];
+  const {intervals} = portfolioFreeIntervals(prior.concat(head), top, 1, first.left, columns);
+  const interval = intervals.find(([from, to]) => from === first.left && to >= from + tail.length);
+  if (!interval) return null;
+  // Keep the first photo beside its date if the strip starts with that photo.
+  const count = start === 1 ? 1 : tail.length;
+  for (let left = interval[1] - tail.length; left > first.left; left--){
+    if (!Number.isFinite(portfolioConnectedLeft(head, top, first, left, left, count, corners))) continue;
+    const shifted = head.concat(tail.map((box, i) => ({...box, left:left + i})));
+    // In markerless layouts the original tail may be the only link between two strips.
+    if (date || portfolioDayIsConnected(shifted, columns, corners)) return {boxes:shifted, bottom:option.bottom};
+  }
+  return null;
+}
+
+function portfolioOccupiedRowSum(boxes){
+  return boxes.reduce((sum, box) => sum + box.width * box.height * (box.top + (box.height - 1) / 2), 0);
+}
+
+// Count side-connected empty cells up to (but excluding) end. At a fixed day
+// boundary only the components touching its preceding row can still grow.
+function portfolioGapFrontier(boxes, columns, prefix, end){
+  if (end === prefix.top) return prefix;
+  const occupied = new Uint8Array((end - prefix.top) * columns);
+  for (const box of boxes){
+    const bottom = Math.min(end, box.top + box.height);
+    for (let y = Math.max(prefix.top, box.top); y < bottom; y++){
+      const offset = (y - prefix.top) * columns + box.left;
+      occupied.fill(1, offset, offset + box.width);
+    }
+  }
+  const copies = new Map();
+  let above = prefix.edge.map(region => {
+    if (!region) return null;
+    if (!copies.has(region)) copies.set(region, {area:region.area});
+    return copies.get(region);
+  });
+  let row = Array(columns), largest = prefix.largest;
+  for (let offset = 0; offset < occupied.length; offset += columns){
+    row.fill(null);
+    for (let x = 0; x < columns; x++){
+      if (occupied[offset + x]) continue;
+      const left = row[x - 1], up = above[x], region = left || up || {area:0};
+      if (left && up && left !== up){
+        left.area += up.area;
+        for (let k = 0; k < columns; k++){
+          if (above[k] === up) above[k] = left;
+          if (row[k] === up) row[k] = left;
+        }
+      }
+      row[x] = region;
+      largest = Math.max(largest, ++region.area);
+    }
+    [above, row] = [row, above];
+  }
+  return {top:end, edge:above, largest};
+}
+
+function choosePortfolioPlacement(options, prior, bottom, columns, next, prefix, exactFit, search){
+  const pairs = search?.pairs && next;
+  if (options.length === 1 && !pairs) return options[0];
+  let bestHeight = Infinity, bestLastRow = Infinity;
+  const finalists = [];
+  for (const option of options){
+    const preview = prior.concat(option.boxes), height = Math.max(bottom, option.bottom);
+    const neighbors = next ? portfolioDayOptions(next, preview, option.boxes[0], height, columns, true, exactFit, search) : [null];
+    for (const neighbor of neighbors){
+      const combinedHeight = Math.max(height, neighbor?.bottom || 0);
+      if (combinedHeight > bestHeight) continue;
+      const boxes = neighbor ? preview.concat(neighbor.boxes) : preview;
+      // At equal height and fixed tile area, each occupied cell in the last
+      // row means one extra empty cell somewhere above it.
+      const lastRow = boxes.reduce((n, b) => n + (b.top + b.height === combinedHeight ? b.width : 0), 0);
+      if (combinedHeight === bestHeight && lastRow > bestLastRow) continue;
+      if (combinedHeight < bestHeight || lastRow < bestLastRow) finalists.length = 0;
+      bestHeight = combinedHeight; bestLastRow = lastRow;
+      finalists.push({option, neighbor, boxes});
+    }
+  }
+  if (!pairs && finalists.every(candidate => candidate.option === finalists[0].option)) return finalists[0].option;
+  let best = null, bestGap = Infinity, bestRowSum = Infinity;
+  for (const candidate of finalists){
+    const {option, boxes} = candidate;
+    const gap = portfolioGapFrontier(boxes, columns, prefix, bestHeight - 1).largest;
+    if (gap > bestGap) continue;
+    const sum = portfolioOccupiedRowSum(boxes);
+    if (!best || gap < bestGap || option.bottom < best.option.bottom || (option.bottom === best.option.bottom && sum < bestRowSum)){
+      best = candidate; bestGap = gap; bestRowSum = sum;
+    }
+  }
+  return pairs ? {...best.option, next:best.neighbor} : best.option;
+}
+
+function timelineGrid(width){
+  const narrow = width < 600;
+  const rail = narrow ? 80 : 132;
+  const photosWidth = Math.max(1, width - rail - 32 - (narrow ? 0 : 100));
+  const cols = Math.max(1, Math.min(15, Math.floor((photosWidth + 6) / 102)));
+  const tile = (photosWidth - 6 * (cols - 1)) / cols;
+  return {narrow, rail, cols, tile};
+}
+
+function packPortfolioDays(groups, columns, exactFit, {corners = false, pairs = false} = {}){
+  const cells = [];
+  let bottom = 0, after = null, prior = [], preview;
+  let prefix = {top:0, edge:Array(columns).fill(null), largest:0};
+  for (let i = 0; i < groups.length; i++){
+    const group = groups[i], next = groups[i + 1], compact = group.sizes.length <= 48;
+    const lookAhead = compact && next && next.sizes.length <= 48;
+    const search = {corners, pairs:pairs && !!lookAhead};
+    const options = portfolioDayOptions(group, prior, after, bottom, columns, compact, exactFit, search);
+    // Keep the preceding day's preview available when choosing this day's placement.
+    if (preview) options.push(preview);
+    if (lookAhead){
+      for (const option of options.slice()){
+        const aligned = portfolioRightAlignedTail(option, prior, columns, {date:group.date, corners});
+        if (aligned) options.push(aligned);
+      }
+    }
+    const firstTop = Math.min(...options.map(option => option.boxes[0].top));
+    if (firstTop > prefix.top){
+      prefix = portfolioGapFrontier(prior, columns, prefix, firstTop);
+      prior = prior.filter(box => box.top + box.height > firstTop);
+    }
+    const best = choosePortfolioPlacement(options, prior, bottom, columns, lookAhead ? next : null, prefix, exactFit, search);
+    preview = best.next;
+    for (const box of best.boxes) cells.push(box);
+    bottom = Math.max(bottom, best.bottom);
+    after = best.boxes[0];
+    prefix = portfolioGapFrontier(prior, columns, prefix, after.top);
+    prior = prior.concat(best.boxes).filter(box => box.top + box.height > after.top);
+  }
+  // Subtract the occupied part of every tile above the last row.
+  const innerRows = Math.max(0, bottom - 1);
+  const gaps = cells.reduce((empty, b) => empty - b.width * Math.min(b.height, Math.max(0, innerRows - b.top)),
+    innerRows * columns);
+  return {cells, bottom, gaps};
+}
+
+function comparePortfolioLayouts(a, b, columns){
+  if (a.bottom !== b.bottom) return a.bottom - b.bottom;
+  if (a.gaps !== b.gaps) return a.gaps - b.gaps;
+  if (!a.gaps) return 0;
+  const prefix = {top:0, edge:Array(columns).fill(null), largest:0};
+  const largest = layout => portfolioGapFrontier(layout.cells, columns, prefix, layout.bottom - 1).largest;
+  return largest(a) - largest(b);
+}
+
+function portfolioCornerDays(layout, groups, columns){
+  let start = 0, count = 0;
+  for (const group of groups){
+    const end = start + group.sizes.length;
+    if (!portfolioDayIsConnected(layout.cells.slice(start, end), columns)) count++;
+    start = end;
+  }
+  return count;
+}
+
+function portfolioPacking(groups, columns, hideDates = false){
+  const original = packPortfolioDays(groups, columns, false);
+  if (!original.gaps) return original;
+  const exact = packPortfolioDays(groups, columns, true);
+  let best = comparePortfolioLayouts(exact, original, columns) < 0 ? exact : original;
+  if (!hideDates || !best.gaps) return best;
+  let usedCorners = false;
+  for (const [exactFit, pairs] of [[false, false], [true, false], [true, true]]){
+    const candidate = packPortfolioDays(groups, columns, exactFit, {corners:true, pairs});
+    const comparison = comparePortfolioLayouts(candidate, best, columns);
+    if (comparison < 0 || (comparison === 0 && usedCorners &&
+        portfolioCornerDays(candidate, groups, columns) < portfolioCornerDays(best, groups, columns))){
+      best = candidate;
+      usedCorners = true;
+    }
+    if (!best.gaps && !portfolioCornerDays(best, groups, columns)) break;
+  }
+  return best;
+}
+
+function portfolioMosaic(items, width, hideDates = false){
+  width = Math.max(1, width);
+  const gap = Math.min(6, width / 8);
+  // Portfolio gains 24 px from the outer padding and 7 px from the stage margin and border.
+  const {tile} = timelineGrid(width - 31);
+  const columns = Math.max(4, Math.round((width + gap) / (tile + gap)));
+  const pitch = (width + gap) / columns, base = pitch - gap;
+  const rows = [], groups = [];
+  for (let i = 0; i < items.length; i++){
+    const it = items[i];
+    if (!i || it.portfolioDate || it.portfolioDay !== items[i - 1].portfolioDay)
+      groups.push({date:!!it.portfolioDate, sizes:[]});
+    groups.at(-1).sizes.push(portfolioTileSize(it));
+  }
+  const {cells, bottom} = portfolioPacking(groups, columns, hideDates);
+  const height = bottom ? bottom * pitch - gap : 0;
+  const boxes = cells.map(cell => ({left:cell.left * pitch, top:cell.top * pitch,
+    width:cell.width * pitch - gap, height:cell.height * pitch - gap}));
+  // Vertical slices keep thumbnails, fillers and outlines virtualized even when photos span rows.
+  const step = 8 * pitch;
+  for (let top = 0; top < height; top += step) rows.push({top, height:Math.min(step, height - top), indices:[]});
+  boxes.forEach((box, i) => {
+    const start = Math.max(0, Math.floor((box.top - gap) / step));
+    const end = Math.min(rows.length - 1, Math.floor((box.top + box.height + gap) / step));
+    for (let row = start; row <= end; row++) rows[row].indices.push(i);
+  });
+  for (const row of rows) row.indices.sort((a, b) => boxes[a].top - boxes[b].top || boxes[a].left - boxes[b].left);
+  return {rows, boxes, base, gap, height};
+}
+
+function portfolioFillerColor(square, neighbors, gap){
+  const shades = neighbors.map(({box, rgb}) => {
+    const dx = Math.max(0, box.left - square.left - square.width, square.left - box.left - box.width);
+    const dy = Math.max(0, box.top - square.top - square.height, square.top - box.top - box.height);
+    return {rgb, distance:Math.hypot(dx, dy)};
+  }).filter(shade => shade.distance <= square.width + gap)
+    .sort((a, b) => a.distance - b.distance).slice(0, 3);
+  if (!shades.length) return "#808080";
+  const rgb = [0, 0, 0];
+  let totalWeight = 0;
+  for (const shade of shades){
+    const weight = 1 / Math.max(gap, shade.distance);
+    totalWeight += weight;
+    shade.rgb.forEach((channel, i) => { rgb[i] += channel * weight; });
+  }
+  return `rgb(${rgb.map(channel => Math.round(channel / totalWeight)).join(",")})`;
+}
+
+function portfolioPhotoFacts(it, filter){
+  const facts = [], tags = tagsOf(it), rating = effRating(it);
+  if (tags.length) facts.push("Tags: " + tags.join(", "));
+  if (rating) facts.push("Rating: " + (rating === "great" ? "5+" : rating === "bad" ? "Bad" : rating + "/5"));
+  if (it.camera && filter !== "camera") facts.push("Camera: " + it.camera);
+  if (it.lens && filter !== "lens") facts.push("Lens: " + it.lens);
+  if (filter !== "focal" && filter !== "shutter"){
+    const exposure = [it.focal && it.focal + " mm", it.shutter].filter(Boolean);
+    if (exposure.length) facts.push(exposure.join(" · "));
+  }
+  if (it.iso) facts.push("ISO " + it.iso);
+  return facts;
+}
+
+function portfolioNeighborFact(square, photos, gap){
+  const choices = [];
+  let nearest = Infinity;
+  for (const photo of photos){
+    const b = photo.box;
+    const dx = Math.max(b.left - square.left - square.width, square.left - b.left - b.width);
+    const dy = Math.max(b.top - square.top - square.height, square.top - b.top - b.height);
+    if (Math.max(dx, dy) > gap + portfolioEpsilon) continue;
+    const x = dx < -portfolioEpsilon ? 0 : Math.sign(b.left - square.left);
+    const y = dy < -portfolioEpsilon ? 0 : Math.sign(b.top - square.top);
+    const distance = Math.abs(x) + Math.abs(y);
+    if (distance > nearest) continue;
+    if (distance < nearest) choices.length = 0;
+    nearest = distance;
+    choices.push({photo, x, y});
+  }
+  if (!choices.length) return null;
+  const {photo, x, y} = choices[Math.floor(Math.random() * choices.length)];
+  return {x, y, text:photo.facts[Math.floor(Math.random() * photo.facts.length)], name:photo.name};
+}
+
+function portfolioFillers(stream, rowIndex){
+  const {rows, boxes, entries, base, gap, width} = stream;
+  const row = rows[rowIndex], pitch = base + gap, epsilon = .001;
+  const squares = [], bottom = row.top + row.height - (rowIndex + 1 < rows.length ? gap : 0);
+  let blocked = row.indices.map(i => boxes[i]);
+  for (let top = row.top; top + base <= bottom + epsilon;){
+    // Sweep the width at each height where a full square can clear an obstacle.
+    blocked = blocked.filter(box => box.top + box.height + gap > top + epsilon);
+    const occupied = blocked.filter(box => box.top - gap < top + base - epsilon).sort((a, b) => a.left - b.left);
+    let left = 0, nextTop = Infinity;
+    const fillTo = right => {
+      for (; left + base <= right + epsilon; left += pitch){
+        const square = {left, top, width:base, height:base};
+        squares.push(square); blocked.push(square);
+        nextTop = Math.min(nextTop, top + pitch);
+      }
+    };
+    for (const box of occupied){
+      fillTo(box.left - gap);
+      left = Math.max(left, box.left + box.width + gap);
+      nextTop = Math.min(nextTop, box.top + box.height + gap);
+    }
+    fillTo(width);
+    top = nextTop;
+  }
+  if (!squares.length) return squares;
+  const neighbors = [], photos = [];
+  const filter = photoTimeline.extraValue && photoTimeline.extraType;
+  const nearby = new Set(rows.slice(Math.max(0, rowIndex - 1), rowIndex + 2).flatMap(line => line.indices));
+  for (const i of nearby){
+    const entry = entries[i], hex = entry.color_hex;
+    if (entry.portfolioDate || entry.portfolioPending) continue;
+    if (/^#[\da-f]{6}$/i.test(hex))
+      neighbors.push({box:boxes[i], rgb:hex.slice(1).match(/../g).map(value => parseInt(value, 16))});
+    const facts = portfolioPhotoFacts(entry, filter);
+    if (facts.length) photos.push({box:boxes[i], facts, name:entry.filename});
+  }
+  for (const square of squares){
+    square.color = portfolioFillerColor(square, neighbors, gap);
+    square.fact = portfolioNeighborFact(square, photos, gap);
+  }
+  return squares;
+}
+
+function portfolioDayColor(date){
+  let hash = 2166136261;
+  for (const char of date) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x7feb352d);
+  hash = Math.imul(hash ^ (hash >>> 15), 0x846ca68b);
+  return `hsl(${((hash ^ (hash >>> 16)) >>> 0) * 360 / 4294967296} 27% 52%)`;
+}
+
+function portfolioDayOutline(boxes, gap){
+  const half = gap / 2, sides = [[], []], segments = [];
+  for (const box of boxes){
+    const left = box.left - half, right = box.left + box.width + half;
+    const top = box.top - half, bottom = box.top + box.height + half;
+    sides[0].push([left, top, bottom, -1], [right, top, bottom, 1]);
+    sides[1].push([top, left, right, -1], [bottom, left, right, 1]);
+  }
+  // Expand into the gutter and cancel shared edges, including partially shared edges.
+  sides.forEach((edges, horizontal) => {
+    edges.sort((a, b) => a[0] - b[0]);
+    for (let i = 0; i < edges.length;){
+      const offset = edges[i][0], events = [];
+      do {
+        const [, from, to, direction] = edges[i++];
+        events.push([from, direction], [to, -direction]);
+      } while (i < edges.length && edges[i][0] - offset <= portfolioEpsilon);
+      events.sort((a, b) => a[0] - b[0]);
+      let previous = events[0][0], balance = 0;
+      for (const [point, change] of events){
+        if (balance && point - previous > portfolioEpsilon)
+          segments.push(horizontal ? [previous, offset, point, offset] : [offset, previous, offset, point]);
+        previous = point; balance += change;
+      }
+    }
+  });
+  return segments;
+}
+
+function selectTimelineHighlights(day, width){
+  const t = photoTimeline;
+  if (day.selectionView === t.view && day.selectionWidth === width && day.selectionCandidates === day.candidates &&
+      day.selectionTotal === day.total) return;
+  day.items = day.candidates.slice(0, 15).sort(timelinePhotoOrder);
+  day.selectionView = t.view; day.selectionWidth = width; day.selectionCandidates = day.candidates;
+  day.selectionTotal = day.total;
+  day.portfolioLayout = null;
+  if (state.timelineDay === day && !day.expanded){
+    state.deck = day.items;
+    const previous = $("detail").querySelector(".nav.prev"), next = $("detail").querySelector(".nav.next");
+    if (previous) previous.disabled = !canStep(-1);
+    if (next) next.disabled = !canStep(1);
+  }
+}
+
+function layoutPortfolioStream(width){
+  const t = photoTimeline, entries = [], regions = new Map();
+  for (const day of t.days){
+    selectTimelineHighlights(day, width);
+    const start = entries.length;
+    if (!t.hideDates) entries.push({portfolioDate:day.day, portfolioDay:day});
+    const items = timelineItems(day), pending = day.expanded && day.allNext !== null;
+    if (pending) entries.push({portfolioPending:true, portfolioDay:day});
+    else items.forEach((it, index) => entries.push({...it, portfolioDay:day, portfolioIndex:index}));
+    regions.set(day, {start, end:entries.length, color:portfolioDayColor(day.day)});
+    day.portfolioLayout = {width, items, pending, total:day.total, boxes:[]};
+  }
+  const mosaic = portfolioMosaic(entries, width, t.hideDates);
+  const dayStarts = new Map(), photos = new Map();
+  entries.forEach((entry, index) => {
+    const day = entry.portfolioDay, box = mosaic.boxes[index];
+    day.portfolioLayout.base = mosaic.base;
+    if (index === regions.get(day).start) dayStarts.set(day.day, box);
+    if (!entry.portfolioDate && !entry.portfolioPending){
+      day.portfolioLayout.boxes[entry.portfolioIndex] = box;
+      photos.set(entry.id, box);
+    }
+  });
+  return t.portfolioStream = {width, entries, dayStarts, photos, regions, ...mosaic};
 }
 
 function drawTimelineTagSelection(){
@@ -3310,8 +4041,25 @@ function timelineIndex(y){
 function timelinePosition(){
   const t = photoTimeline, stage = $("timelineStage");
   const top = stage.getBoundingClientRect().top + window.scrollY;
-  const index = timelineIndex(window.scrollY - top);
-  return {day:t.days[index]?.day, index, within:window.scrollY - top - (t.offsets[index] || 0)};
+  const local = window.scrollY - top;
+  if (t.view === "portfolio" && t.portfolioStream){
+    const stream = t.portfolioStream;
+    const line = stream.rows.find(row => row.top + row.height >= local);
+    let index;
+    for (const i of line?.indices || []){
+      const box = stream.boxes[i];
+      if (box.top > local + 1) break;
+      if (box.top + box.height >= local && (index === undefined || box.top > stream.boxes[index].top)) index = i;
+    }
+    index ??= line?.indices[0];
+    const entry = stream.entries[index], box = stream.boxes[index];
+    return {day:entry?.portfolioDay.day, index:t.days.indexOf(entry?.portfolioDay), photoId:entry?.id,
+      within:box ? local - box.top : local, portfolio:true};
+  }
+  // Scroll positions may round down while photo/day heights remain fractional.
+  // Keep an anchor at a day boundary attached to that day after a relayout.
+  const index = timelineIndex(local + 1), within = local - (t.offsets[index] || 0);
+  return {day:t.days[index]?.day, index, within:within >= -1 ? Math.max(0, within) : within};
 }
 
 function layoutPhotoTimeline(preserve = true, position = null){
@@ -3320,11 +4068,18 @@ function layoutPhotoTimeline(preserve = true, position = null){
   const previous = position || timelinePosition();
   const top = stage.getBoundingClientRect().top + window.scrollY;
   const width = stage.clientWidth;
-  const narrow = width < 600;
-  const rail = narrow ? 80 : 132;
-  const photosWidth = Math.max(1, width - rail - 32 - (narrow ? 0 : 100));
-  const cols = Math.max(1, Math.min(15, Math.floor((photosWidth + 6) / 102)));
-  const tile = (photosWidth - 6 * (cols - 1)) / cols;
+  const portfolio = t.view === "portfolio";
+  if (portfolio){
+    const stream = layoutPortfolioStream(width);
+    t.offsets = t.days.map(day => stream.dayStarts.get(day.day)?.top || 0); t.offsets.push(stream.height);
+    stage.style.height = stream.height + "px";
+    if (preserve && previous.day && previous.within >= 0){
+      const box = stream.photos.get(previous.photoId) || stream.dayStarts.get(previous.day);
+      if (box) window.scrollTo(0, top + box.top + (previous.portfolio ? Math.min(previous.within, box.height - 1) : 0));
+    }
+    return renderPortfolioStream();
+  }
+  const {narrow, rail, cols, tile} = timelineGrid(width);
   if (t.narrow !== narrow){
     t.mounted.forEach(row => row.remove()); t.mounted.clear();
   }
@@ -3333,9 +4088,12 @@ function layoutPhotoTimeline(preserve = true, position = null){
   stage.style.setProperty("--timeline-cols", cols);
   document.documentElement.style.setProperty("--timeline-tools", $("timelineTools").offsetHeight + "px");
   t.offsets = [0];
-  t.days.forEach(day => t.offsets.push(t.offsets.at(-1) +
-    Math.max(day.expanded || day.total > day.items.length ? (narrow ? 325 : 215) : 185,
-      Math.ceil(timelinePhotoCount(day) / cols) * (tile + 6) - 6) + 32));
+  t.days.forEach(day => {
+    selectTimelineHighlights(day, width);
+    const height = Math.max(day.expanded || day.total > day.items.length ? (narrow ? 325 : 215) : 185,
+          Math.ceil(timelinePhotoCount(day) / cols) * (tile + 6) - 6) + 32;
+    t.offsets.push(t.offsets.at(-1) + height);
+  });
   stage.style.height = t.offsets.at(-1) + "px";
   t.mounted.forEach((el, day) => {
     const index = t.days.findIndex(d => d.day === day);
@@ -3395,7 +4153,7 @@ function mountTimelineDay(day, index){
   const retry = document.createElement("button"); retry.className = "tool timeline-all-retry";
   retry.textContent = "Try again"; retry.onclick = () => loadAllTimelineDay(day);
   actions.append(toggle, progress, retry);
-  if (photoTimeline.narrow){ date.appendChild(actions); row.append(date, photos); }
+  if (photoTimeline.narrow || photoTimeline.view === "portfolio"){ date.appendChild(actions); row.append(date, photos); }
   else row.append(date, photos, actions);
   row.photoNodes = new Map();
   const next = Array.from($("timelineStage").children).find(el => +el.dataset.index > index);
@@ -3406,9 +4164,11 @@ function mountTimelineDay(day, index){
 }
 
 function updateTimelineDayControls(day){
+  if (photoTimeline.view === "portfolio") return;
   const row = photoTimeline.mounted.get(day.day);
   if (!row) return;
   const actions = row.querySelector(".timeline-actions"), toggle = actions.querySelector(".timeline-toggle-all");
+  row.querySelector(".count").textContent = day.expanded ? "All " + nf(day.total) : day.items.length + " of " + nf(day.total);
   toggle.hidden = !photoTimeline.limitDaily || day.total <= day.items.length;
   actions.hidden = toggle.hidden && !day.allLoading && !day.allError;
   toggle.querySelector(".label").textContent = day.expanded ? "Show highlights" : "Show all";
@@ -3421,11 +4181,13 @@ function updateTimelineDayControls(day){
   actions.querySelector(".timeline-all-retry").hidden = !day.allError;
 }
 
-function timelinePhotoTitle(it){
+function timelinePhotoTitle(it, showDate = true){
   const present = value => value !== null && value !== undefined && value !== "";
   const value = (raw, prefix = "", suffix = "") => present(raw) ? prefix + raw + suffix : "—";
-  const lines = [it.filename || "", it.taken || "",
-    "Camera model: " + value(it.camera)];
+  const lines = [it.filename || ""];
+  if (showDate) lines.push(it.taken || "");
+  lines.push("Camera model: " + value(it.camera));
+  if (it.has_raw) lines.push("RAW file available");
   if (present(it.lens)) lines.push("Lens: " + it.lens);
   lines.push("Focal length: " + value(it.focal, "", " mm") + " · Aperture: " + value(it.fnumber, "f/") +
     " · ISO: " + value(it.iso) + " · Shutter speed: " + value(it.shutter));
@@ -3436,8 +4198,15 @@ function timelinePhotoTitle(it){
 }
 
 function updateTimelinePhotoInfo(button, it){
-  button.title = timelinePhotoTitle(it);
+  const portfolio = photoTimeline.view === "portfolio";
+  button.title = timelinePhotoTitle(it, !portfolio || !photoTimeline.hideDates);
   button.setAttribute("aria-label", button.title);
+  if (portfolio){
+    const caption = button.querySelector(".portfolio-caption");
+    caption.textContent = portfolioFeatured(it) ? it.comment || "" : "";
+    caption.hidden = !caption.textContent;
+    return;
+  }
   const hasTags = tagsOf(it).length > 0, hasComment = !!it.comment;
   button.querySelector(".timeline-tags-badge").hidden = !hasTags;
   button.querySelector(".timeline-comment-badge").hidden = !hasComment;
@@ -3450,7 +4219,7 @@ function refreshTimelineAnnotations(it){
   if ("comment" in it) annotations.comment = it.comment;
   photoTimeline.days.forEach(day => {
     if (day.day !== (it.taken || "").slice(0, 10)) return;
-    [day.items, day.allItems, day.details || []].forEach(items =>
+    [day.candidates, day.items, day.allItems, day.details || []].forEach(items =>
       items.forEach(photo => { if (photo.id === it.id) Object.assign(photo, annotations); }));
     const row = photoTimeline.mounted.get(day.day);
     if (row) row.photoNodes.forEach(button => {
@@ -3470,10 +4239,15 @@ function createTimelinePhoto(day, it){
     return button;
   }
   button.dataset.pid = it.id;
+  const portfolio = photoTimeline.view === "portfolio";
+  if (portfolio){
+    const caption = document.createElement("span"); caption.className = "portfolio-caption";
+    caption.setAttribute("aria-hidden", "true"); button.appendChild(caption);
+  } else button.appendChild(rawBadge(it));
   const placeholder = document.createElement("span"); placeholder.className = "noimg";
   placeholder.textContent = (it.ext || "image").toUpperCase(); button.appendChild(placeholder);
   const rating = effRating(it);
-  if (rating){
+  if (rating && !portfolio){
     const badge = document.createElement("span"); badge.className = "timeline-badge";
     badge.textContent = rating === "great" ? "5+" : rating === "bad" ? "✗ bad" : "★".repeat(+rating);
     button.appendChild(badge);
@@ -3484,7 +4258,7 @@ function createTimelinePhoto(day, it){
     const badge = document.createElement("span"); badge.className = "timeline-annotation " + name;
     badge.innerHTML = svg; annotations.appendChild(badge);
   });
-  button.appendChild(annotations);
+  if (!portfolio) button.appendChild(annotations);
   updateTimelinePhotoInfo(button, it);
   button.onclick = () => openTimelinePhoto(day, it.id, button);
   return button;
@@ -3515,7 +4289,8 @@ function renderTimelinePhotos(day, row){
       button = createTimelinePhoto(day, items[i]);
       const next = Array.from(photos.children).find(el => +el.dataset.index > i);
       button.dataset.index = i; photos.insertBefore(button, next || null); row.photoNodes.set(i, button);
-      if (items[i]) queueThumb(button, items[i].id, 200, () => state.page === "timeline" && button.isConnected);
+      if (items[i])
+        queueThumb(button, items[i].id, 200, () => state.page === "timeline" && button.isConnected);
     }
     if (day.expanded){
       Object.assign(button.style, {top:Math.floor(i / t.cols) * (t.tile + 6) + "px",
@@ -3524,6 +4299,194 @@ function renderTimelinePhotos(day, row){
   }
   if (day.expanded && !day.allLoading && !day.allError && day.allNext !== null && until > items.length)
     loadAllTimelineDay(day);
+}
+
+function renderPortfolioFillers(stage, stream, first, end){
+  let layer = $("portfolioFillers");
+  if (!layer){
+    layer = document.createElement("div"); layer.id = "portfolioFillers"; layer.className = "portfolio-fillers";
+    stage.prepend(layer);
+  }
+  if (layer.stream !== stream){
+    layer.replaceChildren(); layer.stream = stream;
+  }
+  const mounted = new Set();
+  for (const group of Array.from(layer.children)){
+    const index = Number(group.dataset.row);
+    if (index < first || index >= end) group.remove();
+    else mounted.add(index);
+  }
+  for (let i = first; i < end; i++){
+    if (mounted.has(i)) continue;
+    const row = stream.rows[i], squares = row.fillers ??= portfolioFillers(stream, i);
+    if (!squares.length) continue;
+    const group = document.createElement("div"); group.dataset.row = i;
+    for (const box of squares){
+      const tile = document.createElement("div"); tile.className = "portfolio-filler";
+      Object.assign(tile.style, {left:box.left + "px", top:box.top + "px", width:box.width + "px",
+        height:box.height + "px", backgroundColor:box.color});
+      if (box.fact){
+        const {x, y, text, name} = box.fact;
+        const arrow = document.createElement("span"), label = document.createElement("span");
+        arrow.className = "arrow"; arrow.setAttribute("aria-hidden", "true");
+        arrow.textContent = ["↖","↑","↗","←","","→","↙","↓","↘"][(y + 1) * 3 + x + 1];
+        arrow.style.left = x < 0 ? "8px" : x > 0 ? "calc(100% - 8px)" : "50%";
+        arrow.style.top = y < 0 ? "8px" : y > 0 ? "calc(100% - 8px)" : "50%";
+        label.className = "fact"; label.textContent = text;
+        tile.setAttribute("role", "img");
+        tile.setAttribute("aria-label", [name, text].filter(Boolean).join(" — "));
+        tile.append(arrow, label);
+      }
+      group.append(tile);
+    }
+    layer.append(group);
+  }
+}
+
+function renderPortfolioOutlines(stage, stream, local, wanted){
+  const half = stream.gap / 2, top = Math.max(-half, Math.floor(local));
+  const bottom = Math.min(stream.height + half, Math.ceil(local + innerHeight));
+  let canvas = $("portfolioOutlines");
+  if (bottom <= top || !stream.height){ canvas?.remove(); return; }
+  if (!canvas){
+    canvas = document.createElement("canvas"); canvas.id = "portfolioOutlines"; canvas.className = "portfolio-outlines";
+    canvas.setAttribute("aria-hidden", "true");
+    stage.insertBefore(canvas, stage.children[1] || null);
+  }
+  const width = stream.width + stream.gap, height = bottom - top;
+  const scale = Math.min(devicePixelRatio || 1, 2);
+  const pixelsWide = Math.ceil(width * scale), pixelsHigh = Math.ceil(height * scale);
+  if (canvas.width !== pixelsWide) canvas.width = pixelsWide;
+  if (canvas.height !== pixelsHigh) canvas.height = pixelsHigh;
+  Object.assign(canvas.style, {left:-half + "px", top:top + "px", width:width + "px", height:height + "px"});
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.setTransform(scale, 0, 0, scale, half * scale, -top * scale);
+  context.clearRect(-half, top, width, height);
+  context.lineWidth = stream.gap;
+  context.lineCap = "square";
+  const outlines = [];
+  for (const [day, indices] of wanted){
+    const visible = indices.map(i => stream.boxes[i]).filter(box =>
+      box.top + box.height + half >= top && box.top - half <= bottom);
+    if (!visible.length) continue;
+    const region = stream.regions.get(day);
+    const edges = region.edges ??= portfolioDayOutline(stream.boxes.slice(region.start, region.end), stream.gap);
+    const path = new Path2D();
+    for (const [x1, y1, x2, y2] of edges){
+      if (y2 + half < top || y1 - half > bottom) continue;
+      path.moveTo(x1, y1); path.lineTo(x2, y2);
+    }
+    // Reserve each day's own half of a shared gutter in its color.
+    context.save();
+    context.beginPath();
+    for (const box of visible)
+      context.rect(box.left - half, box.top - half, box.width + stream.gap, box.height + stream.gap);
+    context.clip();
+    context.strokeStyle = region.color;
+    context.stroke(path);
+    context.restore();
+    outlines.push({path, color:region.color});
+  }
+  // Beside a filler there is no second day to paint the other half.
+  context.save();
+  context.globalCompositeOperation = "destination-over";
+  for (const {path, color} of outlines){
+    context.strokeStyle = color;
+    context.stroke(path);
+  }
+  context.restore();
+}
+
+function renderPortfolioStream(){
+  const t = photoTimeline, stage = $("timelineStage"), stream = t.portfolioStream;
+  if (!stream || state.page !== "timeline" || t.view !== "portfolio") return;
+  const local = -stage.getBoundingClientRect().top, wanted = new Map(), seen = new Set();
+  let lo = 0, hi = stream.rows.length;
+  while (lo < hi){
+    const mid = (lo + hi) >> 1, line = stream.rows[mid];
+    if (line.top + line.height < local - 700) lo = mid + 1; else hi = mid;
+  }
+  let end = lo;
+  for (; end < stream.rows.length && stream.rows[end].top < local + innerHeight + 900; end++){
+    const line = stream.rows[end];
+    for (const i of line.indices){
+      const box = stream.boxes[i], day = stream.entries[i].portfolioDay;
+      if (seen.has(i) || box.top + box.height < local - 700 || box.top >= local + innerHeight + 900) continue;
+      seen.add(i);
+      if (!wanted.has(day)) wanted.set(day, []);
+      wanted.get(day).push(i);
+    }
+  }
+  renderPortfolioFillers(stage, stream, lo, end);
+  if (t.hideDayBorders) $("portfolioOutlines")?.remove();
+  else renderPortfolioOutlines(stage, stream, local, wanted);
+  const wantedDays = new Set([...wanted.keys()].map(day => day.day));
+  t.mounted.forEach((row, value) => {
+    if (!wantedDays.has(value)){
+      row.remove(); t.mounted.delete(value);
+      const day = t.days.find(day => day.day === value); if (day) day.details = null;
+    }
+  });
+  for (const [day, indices] of wanted){
+    let row = t.mounted.get(day.day);
+    if (!row){
+      row = document.createElement("section"); row.className = "portfolio-group"; row.dataset.day = day.day;
+      row.photoNodes = new Map(); row.portfolioNodes = new Map(); row.streamNodes = new Map();
+      const next = Array.from(stage.children).find(el => t.days.findIndex(day => day.day === el.dataset.day) > t.days.indexOf(day));
+      stage.insertBefore(row, next || null); t.mounted.set(day.day, row);
+    }
+    const showDates = !t.hideDates, datesChanged = row.hasAttribute("aria-label") !== showDates;
+    if (datesChanged){
+      if (showDates) row.setAttribute("aria-label", day.day);
+      else row.removeAttribute("aria-label");
+    }
+    const key = it => it.portfolioDate ? "date" : it.portfolioPending ? "pending" : String(it.id);
+    const keys = new Set(indices.map(i => key(stream.entries[i])));
+    row.streamNodes.forEach((tile, value) => { if (!keys.has(value)){ tile.remove(); row.streamNodes.delete(value); } });
+    row.photoNodes.clear(); row.portfolioNodes.clear();
+    let before = row.firstChild;
+    for (const i of indices.sort((a, b) => a - b)){
+      const entry = stream.entries[i], box = stream.boxes[i], value = key(entry);
+      // Annotation edits update the day cache without rebuilding the layout.
+      const photo = timelineItems(day)[entry.portfolioIndex];
+      let tile = row.streamNodes.get(value);
+      const newTile = !tile;
+      if (newTile){
+        if (entry.portfolioDate){
+          tile = document.createElement("time"); tile.className = "portfolio-date-tile"; tile.dateTime = day.day;
+          tile.setAttribute("aria-label", day.day);
+          const year = document.createElement("span"); year.className = "year"; year.textContent = day.day.slice(0, 4);
+          tile.append(year, new Intl.DateTimeFormat("en", {month:"short", day:"numeric"}).format(new Date(day.day + "T12:00:00")));
+        } else if (entry.portfolioPending){
+          tile = document.createElement("div"); tile.className = "portfolio-tile portfolio-loading";
+          tile.setAttribute("role", "status");
+        } else {
+          tile = document.createElement("div"); tile.className = "portfolio-tile"; tile.dataset.pid = photo.id;
+          tile.append(createTimelinePhoto(day, photo));
+        }
+        row.streamNodes.set(value, tile);
+      }
+      // Keyboard navigation follows the photo deck when small tiles fill
+      // spaces around larger photos in the same day.
+      if (tile !== before) row.insertBefore(tile, before);
+      before = tile.nextSibling; tile.dataset.streamIndex = i;
+      Object.assign(tile.style, {left:box.left + "px", top:box.top + "px", width:box.width + "px", height:box.height + "px"});
+      if (entry.portfolioPending) tile.textContent = day.allError ? "Could not load photos. Use Refresh to retry." : "Loading photos…";
+      else if (!entry.portfolioDate){
+        const button = tile.firstElementChild;
+        button.style.height = box.height + "px";
+        if (!newTile && datesChanged) updateTimelinePhotoInfo(button, photo);
+        row.portfolioNodes.set(entry.portfolioIndex, tile); row.photoNodes.set(entry.portfolioIndex, button);
+        // An idle thumbnail queue checks isConnected as soon as a job is added.
+        if (newTile) queueThumb(button, photo.id, portfolioFeatured(photo) ? 800 : 200,
+          () => state.page === "timeline" && button.isConnected, image => portfolioThumbnailLoaded(photo, image));
+      }
+    }
+    if (day.expanded && day.allNext !== null && !day.allLoading && !day.allError) loadAllTimelineDay(day);
+  }
+  if (t.started && !t.ended && !t.loading && !t.error && ![...wanted.keys()].some(day => day.expanded && day.allNext !== null) &&
+      $("timelineFooter").getBoundingClientRect().top < innerHeight + 800) loadTimelineDays();
 }
 
 function toggleTimelineDay(day){
@@ -3584,6 +4547,7 @@ function loadAllTimelineDay(day){
 
 function renderPhotoTimeline(){
   if (state.page !== "timeline") return;
+  if (photoTimeline.view === "portfolio") return renderPortfolioStream();
   const t = photoTimeline, stage = $("timelineStage");
   const local = -stage.getBoundingClientRect().top;
   const from = timelineIndex(local - 700), until = local + window.innerHeight + 900;
@@ -3654,9 +4618,11 @@ function loadTimelineDays(){
 
 function resetPhotoTimeline(reshuffle = true){
   const t = photoTimeline;
+  state.timelineFilesStale = false;
   closeTimelineBulk();
   closeDetail();
   t.epoch++; t.days = []; t.offsets = [0]; t.mounted.clear(); t.dirty.clear(); t.updating.clear();
+  t.portfolioStream = null;
   t.next = null; t.started = false; t.loading = false; t.ended = false; t.error = false; t.scrollY = 0;
   if (reshuffle) t.seed = timelineSeed();
   Object.keys(ctl).filter(key => key.startsWith("timeline-") && key !== "timeline-tags")
@@ -3669,6 +4635,33 @@ function resetPhotoTimeline(reshuffle = true){
 }
 $("timelineRefresh").onclick = () => resetPhotoTimeline();
 $("timelineRetry").onclick = loadTimelineDays;
+$("portfolioHideBorders").onchange = event => {
+  photoTimeline.hideDayBorders = event.target.checked;
+  renderPortfolioStream();
+};
+$("portfolioHideDates").onchange = event => {
+  photoTimeline.hideDates = event.target.checked;
+  if (state.timelineDay && photoTimeline.view === "portfolio")
+    $("detail").classList.toggle("hide-capture-date", photoTimeline.hideDates);
+  layoutPhotoTimeline();
+};
+$("timelineView").onchange = () => {
+  const t = photoTimeline, position = timelinePosition();
+  closeDetail(); closeTimelineBulk();
+  t.view = $("timelineView").value;
+  $("photoTimeline").classList.toggle("portfolio", t.view === "portfolio");
+  $("timelineLimitLabel").textContent = "15 per day";
+  t.mounted.forEach(row => row.remove()); t.mounted.clear();
+  $("portfolioFillers")?.remove();
+  $("portfolioOutlines")?.remove();
+  t.days.forEach(day => {
+    day.selectionView = null; day.portfolioLayout = null;
+    if (t.view === "portfolio"){ day.timelineExpanded = day.expanded; day.expanded = !t.limitDaily; }
+    else day.expanded = !t.limitDaily || !!day.timelineExpanded;
+    if (day.allNext === null) day.allItems.sort(timelinePhotoOrder);
+  });
+  layoutPhotoTimeline(true, position);
+};
 $("timelineRating").onchange = () => {
   photoTimeline.ratingMode = $("timelineRating").value; resetPhotoTimeline(false);
 };
@@ -3763,7 +4756,7 @@ function matchesTimelinePhoto(it){
     (t.ratingMode === "great" ? rating === "great" : ["great", "5", "4"].includes(rating));
   let matchesExtra = true;
   if (t.extraType && t.extraValue){
-    const column = t.extraType === "aperture" ? "fnumber" : t.extraType;
+    const column = t.extraType === "aperture" ? "fnumber" : t.extraType === "focal" ? "focal35" : t.extraType;
     const value = it[column];
     if (t.extraValue === NONE) matchesExtra = value === null || value === undefined;
     else if (["focal", "aperture"].includes(t.extraType)){
@@ -3798,6 +4791,8 @@ function showPage(){
     // queues them again on return instead of leaving half-loaded rows blank.
     photoTimeline.mounted.forEach(row => row.remove());
     photoTimeline.mounted.clear();
+    $("portfolioFillers")?.remove();
+    $("portfolioOutlines")?.remove();
     photoTimeline.days.forEach(day => { day.details = null; });
   }
   state.page = page;
@@ -3811,12 +4806,13 @@ function showPage(){
     if (page === ["statistics", "directories", "timeline"][i]) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   });
-  document.title = "Photo archive — " + state.page;
+  document.title = "photostats — " + (directories ? "folders" : page);
   measureTop();
   if (directories){
     if (directoryData) renderDirectories(); else loadDirectories();
   } else if (timeline){
     state.statsLoaded = false;
+    if (state.timelineFilesStale) return resetPhotoTimeline(false);
     window.scrollTo(0, photoTimeline.scrollY);
     if (!photoTimeline.started) loadTimelineDays(); else layoutPhotoTimeline(false);
     photoTimeline.dirty.forEach(refreshTimelineDay);
@@ -3947,6 +4943,26 @@ function renderJob(j){
   box.hidden = false;
 }
 
+function refreshFileViews(revision){
+  if (!revision || revision === state.fileRevision) return;
+  const initial = state.fileRevision === undefined;
+  state.fileRevision = revision;
+  if (initial) return;
+
+  state.statsLoaded = false;
+  state.timelineFilesStale = true;
+  directoryData = null;
+  if (directoryLoading){
+    ctl.directories.abort();
+    directoryLoading.then(() => {
+      if (state.page === "directories") loadDirectories();
+    });
+    if (state.page === "directories") return;
+  }
+  if (state.page === "timeline") resetPhotoTimeline(false);
+  else { closeDetail(); load(); }
+}
+
 function pollJob(){
   const again = ms => setTimeout(pollJob, ms);
   if (document.hidden) return again(5000);      // a background tab asks nothing
@@ -3954,6 +4970,7 @@ function pollJob(){
     .then(r => r.json())
     .then(d => {
       renderJob(d.job);
+      refreshFileViews(d.file_revision);
       again(d.job && d.job.state === "running" ? 3000 : 15000);
     })
     .catch(() => again(15000));
@@ -4003,7 +5020,7 @@ function load(){
     document.querySelector(".wrap").hidden = state.page !== "statistics" || state.empty;
     $("archiveEmpty").hidden = state.page !== "statistics" || !state.empty;
     if (d.empty){
-      $("tally").textContent = "Database is empty";
+      $("tally").textContent = "No photos to show";
       return;
     }
     $("tally").innerHTML = "<b>" + nf(d.total) + "</b> of " + nf(d.totalAll) + " photos · " +
@@ -4173,6 +5190,7 @@ $("eq").onclick = () => {
    loads everything, as it always did. */
 fetch("/api/job").then(r => r.json()).catch(() => ({}))
   .then(d => {
+    refreshFileViews(d.file_revision);
     if (d.job && d.job.state === "running") holdSelection(d.job);
     showPage();
     pollJob();

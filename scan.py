@@ -34,11 +34,15 @@ import tempfile
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 
 import db_schema
 import dupkey
 import jobs
+import raw_pairs
+import rescan
 import tags
 
 try:
@@ -58,16 +62,12 @@ except Exception:
 # Exactly two extensions. .jpe and .jfif are JPEG too, but that is how a browser
 # saves pictures rather than how a camera names them; anyone who wants them can
 # add them with --ext.
-JPEG_EXT = {".jpg", ".jpeg"}
+JPEG_EXT = raw_pairs.JPEG_EXT
 RASTER_EXT = JPEG_EXT | {
     ".jpe", ".jfif",        # JPEG as well, but left out by default — see above
     ".png", ".tif", ".tiff", ".heic", ".heif", ".webp", ".avif", ".bmp", ".gif",
 }
-RAW_EXT = {
-    ".cr2", ".cr3", ".crw", ".nef", ".nrw", ".arw", ".srf", ".sr2", ".orf",
-    ".rw2", ".raf", ".dng", ".pef", ".ptx", ".raw", ".rwl", ".3fr", ".fff",
-    ".iiq", ".erf", ".mos", ".mrw", ".x3f", ".srw", ".kdc", ".dcr", ".mef",
-}
+RAW_EXT = raw_pairs.RAW_EXT
 PHOTO_EXT = RASTER_EXT | RAW_EXT          # everything the program can read at all
 DEFAULT_EXT = set(JPEG_EXT)               # what is taken unless told otherwise
 
@@ -175,7 +175,7 @@ COLUMNS = [
     "path", "folder", "filename", "ext", "size", "mtime", "taken", "date_src",
     "year", "month", "ym", "day", "hour", "weekday", "brand", "camera", "lens",
     "focal", "focal35", "iso", "fnumber", "shutter", "exposure", "width", "height",
-    "lat", "lon", "rating",
+    "lat", "lon", "rating", "pair_stem",
 ]
 
 
@@ -348,6 +348,7 @@ def make_row(path, st, tags):
         "path": path,
         "folder": os.path.dirname(path),
         "filename": os.path.basename(path),
+        "pair_stem": raw_pairs.stem(os.path.basename(path)),
         "ext": os.path.splitext(path)[1].lower().lstrip("."),
         "size": st.st_size,
         "mtime": st.st_mtime,
@@ -566,11 +567,11 @@ def sign_files(con, workers, full=False, job=None):
     row = con.execute("SELECT v FROM meta WHERE k = 'sig_mode'").fetchone()
     if row and row[0] != mode:
         print(f"Signature mode changed ({row[0]} -> {mode}) — recomputing all.")
-        con.execute("UPDATE photos SET sig = NULL")
+        con.execute("UPDATE photos SET sig = NULL WHERE missing = 0")
     con.execute("INSERT OR REPLACE INTO meta VALUES ('sig_mode', ?)", (mode,))
     con.commit()
 
-    rows = con.execute("SELECT id, path FROM photos WHERE sig IS NULL").fetchall()
+    rows = con.execute("SELECT id, path FROM photos WHERE missing = 0 AND sig IS NULL").fetchall()
     if not rows:
         print("Signatures already computed for every photo.")
         job.note = "nothing to do"
@@ -607,7 +608,7 @@ def sign_files(con, workers, full=False, job=None):
             con.executemany("UPDATE photos SET sig = ? WHERE id = ?", buf)
             con.commit()
     print()
-    bad, = con.execute("SELECT COUNT(*) FROM photos WHERE sig IS NULL").fetchone()
+    bad, = con.execute("SELECT COUNT(*) FROM photos WHERE missing = 0 AND sig IS NULL").fetchone()
     if bad:
         print(f"{bad} files could not be read; duplicates fall back to "
               f"name, size and capture time until they are.")
@@ -1144,6 +1145,7 @@ STAT_KEYS = ["color", "color_hex", "color_share",
              "color_center", "color_center_hex", "color_center_share",
              "brightness", "contrast",
              "chroma", "clip_hi", "clip_lo"]
+FILE_RESULTS = ("sig", *STAT_KEYS, "sharp_center", "sharp_edge", "sharp_v")
 # the length always matches STAT_KEYS: add a metric and the blank follows by itself
 FAILED = (UNKNOWN,) + (None,) * (len(STAT_KEYS) - 1)
 
@@ -1198,7 +1200,7 @@ def analyze_colors(con, exe, workers, reset=False, job=None):
     row = con.execute("SELECT v FROM meta WHERE k = 'color_algo'").fetchone()
     stored = int(row[0]) if row else 0
     if reset or stored != ALGO_VERSION:
-        done_before, = con.execute("SELECT COUNT(*) FROM photos "
+        done_before, = con.execute("SELECT COUNT(*) FROM visible_photos "
                                    "WHERE color IS NOT NULL").fetchone()
         if done_before:
             print("Image analysis rules have changed — "
@@ -1222,7 +1224,7 @@ def analyze_colors(con, exe, workers, reset=False, job=None):
               "  pip install -r requirements.txt   (the window does it by itself)")
     want = NEEDS_COLOUR + (f" OR {NEEDS_SHARP}" if sharp_on else "")
     rows = con.execute(f"SELECT id, path, {NEEDS_COLOUR},"
-                       f" {NEEDS_SHARP if sharp_on else '0'} FROM photos"
+                       f" {NEEDS_SHARP if sharp_on else '0'} FROM visible_photos"
                        f" WHERE {want}").fetchall()
     if not rows:
         print("Images already analysed — colour, light and sharpness are done "
@@ -1282,17 +1284,17 @@ def analyze_colors(con, exe, workers, reset=False, job=None):
         flush()
     print()
 
-    bad, = con.execute("SELECT COUNT(*) FROM photos WHERE color = ?",
+    bad, = con.execute("SELECT COUNT(*) FROM visible_photos WHERE color = ?",
                        (UNKNOWN,)).fetchone()
     if bad:
         print(f"Could not read the image of {bad} files"
               f"{' (RAW needs ExifTool)' if not exe else ''}.")
-    unsharp, = con.execute("SELECT COUNT(*) FROM photos WHERE sharp_v IS NOT NULL"
+    unsharp, = con.execute("SELECT COUNT(*) FROM visible_photos WHERE sharp_v IS NOT NULL"
                            " AND sharp_center IS NULL").fetchone()
     if unsharp:
         print(f"Sharpness could not be measured for {unsharp} files — smaller than "
               f"{SHARP_MIN_SIDE} pixels, or RAW without a large preview.")
-    left, = con.execute(f"SELECT COUNT(*) FROM photos WHERE {want}").fetchone()
+    left, = con.execute(f"SELECT COUNT(*) FROM visible_photos WHERE {want}").fetchone()
     if left:
         print(f"Still to analyse: {left}. Run again to continue.")
 
@@ -1378,7 +1380,7 @@ def report_passed(passed_by):
 
 def open_db_ro(path):
     """A read-only connection: mode=ro forbids writing at the SQLite level."""
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
+    con = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=10)
     con.execute("PRAGMA busy_timeout = 10000")
     return con
 
@@ -1409,6 +1411,30 @@ def stop_on_break():
         pass
 
 
+def read_rows(todo, exe, workers):
+    def read(chunk):
+        if exe:
+            tags_by_path = read_chunk_exiftool(exe, [p for p, _ in chunk])
+            return [make_row(p, st, tags_by_path.get(p) or read_one_fallback(p)) for p, st in chunk]
+        return [make_row(p, st, read_one_fallback(p)) for p, st in chunk]
+
+    chunks = (todo[i:i + 150] for i in range(0, len(todo), 150))
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        for rows in pool.map(read, chunks):
+            yield from rows
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def candidate_signatures(todo, full, workers):
+    pool = ThreadPoolExecutor(max_workers=workers * 2)
+    try:
+        yield from pool.map(file_sig, ((p, p, full) for p, _ in todo))
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def candidate_keys(con, todo, by_sig, full, exe, workers):
     """Yields (path, key) for every file in todo.
 
@@ -1418,12 +1444,7 @@ def candidate_keys(con, todo, by_sig, full, exe, workers):
     two rules.
     """
     if by_sig:
-        jobs = [(p, p, full) for p, _ in todo]
-        pool = ThreadPoolExecutor(max_workers=workers * 2)
-        try:
-            yield from pool.map(file_sig, jobs)
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
+        yield from candidate_signatures(todo, full, workers)
         return
 
     # The name key is assembled not in Python but by the same expression and the
@@ -1434,22 +1455,10 @@ def candidate_keys(con, todo, by_sig, full, exe, workers):
                " FROM (SELECT ? AS filename, ? AS size, ? AS taken,"
                " ? AS date_src) c")
 
-    def read(chunk):
-        if exe:
-            tags = read_chunk_exiftool(exe, [p for p, _ in chunk])
-            return [make_row(p, st, tags.get(p, {})) for p, st in chunk]
-        return [make_row(p, st, read_one_fallback(p)) for p, st in chunk]
-
-    chunks = [todo[i:i + 150] for i in range(0, len(todo), 150)]
-    pool = ThreadPoolExecutor(max_workers=workers)
-    try:
-        for rows in pool.map(read, chunks):
-            for row in rows:
-                key, = con.execute(key_sql, (row["filename"], row["size"],
-                                             row["taken"], row["date_src"])).fetchone()
-                yield row["path"], key
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    for row in read_rows(todo, exe, workers):
+        key, = con.execute(key_sql, (row["filename"], row["size"],
+                                     row["taken"], row["date_src"])).fetchone()
+        yield row["path"], key
 
 
 def check_dups(db_path, roots, exts, min_size, workers=4):
@@ -1465,9 +1474,10 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
         full = bool(row and row[0] == "full")
         # The archive's keys go into memory whole: forty thousand rows is a couple
         # of megabytes, and every file is then checked without a query.
+        present = dupkey.available_where(con)
         keys = {k for k, in con.execute(
-            f"SELECT {dupkey.dup_key(by_sig=by_sig)} FROM photos") if k}
-        paths = {p for p, in con.execute("SELECT path FROM photos")}
+            f"SELECT {dupkey.dup_key(by_sig=by_sig)} FROM photos WHERE {present}") if k}
+        paths = {p for p, in con.execute(f"SELECT path FROM photos WHERE {present}")}
     except sqlite3.Error as e:
         print(f"Cannot read the database: {e}")
         return 1
@@ -1566,6 +1576,43 @@ def check_dups(db_path, roots, exts, min_size, workers=4):
     return 0
 
 
+def run_rescan(args):
+    if not os.path.isfile(args.db):
+        print("Scan your folders with Read EXIF first.")
+        return 1
+    try:
+        if args.rescan_plan:
+            print("Checking selected folders…", flush=True)
+            exe = find_exiftool()[0]
+            with closing(open_db_ro(args.db)) as con:
+                if con.execute("PRAGMA user_version").fetchone()[0] < 5:
+                    raise ValueError("Open the interface once to upgrade the catalogue, then rescan.")
+                plan = rescan.plan_changes(
+                    con, args.db, args, active_exts(args), SKIP_DIRS,
+                    lambda todo: read_rows(todo, exe, args.workers),
+                    lambda todo, full: candidate_signatures(todo, full, args.workers))
+            with open(args.rescan_plan, "x", encoding="utf-8") as output:
+                json.dump(plan, output, ensure_ascii=False)
+            print(f"Rule: {plan['rule']}.\n{rescan.summary(plan)}.")
+        else:
+            with open(args.apply_rescan, encoding="utf-8") as source:
+                plan = json.load(source)
+            if (not isinstance(plan, dict) or plan.get("format") != 1
+                    or plan.get("database") != os.path.realpath(args.db)):
+                raise ValueError("The preview belongs to a different catalogue or format.")
+            if plan.get("database_id") != rescan.fingerprint(os.stat(args.db))[:2]:
+                raise ValueError("The database file was replaced after preview. Run Rescan folders again.")
+            with jobs.Job(args.db, "rescan", "applying preview"):
+                with closing(open_db(args.db)) as con:
+                    rescan.apply_plan(con, plan, COLUMNS, FILE_RESULTS)
+                    db_schema.maintain_statistics(con)
+            print(f"Applied: {rescan.summary(plan)}.")
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"Rescan failed: {exc}", flush=True)
+        return 1
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Scan a photo archive into a database")
     ap.add_argument("roots", nargs="*", help="folders with photos")
@@ -1596,7 +1643,26 @@ def main():
     ap.add_argument("--check-dups", action="store_true", dest="check_dups",
                     help="report how much of a folder is already in the archive; "
                          "reads the database, never writes to it")
+    rescan_options = ap.add_mutually_exclusive_group()
+    rescan_options.add_argument("--rescan-plan", metavar="FILE",
+                                help="preview selected folders and save the plan outside them")
+    rescan_options.add_argument("--apply-rescan", metavar="FILE",
+                                help="apply a previously saved rescan plan")
     args = ap.parse_args()
+    if args.workers < 1:
+        ap.error("--workers needs a positive number")
+    if args.rescan_plan or args.apply_rescan:
+        if args.rescan_plan and not args.roots:
+            ap.error("--rescan-plan needs at least one folder to check")
+        if args.rescan_plan and rescan.covered(os.path.realpath(args.rescan_plan),
+                                               [rescan.path_key(os.path.realpath(root)) for root in args.roots],
+                                               SKIP_DIRS):
+            ap.error("save the rescan plan outside the folders being checked")
+        if args.apply_rescan and args.roots:
+            ap.error("--apply-rescan uses the folders from the preview")
+        if args.check_dups or args.colors_only or args.hash_only:
+            ap.error("run Rescan folders separately from other passes")
+        return run_rescan(args)
     if args.check_dups and not args.roots:
         ap.error("--check-dups needs the folder to check")
     if args.recolor and not args.roots:
@@ -1660,10 +1726,8 @@ def exif_pass(args, job):
                   f"{have} files. Image analysis is kept.")
             args.full = True
 
-    known = {}
-    if not args.full:
-        for p, s, m in con.execute("SELECT path, size, mtime FROM photos"):
-            known[p] = (s, m)
+    known = {p: (s, m, missing) for p, s, m, missing in con.execute(
+        "SELECT path, size, mtime, missing FROM photos")}
 
 
     args.min_size = max(0, args.min_kb) * 1024
@@ -1671,44 +1735,25 @@ def exif_pass(args, job):
     passed_by = Counter()
     print(f"Looking at: {describe_exts(exts)}", flush=True)
     print("Looking for files…", flush=True)
-    todo, skipped, gone = [], 0, set(known)
-    tiny, tiny_known = 0, []
+    todo, skipped, tiny = [], 0, 0
     for path in walk_photos(args.roots, exts, passed_by):
-        gone.discard(path)
         job.done += 1
         try:
             st = os.stat(path)
         except OSError:
             continue
-        if st.st_size < args.min_size:
-            tiny += 1
-            if path in known:
-                tiny_known.append(path)   # got into the database on an earlier run
-            continue
         prev = known.get(path)
-        if prev and abs(prev[0] - st.st_size) < 1 and abs(prev[1] - st.st_mtime) < 2:
+        if prev is None and st.st_size < args.min_size:
+            tiny += 1
+            continue
+        if not args.full and prev == (st.st_size, st.st_mtime, 0):
             skipped += 1
             continue
         todo.append((path, st))
 
-    if tiny_known:
-        con.executemany("DELETE FROM photos WHERE path = ?",
-                        [(p,) for p in tiny_known])
-        con.commit()
-
-    # only files genuinely absent from the disk count as gone, or changing the set
-    # of formats would sweep previously collected RAW out of the database
-    gone = {p for p in gone if not os.path.exists(p)}
-    if gone:
-        con.executemany("DELETE FROM photos WHERE path = ?", [(p,) for p in gone])
-        con.commit()
-        print(f"Dropped from the database (files are gone): {len(gone)}")
-
     if tiny:
         kb = args.min_size // 1024
-        print(f"Skipped {tiny} files under {kb} KB — thumbnails and the like." +
-              (f" {len(tiny_known)} of them were dropped from the database."
-               if tiny_known else ""))
+        print(f"Skipped {tiny} new files under {kb} KB — thumbnails and the like.")
     print(f"New and changed: {len(todo)}   already in the database: {skipped}")
     report_passed(passed_by)
     if not todo:
@@ -1729,10 +1774,14 @@ def exif_pass(args, job):
                   "  usually stay empty. Install ExifTool — winget install "
                   "-e --id OliverBetz.ExifTool", flush=True)
 
-    # Only the EXIF columns are updated. The earlier INSERT OR REPLACE rewrote the
-    # whole row and cleared the image analysis — re-reading the metadata would have
-    # meant losing colour and light across the whole archive.
-    upd = ", ".join(f"{c}=excluded.{c}" for c in COLUMNS if c != "path")
+    # A forced EXIF refresh preserves analysis for an unchanged file. A change
+    # of size or mtime invalidates the old file's computed results.
+    fingerprint_changed = "photos.size IS NOT excluded.size OR photos.mtime IS NOT excluded.mtime"
+    updates = [f"{c}=excluded.{c}" for c in COLUMNS if c != "path"]
+    updates += ["missing=0"] + [
+        f"{c}=CASE WHEN {fingerprint_changed} THEN NULL ELSE photos.{c} END"
+        for c in FILE_RESULTS]
+    upd = ", ".join(updates)
     sql = (f"INSERT INTO photos ({','.join(COLUMNS)}) "
            f"VALUES ({','.join(':' + c for c in COLUMNS)}) "
            f"ON CONFLICT(path) DO UPDATE SET {upd}")
@@ -1800,26 +1849,27 @@ def exif_pass(args, job):
                 (str(EXIF_VERSION),))
     con.commit()
 
-    total, = con.execute("SELECT COUNT(*) FROM photos").fetchone()
-    no_exif, = con.execute("SELECT COUNT(*) FROM photos WHERE date_src='file'").fetchone()
-    yrs = con.execute("SELECT MIN(year), MAX(year) FROM photos").fetchone()
-    by_ext = con.execute("SELECT ext, COUNT(*) c FROM photos GROUP BY ext "
+    total, = con.execute("SELECT COUNT(*) FROM visible_photos").fetchone()
+    files, = con.execute("SELECT COUNT(*) FROM photos WHERE missing = 0").fetchone()
+    no_exif, = con.execute("SELECT COUNT(*) FROM visible_photos WHERE date_src='file'").fetchone()
+    yrs = con.execute("SELECT MIN(year), MAX(year) FROM visible_photos").fetchone()
+    by_ext = con.execute("SELECT ext, COUNT(*) c FROM visible_photos GROUP BY ext "
                          "ORDER BY c DESC").fetchall()
-    pending_color, = con.execute("SELECT COUNT(*) FROM photos "
+    pending_color, = con.execute("SELECT COUNT(*) FROM visible_photos "
                                  "WHERE color IS NULL OR brightness IS NULL"
                                  ).fetchone()
     db_schema.maintain_statistics(con)
     year_limit = datetime.now().year + 1
-    odd, = con.execute("SELECT COUNT(*) FROM photos WHERE year < 1990 OR year > ?",
+    odd, = con.execute("SELECT COUNT(*) FROM visible_photos WHERE year < 1990 OR year > ?",
                        (year_limit,)).fetchone()
     con.close()
 
     print(f"\nDone in {time.time() - started:.0f} s.")
     print(f"In the database: {total} photos, years {yrs[0]}–{yrs[1]}.")
+    if files > total:
+        print(f"Paired RAW files hidden: {files - total}. Their JPEGs carry a RAW badge.")
     if len(by_ext) > 1:
         print("By format: " + ", ".join(f"{e} {c}" for e, c in by_ext[:8]))
-        print("A frame stored as both RAW and JPEG is counted twice —"
-              "\n  the interface can filter by format.")
     if no_exif:
         print(f"{no_exif} files have no EXIF date — the file date was used instead.")
     if odd:

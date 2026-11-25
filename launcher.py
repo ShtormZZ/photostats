@@ -31,17 +31,37 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 import webbrowser
 
+import dupkey
+import rescan
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SETTINGS = os.path.join(ROOT, "settings.json")
 VENV = os.path.join(ROOT, ".venv")
 WINDOWS = sys.platform == "win32"
 PORT = 5577
+
+# The web interface uses this palette in web/index.html.
+GROUND = "#16151A"
+PANEL = "#1E1D24"
+FRAME = "#2C2A34"
+LINE = "#3A3745"
+PAPER = "#EDE8DF"
+MUTED = "#8B8598"
+ACCENT = "#E39B33"
+WARNING = "#F08A82"
+TEXT_SURFACE = {
+    "background": PANEL, "foreground": PAPER,
+    "selectbackground": ACCENT, "selectforeground": GROUND,
+    "borderwidth": 0, "highlightthickness": 1,
+    "highlightbackground": LINE, "highlightcolor": ACCENT,
+}
 
 try:
     import tkinter as tk
@@ -115,6 +135,42 @@ PROGRESS = re.compile(r"(\d+)\s*/\s*(\d+)\s*\(\s*([\d.]+)%\)")
 LEFT = re.compile(r"about\s+(\d+)\s+min left")
 
 
+def configure_theme(root):
+    """Use Tk's colourable theme for the launcher and its preview windows."""
+    root.configure(background=GROUND)
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    style.configure(".", background=GROUND, foreground=PAPER, focuscolor=ACCENT,
+                    bordercolor=LINE, lightcolor=FRAME, darkcolor=FRAME, troughcolor=PANEL)
+    style.configure("Muted.TLabel", foreground=MUTED)
+    style.configure("Accent.TLabel", foreground=ACCENT)
+    style.configure("Warning.TLabel", foreground=WARNING)
+    style.configure("Brand.TLabel", font=("Segoe UI", 16, "bold"))
+    style.configure("Accent.Brand.TLabel", foreground=ACCENT)
+
+    style.configure("TButton", background=PANEL, padding=(10, 3))
+    style.map("TButton", background=[("disabled", PANEL), ("pressed", GROUND), ("active", FRAME)],
+              foreground=[("disabled", MUTED)], bordercolor=[("focus", ACCENT), ("active", ACCENT)])
+    style.configure("Accent.TButton", foreground=ACCENT)
+    style.configure("Primary.TButton", background=ACCENT, foreground=GROUND,
+                    bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT, focuscolor=GROUND)
+    style.map("Primary.TButton", background=[("disabled", FRAME), ("pressed", "#D58D27"),
+                                             ("active", "#F2AD49")],
+              bordercolor=[("disabled", LINE), ("focus", PAPER)],
+              lightcolor=[("disabled", FRAME)], darkcolor=[("disabled", FRAME)])
+
+    style.configure("TCheckbutton", indicatorbackground=PANEL, indicatorforeground=GROUND,
+                    upperbordercolor=LINE, lowerbordercolor=LINE)
+    style.map("TCheckbutton", indicatorbackground=[("disabled", FRAME), ("selected", ACCENT)],
+              foreground=[("disabled", MUTED), ("active", ACCENT)],
+              background=[("active", GROUND)])
+    style.configure("TProgressbar", background=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT,
+                    thickness=10)
+    style.configure("TScrollbar", background=FRAME, arrowcolor=PAPER)
+    style.map("TScrollbar", background=[("active", LINE)])
+    style.configure("TSeparator", background=LINE)
+
+
 class Task:
     """A numbered button with a progress bar, an explanation and the process.
 
@@ -125,28 +181,31 @@ class Task:
     def __init__(self, app, key, label, note, args_fn, parent, writes=True):
         self.app, self.key, self.args_fn = app, key, args_fn
         self.proc = None
+        self.stop_requested = False
         self.label = label
         self.writes = writes         # does this pass need the database for writing?
 
         box = ttk.Frame(parent)
-        box.pack(fill="x", padx=14, pady=(0, 10))
+        box.pack(fill="x", padx=14, pady=(0, 7))
         row = ttk.Frame(box)
         row.pack(fill="x")
-        self.button = ttk.Button(row, text=label, width=22, command=self.toggle)
+        button_style = "Accent.TButton" if key in ("exif", "rescan") else "TButton"
+        self.button = ttk.Button(row, text=label, width=22, command=self.toggle, style=button_style)
         self.button.pack(side="left")
         self.bar = ttk.Progressbar(row, mode="determinate", maximum=100)
         self.bar.pack(side="left", fill="x", expand=True, padx=10)
-        self.state = ttk.Label(row, text="", width=20, anchor="e")
+        self.state = ttk.Label(row, text="", width=20, anchor="e", style="Muted.TLabel")
         self.state.pack(side="left")
-        self.note = ttk.Label(box, text=note, foreground="#8B8598",
+        self.note = ttk.Label(box, text=note, style="Muted.TLabel",
                               wraplength=680, justify="left")
-        self.note.pack(fill="x", padx=(2, 0), pady=(3, 0))
+        self.note.pack(fill="x", padx=(2, 0), pady=(2, 0))
 
     def running(self):
         return self.proc and self.proc.poll() is None
 
     def toggle(self):
         if self.running():
+            self.stop_requested = True
             self.state.config(text="stopping…")
             interrupt(self.proc)
             return
@@ -161,17 +220,26 @@ class Task:
         args = self.args_fn()
         if args is None:
             return
+        self.start(args)
+
+    def start(self, args):
+        self.stop_requested = False
         self.bar["value"] = 0
-        self.state.config(text="starting…")
+        self.state.config(text="starting…", style="Accent.TLabel")
         self.button.config(text="Stop")
         self.app.log(f"\n$ {' '.join(args[1:])}\n")
-        self.proc = spawn(args)
-        threading.Thread(target=self.pump, daemon=True).start()
+        try:
+            self.proc = spawn(args)
+        except OSError as exc:
+            self.app.log(f"Could not start {self.label}: {exc}\n")
+            self.app.out.put(("done", (self, 1)))
+            return
+        threading.Thread(target=self.pump, args=(self.proc,), daemon=True).start()
 
-    def pump(self):
+    def pump(self, proc):
         buf = ""
         while True:
-            ch = self.proc.stdout.read(1)
+            ch = proc.stdout.read(1)
             if not ch:
                 break
             if ch in "\r\n":
@@ -181,16 +249,18 @@ class Task:
                 buf = ""
             else:
                 buf += ch
-        code = self.proc.wait()
+        code = proc.wait()
         self.app.out.put(("done", (self, code)))
 
     def finished(self, code):
         self.button.config(text=self.label)
         if code == 0:
             self.bar["value"] = 100
-            self.state.config(text="done")
+            self.state.config(text="done", style="Muted.TLabel")
+        elif self.stop_requested:
+            self.state.config(text="stopped", style="Muted.TLabel")
         else:
-            self.state.config(text="stopped" if code else "failed")
+            self.state.config(text="failed", style="Warning.TLabel")
 
     def progress(self, line):
         m = PROGRESS.search(line)
@@ -225,28 +295,31 @@ class App:
         self.out = queue.Queue()
         self.server = None
         self.ready = False
+        configure_theme(root)
         root.title("photostats")
         set_window_icon(root)
-        root.minsize(760, 760)       # four passes plus the log; below this the log collapses
+        root.minsize(760, 760)
 
-        pad = {"padx": 14, "pady": (0, 8)}
+        pad = {"padx": 14, "pady": (0, 6)}
         head = ttk.Frame(root)
-        head.pack(fill="x", padx=14, pady=(12, 10))
-        ttk.Label(head, text="photostats", font=("Segoe UI", 11, "bold")).pack(side="left")
-        self.setup_state = ttk.Label(head, text="checking the environment…")
+        head.pack(fill="x", padx=14, pady=(12, 8))
+        ttk.Label(head, text="photo", style="Brand.TLabel").pack(side="left")
+        ttk.Label(head, text="stats", style="Accent.Brand.TLabel").pack(side="left")
+        self.setup_state = ttk.Label(head, text="checking the environment…", style="Muted.TLabel")
         self.setup_state.pack(side="right")
 
         # The main hint. The notes under the buttons say what each one does, but
         # what leaves people at a loss is a different question — which one to press
         # now. That is answered by the state of the database, not by instructions.
-        self.next_step = ttk.Label(root, text="", foreground="#E39B33",
+        self.next_step = ttk.Label(root, text="", style="Accent.TLabel",
                                    wraplength=680, justify="left")
-        self.next_step.pack(fill="x", padx=14, pady=(0, 12))
+        self.next_step.pack(fill="x", padx=14, pady=(0, 8))
 
-        ttk.Label(root, text="(1 step) Configure photo folders").pack(anchor="w", padx=14)
+        ttk.Label(root, text="(1 step) Configure photo folders", style="Accent.TLabel").pack(anchor="w", padx=14)
         box = ttk.Frame(root)
-        box.pack(fill="both", padx=14, pady=(4, 6))
-        self.folders = tk.Listbox(box, height=4, activestyle="none")
+        box.pack(fill="both", padx=14, pady=(3, 5))
+        self.folders = tk.Listbox(box, height=4, activestyle="none",
+                                  selectmode="extended", exportselection=False, **TEXT_SURFACE)
         self.folders.pack(side="left", fill="both", expand=True)
         bar = ttk.Scrollbar(box, command=self.folders.yview)
         bar.pack(side="right", fill="y")
@@ -259,13 +332,16 @@ class App:
         self.raw = tk.BooleanVar()
         ttk.Checkbutton(line, text="include RAW and DNG", variable=self.raw,
                         command=self.save).pack(side="right")
-        ttk.Label(root, foreground="#8B8598", wraplength=680, justify="left",
+        ttk.Label(root, style="Muted.TLabel", wraplength=680, justify="left",
                   text="Sub-folders are included, so the top of your archive is "
                        "usually enough. RAW files normally sit beside a JPEG of "
                        "the same shot, so leaving that box off avoids counting "
-                       "those frames twice.").pack(fill="x", padx=14, pady=(0, 14))
+                       "those frames twice.").pack(fill="x", padx=14, pady=(0, 10))
 
         self.tasks = {}
+        self.rescan_dir = None
+        self.rescan_applying = False
+        self.rescan_auto = tk.BooleanVar()
         for key, label, note, fn in (
             ("exif", "Read EXIF",
              "(2 step) Reads dates, camera, lens and settings from the files. Fast, and "
@@ -284,16 +360,22 @@ class App:
              "already in the archive? Counts copies and new files and says so at "
              "the end. Reads the database, never writes to it.",
              self.args_check),
+            ("rescan", "Rescan folders",
+             "Checks selected photo folders, or all configured folders if none are selected. "
+             "Finds moves and marks missing files while keeping their tags, ratings and comments.",
+             self.args_rescan),
         ):
             self.tasks[key] = Task(self, key, label, note, fn, root,
                                    writes=(key != "check"))
+        ttk.Checkbutton(root, text="Apply changes automatically after rescan",
+                        variable=self.rescan_auto).pack(anchor="w", padx=14, pady=(0, 6))
 
-        ttk.Separator(root).pack(fill="x", padx=14, pady=(4, 10))
+        ttk.Separator(root).pack(fill="x", padx=14, pady=(4, 6))
         srv = ttk.Frame(root)
         srv.pack(fill="x", **pad)
-        self.open_btn = ttk.Button(srv, text="Open interface", command=self.open_ui)
+        self.open_btn = ttk.Button(srv, text="Open interface", command=self.open_ui, style="Primary.TButton")
         self.open_btn.pack(side="left")
-        self.srv_state = ttk.Label(srv, text="server stopped")
+        self.srv_state = ttk.Label(srv, text="server stopped", style="Muted.TLabel")
         self.srv_state.pack(side="left", padx=10)
         self.stop_btn = ttk.Button(srv, text="Stop server", command=self.stop_server,
                                    state="disabled")
@@ -305,27 +387,25 @@ class App:
         self.lan_box = ttk.Checkbutton(srv, text="allow access from the local network",
                                        variable=self.lan, command=self.lan_changed)
         self.lan_box.pack(side="right", padx=10)
-        ttk.Label(root, foreground="#8B8598", wraplength=680, justify="left",
+        ttk.Label(root, style="Muted.TLabel", wraplength=680, justify="left",
                   text="(3 step) Opens the statistics in your browser.  "
                        "It can stay open while a pass is running — the "
                        "numbers fill in as the scan goes.").pack(
             fill="x", padx=14, pady=(3, 4))
-        # Red, and only while the box is ticked: it is a warning about the
-        # state the program is in, not a paragraph to learn to skip.
         self.lan_warn = ttk.Label(
-            root, foreground="#D9342B", wraplength=680, justify="left",
+            root, style="Warning.TLabel", wraplength=680, justify="left",
             text="Network access is on. There is no password: anyone on this "
                  "Wi-Fi or network can see every photo, its folder and where "
                  "it was taken, and change ratings, tags and comments. Opening "
                  "files is switched off. Windows may ask whether Python may "
                  "use the network — allow it for private networks only. Do not "
                  "use this on a public or shared network.")
-        self.lan_spacer = ttk.Frame(root, height=6)
+        self.lan_spacer = ttk.Frame(root, height=4)
         self.lan_spacer.pack(fill="x")
 
         self.text = tk.Text(root, height=10, wrap="none", state="disabled",
-                            font=("Consolas", 9))
-        self.text.pack(fill="both", expand=True, padx=14, pady=(6, 14))
+                            font=("Consolas", 9), **TEXT_SURFACE)
+        self.text.pack(fill="both", expand=True, padx=14, pady=(4, 12))
 
         self.load()
         self.set_ready(False)
@@ -378,8 +458,9 @@ class App:
             con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=3)
             con.execute("PRAGMA busy_timeout = 3000")
             try:
+                available = dupkey.available_where(con)
                 row = con.execute(
-                    "SELECT COUNT(*), SUM(color IS NULL), SUM(sig IS NULL) FROM photos"
+                    f"SELECT COUNT(*), SUM(color IS NULL), SUM(sig IS NULL) FROM photos WHERE {available}"
                 ).fetchone()
                 out = {"total": row[0], "no_images": row[1] or 0,
                        "no_sig": row[2] or 0}
@@ -517,6 +598,138 @@ class App:
             args.append("--raw")
         return args
 
+    def args_rescan(self):
+        if self.rescan_dir is not None:
+            return None
+        selected = self.folders.curselection()
+        folders = ([self.folders.get(i) for i in selected] if selected
+                   else list(self.folders.get(0, "end")))
+        if not folders or not os.path.isfile(os.path.join(ROOT, "photos.db")):
+            messagebox.showinfo("Rescan folders", "Configure your folders and run Read EXIF first.")
+            return None
+        self.rescan_dir = tempfile.TemporaryDirectory(prefix=".photostats-rescan-")
+        self.rescan_applying = False
+        args = [venv_python(), "scan.py", "--rescan-plan", self.rescan_plan_path()] + folders
+        if self.raw.get():
+            args.append("--raw")
+        return args
+
+    def rescan_plan_path(self):
+        return os.path.join(self.rescan_dir.name, "preview.json")
+
+    def discard_rescan(self):
+        if self.rescan_dir is not None:
+            self.rescan_dir.cleanup()
+            self.rescan_dir = None
+
+    def finish_rescan(self, code):
+        if code or self.rescan_applying or self.rescan_dir is None:
+            self.discard_rescan()
+            return
+        try:
+            with open(self.rescan_plan_path(), encoding="utf-8") as source:
+                plan = json.load(source)
+        except (OSError, ValueError) as exc:
+            self.log(f"Could not read rescan preview: {exc}\n")
+            self.discard_rescan()
+            return
+        if self.rescan_auto.get() and plan["actions"] and self.busy_task() is None:
+            # Still show the report when some paths require attention.
+            if not (plan["conflicts"] or plan["errors"]):
+                self.apply_rescan()
+                return
+            self.show_rescan(plan, automatic=True)
+        else:
+            self.show_rescan(plan)
+
+    def apply_rescan(self):
+        self.rescan_applying = True
+        self.tasks["rescan"].start([venv_python(), "scan.py", "--apply-rescan",
+                                    self.rescan_plan_path()])
+
+    def show_rescan(self, plan, automatic=False):
+        win = tk.Toplevel(self.root, background=GROUND)
+        win.title("Rescan folders preview")
+        win.transient(self.root)
+        win.geometry("760x480")
+        win.minsize(460, 300)
+        win.columnconfigure(0, weight=1)
+        win.rowconfigure(3, weight=1)
+        buttons = ttk.Frame(win)
+        buttons.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 6))
+        summary = ttk.Label(win, text=rescan.summary(plan), wraplength=736, style="Accent.TLabel")
+        summary.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 3))
+
+        def wrap_summary(event):
+            if event.widget is win:
+                summary.configure(wraplength=max(1, event.width - 24))
+
+        win.bind("<Configure>", wrap_summary)
+        ttk.Label(win, text=f"Match rule: {plan['rule']}", style="Muted.TLabel").grid(
+            row=2, column=0, sticky="w", padx=12, pady=(0, 8))
+        body = ttk.Frame(win)
+        body.grid(row=3, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        report = tk.Text(body, width=1, height=1, wrap="word", padx=8, pady=6, **TEXT_SURFACE)
+        bar = ttk.Scrollbar(body, command=report.yview)
+        report.configure(yscrollcommand=bar.set)
+        report.pack(side="left", fill="both", expand=True)
+        bar.pack(side="right", fill="y")
+        report.tag_configure("accent", foreground=ACCENT)
+        parts = []
+
+        def report_line(label, path=None):
+            detail = f"   {path}\n" if path is not None else "\n"
+            parts.extend((label, ("accent",), detail, ()))
+
+        for item in plan["actions"]:
+            kind, old, path = item["kind"], item["old"], item.get("path")
+            if kind in ("move", "rename"):
+                report_line("Move", old)
+                parts.extend((f"    → {path}\n", ()))
+            else:
+                report_line(kind.capitalize(), path or old)
+        for conflict in plan["conflicts"]:
+            report_line("\nConflicting paths (left for another rescan)")
+            parts.extend(("\n".join(f"  Missing: {p}" for p in conflict["old"]) + "\n", ()))
+            parts.extend(("\n".join(f"  Candidate: {p}" for p in conflict["new"]) + "\n", ()))
+        if plan["errors"]:
+            report_line("\nWarnings")
+            parts.extend(("\n".join(plan["errors"]) + "\n", ()))
+        report.insert("1.0", *(parts or ["No changes found."]))
+        report.configure(state="disabled")
+
+        def close():
+            win.destroy()
+            if not automatic:
+                self.discard_rescan()
+
+        def apply(_event=None):
+            if self.busy_task() is not None:
+                messagebox.showinfo("Rescan folders", "Wait for the current pass to finish.", parent=win)
+            else:
+                win.destroy()
+                self.apply_rescan()
+            return "break"
+
+        has_changes = bool(plan["actions"])
+        ttk.Button(buttons, text="Close" if automatic or not has_changes else "Cancel",
+                   command=close).pack(side="right", ipady=3)
+        if automatic:
+            ttk.Label(buttons, text="Applying the listed changes automatically.",
+                      style="Accent.TLabel").pack(side="left")
+            self.apply_rescan()
+        else:
+            ttk.Button(buttons, text="Apply changes", command=apply,
+                       style="Primary.TButton", state="normal" if has_changes else "disabled").pack(
+                side="right", padx=(0, 8), ipady=3)
+            if has_changes:
+                win.bind("<Control-Return>", apply)
+            else:
+                ttk.Label(buttons, text="No changes to apply.", style="Muted.TLabel").pack(side="left")
+        win.protocol("WM_DELETE_WINDOW", close)
+        win.grab_set()
+        win.focus_set()
+
     # ---------- server ----------
 
     def lan_changed(self):
@@ -608,6 +821,8 @@ class App:
                 elif kind == "done":
                     task, code = payload
                     task.finished(code)
+                    if task.key == "rescan":
+                        self.finish_rescan(code)
                     self.refresh_hint()
                 elif kind == "ready":
                     self.set_ready(payload == "environment ready", payload)
@@ -651,6 +866,7 @@ class App:
                 except subprocess.TimeoutExpired:
                     self.server.kill()
         self.save()
+        self.discard_rescan()
         self.root.destroy()
 
 
@@ -662,10 +878,6 @@ def main():
         input("Press Enter to close. ")
         return 1
     root = tk.Tk()
-    try:
-        ttk.Style().theme_use("vista" if WINDOWS else "clam")
-    except tk.TclError:
-        pass
     App(root)
     root.mainloop()
 
