@@ -235,8 +235,8 @@ works. Tags come out in the CSV export as one column.
 **Tags go into the database and nowhere else.** No file is ever written to.
 They live in the catalogue, so re-reading metadata preserves them. Use
 **Rescan folders** after moving files to keep the existing IDs, tags, ratings
-and comments. Missing files keep their records and annotations. The web interface
-counts and exports only photos whose indexed paths are present.
+and comments. Files marked missing keep their records and annotations and are
+excluded from web results and exports.
 
 ### Comments
 
@@ -264,9 +264,9 @@ rule as **Check a folder**. A new copy gets its own record if the original remai
 at its old path. Ambiguous matches and unreadable folders are listed in the
 report. Conflicts are left for another rescan. The optional **Apply changes
 automatically after rescan** checkbox applies the actions listed in the report.
-The web server periodically checks indexed paths while the interface is open.
-A file disappears from the results when its path is gone and returns when the
-file is back. Use **Rescan folders** to match a file moved to a new path.
+After you apply the rescan, files marked missing disappear from web results and
+exports, and files found at their original paths reappear. Until you apply a
+rescan, a file deleted outside photostats can still appear in the catalogue.
 
 For the command line, save the preview outside the folders being checked:
 

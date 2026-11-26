@@ -6,12 +6,20 @@ photos.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.db.backups/
 # The thumbnail cache is pieces of your photos.
 cache/
 # Exports
 *.csv
 # Launcher settings: they hold the paths to your folders
 settings.json
+
+# --- Local notes and diagnostics ---
+/docs/architecture-plan.ru.md
+/docs/database-maintenance.md
+/docs/rescan.md
+/docs/db-benchmark.local.json
+*.log
 
 # --- Environment ---
 .venv/
@@ -23,6 +31,7 @@ __pycache__/
 exiftool.exe
 exiftool_files/
 exiftool(-k).exe
+/README.txt
 
 # --- Editors and the operating system ---
 .vscode/

@@ -37,42 +37,6 @@ def fingerprint(st):
     return [st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns]
 
 
-def refresh_missing(con):
-    """Recheck indexed paths without reading photo contents or holding a writer lock."""
-    folders = defaultdict(list)
-    for pid, path, missing in con.execute("SELECT id, path, missing FROM photos"):
-        folders[os.path.dirname(path) or os.curdir].append((pid, path, missing))
-
-    updates = []
-    for folder, records in folders.items():
-        unchecked = {os.path.normcase(os.path.basename(path)) for _, path, _ in records}
-        present = set()
-        try:
-            with os.scandir(folder) as entries:
-                for entry in entries:
-                    name = os.path.normcase(entry.name)
-                    if name in unchecked:
-                        if entry.is_file():
-                            present.add(name)
-                        unchecked.remove(name)
-                        if not unchecked:
-                            break
-        except (FileNotFoundError, NotADirectoryError):
-            pass
-        except OSError:
-            continue  # Leave the recorded state when a folder cannot be verified.
-        for pid, path, missing in records:
-            absent = int(os.path.normcase(os.path.basename(path)) not in present)
-            if absent != missing:
-                updates.append((absent, pid, path, missing))
-
-    if updates:
-        with con:
-            # A rescan may have moved an indexed file while its old folder was being checked.
-            con.executemany("UPDATE photos SET missing=? WHERE id=? AND path=? AND missing=?", updates)
-    return frozenset(pid for pid, in con.execute("SELECT id FROM photos WHERE missing=1"))
-
-
 def directory_state(folder, db_path):
     identity = fingerprint(os.stat(folder))
     if path_key(os.path.realpath(folder)) != path_key(os.path.dirname(db_path)):

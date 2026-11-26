@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Find missing files through **Rescan folders**. Web requests use the saved
+  catalogue status for lists and exports.
+
 ## [1.17.0] — 2026-11-25
 
 - Timeline adds **Portfolio**: a continuous full-width mosaic with ordinary-size

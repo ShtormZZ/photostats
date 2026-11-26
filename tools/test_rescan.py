@@ -121,7 +121,7 @@ class RescanTests(unittest.TestCase):
         self.assertEqual(self.sql("SELECT mark, comment, missing FROM photos WHERE id=?", (aid,)),
                          [("great", "keep this", 0)])
 
-    def test_web_excludes_an_externally_deleted_photo_and_reinstates_it_on_return(self):
+    def test_web_visibility_follows_applied_rescans(self):
         kept = self.file("keep/frame.jpg")
         deleted = self.archive / "remove/frame.jpg"
         deleted.parent.mkdir()
@@ -130,10 +130,8 @@ class RescanTests(unittest.TestCase):
         pid = self.annotate(deleted)
         self.sql("UPDATE photos SET lat=55, lon=37, taken='2020-01-02 12:00:00', "
                  "year=2020, ym='2020-01', date_src='exif'")
-        checker = app.FileCheck(str(self.db))
-        with (patch.object(app, "DB_PATH", str(self.db)), patch.object(app, "FILE_CHECK", checker),
+        with (patch.object(app, "DB_PATH", str(self.db)),
               patch.object(app, "CACHE_DIR", str(self.base / "thumbs")), app.app.test_client() as client):
-            revision = client.get("/api/job").get_json()["file_revision"]
             self.assertEqual(client.get("/api/photos?dup=has+duplicates").get_json()["total"], 2)
             thumb = f"/api/thumb/{pid}?s=120"
             with client.get(thumb) as response:
@@ -141,12 +139,24 @@ class RescanTests(unittest.TestCase):
             deleted.unlink()
             with client.get(thumb) as response:
                 self.assertEqual(response.status_code, 404)
-            checker.next_check = 0
+            for endpoint in ("/api/open", "/api/reveal"):
+                self.assertEqual(client.post(f"{endpoint}/{pid}").status_code, 404)
+            with client.get("/") as response:
+                self.assertEqual(response.status_code, 200)
+            self.assertEqual(client.get("/api/job").status_code, 200)
+            self.assertEqual(client.get("/api/photos?sort=rating").get_json()["total"], 2)
+            self.assertIn(str(deleted), client.get("/api/export/paths").get_data(as_text=True))
+            mark = client.post(f"/api/mark/{pid}?value=5")
+            self.assertEqual((mark.status_code, mark.get_json()["mark"]), (200, "5"))
+
+            plan_path, plan = self.preview()
+            self.assertEqual([(x["kind"], x["id"]) for x in plan["actions"]], [("missing", pid)])
+            self.assertEqual(self.sql("SELECT missing FROM photos WHERE id=?", (pid,)), [(0,)])
+            self.cli("--apply-rescan", plan_path)
             stats = client.get("/api/stats").get_json()
             self.assertEqual((stats["totalAll"], stats["total"], stats["bytes"], stats["dupGroups"]),
                              (1, 1, kept.stat().st_size, 0))
             self.assertNotIn("availability", stats["charts"])
-            self.assertNotEqual(client.get("/api/job").get_json()["file_revision"], revision)
             for endpoint in ("/api/photos", "/api/random", "/api/timeline/day?day=2020-01-02"):
                 items = client.get(endpoint).get_json()["items"]
                 self.assertEqual(len(items), 1, endpoint)
@@ -166,10 +176,13 @@ class RescanTests(unittest.TestCase):
             self.assertEqual(client.post(f"/api/comment/{pid}", data={"text": "changed"}).status_code, 404)
 
             shutil.copy2(kept, deleted)
-            checker.next_check = 0
+            self.assertEqual(client.get("/api/photos").get_json()["total"], 1)
+            plan_path, plan = self.preview()
+            self.assertEqual([(x["kind"], x["id"]) for x in plan["actions"]], [("restore", pid)])
+            self.cli("--apply-rescan", plan_path)
             restored = next(item for item in client.get("/api/photos").get_json()["items"] if item["id"] == pid)
             self.assertEqual((restored["mark"], restored["comment"], restored["tags"]),
-                             ("great", "keep this", "review"))
+                             ("5", "keep this", "review"))
 
     def test_signed_rename_and_replacement_invalidate_the_right_results(self):
         a, b = self.file("a.jpg"), self.file("b.jpg", "green")

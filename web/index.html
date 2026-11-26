@@ -4620,7 +4620,6 @@ function loadTimelineDays(){
 
 function resetPhotoTimeline(reshuffle = true){
   const t = photoTimeline;
-  state.timelineFilesStale = false;
   closeTimelineBulk();
   closeDetail();
   t.epoch++; t.days = []; t.offsets = [0]; t.mounted.clear(); t.dirty.clear(); t.updating.clear();
@@ -4814,7 +4813,6 @@ function showPage(){
     if (directoryData) renderDirectories(); else loadDirectories();
   } else if (timeline){
     state.statsLoaded = false;
-    if (state.timelineFilesStale) return resetPhotoTimeline(false);
     window.scrollTo(0, photoTimeline.scrollY);
     if (!photoTimeline.started) loadTimelineDays(); else layoutPhotoTimeline(false);
     photoTimeline.dirty.forEach(refreshTimelineDay);
@@ -4945,26 +4943,6 @@ function renderJob(j){
   box.hidden = false;
 }
 
-function refreshFileViews(revision){
-  if (!revision || revision === state.fileRevision) return;
-  const initial = state.fileRevision === undefined;
-  state.fileRevision = revision;
-  if (initial) return;
-
-  state.statsLoaded = false;
-  state.timelineFilesStale = true;
-  directoryData = null;
-  if (directoryLoading){
-    ctl.directories.abort();
-    directoryLoading.then(() => {
-      if (state.page === "directories") loadDirectories();
-    });
-    if (state.page === "directories") return;
-  }
-  if (state.page === "timeline") resetPhotoTimeline(false);
-  else { closeDetail(); load(); }
-}
-
 function pollJob(){
   const again = ms => setTimeout(pollJob, ms);
   if (document.hidden) return again(5000);      // a background tab asks nothing
@@ -4972,7 +4950,6 @@ function pollJob(){
     .then(r => r.json())
     .then(d => {
       renderJob(d.job);
-      refreshFileViews(d.file_revision);
       again(d.job && d.job.state === "running" ? 3000 : 15000);
     })
     .catch(() => again(15000));
@@ -5192,7 +5169,6 @@ $("eq").onclick = () => {
    loads everything, as it always did. */
 fetch("/api/job").then(r => r.json()).catch(() => ({}))
   .then(d => {
-    refreshFileViews(d.file_revision);
     if (d.job && d.job.state === "running") holdSelection(d.job);
     showPage();
     pollJob();

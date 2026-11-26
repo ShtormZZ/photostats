@@ -39,7 +39,6 @@ import db_schema
 import dupkey
 import jobs
 import raw_pairs
-import rescan
 import tags
 
 try:
@@ -81,7 +80,6 @@ NONE_LABEL = "not specified"
 
 app = Flask(__name__, static_folder=None)
 DB_PATH = os.path.join(APP_DIR, "photos.db")
-FILE_CHECK = None
 
 # The timeline is built as an unbroken run of months, so one photo with a
 # broken date stretches the strip over decades of empty cells. Months outside
@@ -383,43 +381,6 @@ def db():
     con = db_schema.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     return con
-
-
-class FileCheck:
-    """Share one filesystem check across the requests that fill a page."""
-
-    def __init__(self, path):
-        self.path = path
-        self.lock = threading.Lock()
-        self.next_check = 0
-        self.missing = None
-        self.revision = None
-
-    def refresh(self, force=False):
-        with self.lock:
-            if not force and time.monotonic() < self.next_check:
-                return
-            try:
-                with closing(db_schema.connect(self.path)) as con:
-                    missing = rescan.refresh_missing(con)
-                if missing != self.missing:
-                    self.missing = missing
-                    self.revision = secrets.token_hex(8)
-            except sqlite3.OperationalError:
-                app.logger.warning("Could not refresh indexed file paths", exc_info=True)
-            finally:
-                self.next_check = time.monotonic() + 10
-
-
-@app.before_request
-def refresh_indexed_paths():
-    if FILE_CHECK is None:
-        return
-    if request.endpoint in ("index", "api_export", "api_export_paths"):
-        FILE_CHECK.refresh(force=True)
-    elif (request.path.startswith("/api/")
-          and request.endpoint not in (None, "api_thumb", "api_db_diagnostics")):
-        FILE_CHECK.refresh()
 
 
 SIMPLE_FILTERS = {
@@ -1622,7 +1583,7 @@ def api_job():
             job = jobs.latest(con)
         except sqlite3.OperationalError:     # the table is not there yet
             job = None
-    return jsonify({"job": job, "file_revision": FILE_CHECK.revision if FILE_CHECK else None})
+    return jsonify({"job": job})
 
 
 @app.get("/api/tags")
@@ -1806,7 +1767,7 @@ def initialize_database(path):
 
 
 def main():
-    global DB_PATH, FILE_CHECK, MIN_YEAR, LOOPBACK_ONLY
+    global DB_PATH, MIN_YEAR, LOOPBACK_ONLY
     ap = argparse.ArgumentParser(description="Photo archive statistics")
     ap.add_argument("--db", default=DB_PATH)
     ap.add_argument("--port", type=int, default=5577)
@@ -1826,7 +1787,6 @@ def main():
         sys.exit(1)
     os.makedirs(CACHE_DIR, exist_ok=True)
     initialize_database(DB_PATH)
-    FILE_CHECK = FileCheck(DB_PATH)
     if not WEB_DIR:
         print("WARNING: index.html not found — neither in " + APP_DIR +
               ",\n         nor in " + os.path.join(APP_DIR, "web") +
