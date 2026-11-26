@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.17.1] — 2026-11-26
+
 - Find missing files through **Rescan folders**. Web requests use the saved
   catalogue status for lists and exports.
 

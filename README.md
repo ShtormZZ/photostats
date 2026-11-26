@@ -781,7 +781,7 @@ together; interrupted migrations roll back and retry. Changed index expressions
 are detected and rebuilt. Before changing a nonempty catalogue, the program
 creates and checks a SQLite backup in `<database filename>.backups/` next to it;
 a backup failure stops migration. These retained copies contain private catalogue
-data, **not original photos**. See [recovery instructions](docs/database-maintenance.md).
+data, **not original photos**. See [recovery instructions](https://github.com/ShtormZZ/photostats/blob/v1.17.0/docs/database-maintenance.md#backups-and-recovery).
 
 Planner statistics are collected once for catalogues that lack them, after index
 changes, and after completed scans or analysis change at least

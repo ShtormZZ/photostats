@@ -246,7 +246,7 @@ columns, translates old colour names and reconciles index expressions. The app,
 scanner and job writer all use it. Migrations and success records run under one
 `BEGIN IMMEDIATE`; do not commit inside a migration or use `executescript`, which
 can commit implicitly. A verified backup precedes changes to a nonempty catalogue.
-See `docs/database-maintenance.md` for recovery and the planner policy.
+See the [database maintenance guide](https://github.com/ShtormZZ/photostats/blob/v1.17.0/docs/database-maintenance.md) for recovery and the planner policy.
 
 **Data revision is transactional.** Database triggers update `db_state.revision`
 for changes to photos, tags and algorithm/signature metadata. Job heartbeats and
