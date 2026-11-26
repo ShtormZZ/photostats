@@ -1103,6 +1103,10 @@ SCRIPT = r"""
     const featured = portfolioDay.allItems[0];
     await openTimelinePhoto(portfolioDay, featured.id);
     check("Portfolio card navigation follows its three-group order", inPortfolioOrder(state.deck));
+    // Thumbnail proportions can relayout the mosaic independently of the comment.
+    await revealDay(portfolioDay);
+    await wait(() => !thumbBusy && !thumbQ.length && !photoTimeline.frame && !photoTimeline.layoutFrame,
+      "Portfolio mosaic settled before saving the comment");
     const mosaicHeight = $("timelineStage").style.height;
     const note = ('Portfolio <b> & "text" ' + "A long caption wraps over the image. ".repeat(5)).trim();
     saveComment(state.shown, note);
